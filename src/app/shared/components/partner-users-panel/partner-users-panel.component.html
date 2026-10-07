@@ -1,0 +1,166 @@
+<div class="toolbar">
+  <app-search-input placeholder="Search name, email or job title…" [value]="search()" (search)="onSearch($event)" />
+  @if (canCreate() && showAddButton()) {
+    <button type="button" class="btn btn-primary" (click)="openNew()">+ Add user</button>
+  }
+</div>
+
+<div class="table-card users-card" [class.refreshing]="list.refreshing()">
+  @if (list.error()) {
+    <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+  } @else {
+    <div class="table-scroll">
+      <table class="data-table stack">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Access</th>
+            <th>Status</th>
+            <th><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (list.loading()) {
+            @for (i of skeleton; track i) {
+              <tr>@for (c of [1, 2, 3, 4, 5, 6]; track c) { <td><span class="skeleton"></span></td> }</tr>
+            }
+          } @else {
+            @for (u of list.items(); track u.id) {
+              <tr [class.inactive]="!u.is_active">
+                <td class="c-name">
+                  <span class="cell-main">{{ u.full_name || '—' }}</span>
+                  @if (u.is_owner) { <span class="badge gold tag">Owner</span> }
+                  @if (u.is_me) { <span class="badge blue tag">You</span> }
+                  @if (!u.is_owner && u.staff_type && u.staff_type !== 'staff') { <span class="badge tag">{{ u.staff_type === 'master' ? 'Master' : 'Tailor' }}</span> }
+                  @if (u.job_title) { <span class="cell-sub">{{ u.job_title }}</span> }
+                </td>
+                <td class="c-email">{{ u.email }}</td>
+                <td class="c-phone nowrap">{{ u.phone || '—' }}</td>
+                <td class="c-access">
+                  <span class="access" tabindex="0" [attr.title]="detail(u)" [attr.aria-label]="'Access: ' + detail(u).split('\n').join('; ')">{{ summary(u) }}</span>
+                </td>
+                <td class="c-status">
+                  <span class="badge dot" [class.green]="u.is_active">{{ u.is_active ? 'Active' : 'Off' }}</span>
+                  @if (u.is_active && u.must_change_password) { <span class="cell-sub">Has not chosen a password yet</span> }
+                </td>
+                <td class="actions-cell c-actions">
+                  @if (canManage(u)) {
+                    <button type="button" class="btn btn-sm" [disabled]="busyId() === u.id" [attr.aria-label]="'Edit ' + (u.full_name || u.email)" (click)="openEdit(u)">Edit</button>
+                    <button type="button" class="btn btn-sm" [disabled]="busyId() === u.id" [attr.aria-label]="'Reset password for ' + (u.full_name || u.email)" (click)="resetPassword(u)">Reset password</button>
+                    @if (u.is_active) {
+                      <button type="button" class="btn btn-sm btn-ghost danger" [disabled]="busyId() === u.id" [attr.aria-label]="'Switch off ' + (u.full_name || u.email)" (click)="switchOff(u)">
+                        @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Switch off
+                      </button>
+                    } @else {
+                      <button type="button" class="btn btn-sm" [disabled]="busyId() === u.id" [attr.aria-label]="'Switch on ' + (u.full_name || u.email)" (click)="switchOn(u)">
+                        @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Switch on
+                      </button>
+                    }
+                  } @else if (lockedReason(u)) {
+                    <span class="locked">{{ lockedReason(u) }}</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr class="empty-row"><td colspan="6">
+                <app-empty-state
+                  [title]="search() ? 'No matching users' : 'No users yet'"
+                  [message]="search() ? 'Try another name or email, or clear the search.' : 'Add the people who work with you. Each one gets their own login and only the access you choose.'">
+                  @if (!search() && canCreate()) { <button type="button" class="btn btn-sm btn-primary" (click)="openNew()">+ Add user</button> }
+                </app-empty-state>
+              </td></tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+    <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+  }
+</div>
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="!saving() && closeForm()">
+    <form class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="puTitle" novalidate (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Users</span>
+          <h3 id="puTitle">{{ f.id ? 'Edit user' : 'Add user' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeForm()" [disabled]="saving()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="puName">Full name</label>
+            <input id="puName" class="input" required autocomplete="off" maxlength="100" [value]="f.full_name"
+              [attr.aria-invalid]="showErrors() && nameError() ? 'true' : null" [attr.aria-describedby]="showErrors() && nameError() ? 'puNameErr' : null"
+              (input)="patchForm({ full_name: $any($event.target).value })" />
+            @if (showErrors() && nameError()) { <span class="error" id="puNameErr">{{ nameError() }}</span> }
+          </div>
+          <div class="field">
+            <label for="puEmail">Email (their login)</label>
+            <input id="puEmail" class="input" type="email" required autocomplete="off" maxlength="160" [value]="f.email" [disabled]="!!f.id"
+              [attr.aria-invalid]="showErrors() && emailError() ? 'true' : null" [attr.aria-describedby]="showErrors() && emailError() ? 'puEmailErr' : null"
+              (input)="patchForm({ email: $any($event.target).value })" />
+            @if (showErrors() && emailError()) { <span class="error" id="puEmailErr">{{ emailError() }}</span> }
+            @if (f.id) { <span class="hint">The login email cannot be changed.</span> }
+          </div>
+          <div class="field">
+            <label for="puPhone">Phone <span class="opt">(optional)</span></label>
+            <input id="puPhone" class="input" type="tel" autocomplete="off" maxlength="40" [value]="f.phone" (input)="patchForm({ phone: $any($event.target).value })" />
+          </div>
+          @if (!f.isOwner) {
+            <div class="field">
+              <label for="puType">Type</label>
+              <select id="puType" class="input" [value]="f.staff_type" (change)="pickType($any($event.target).value)">
+                @for (t of staffTypes; track t.id) { <option [value]="t.id" [selected]="t.id === f.staff_type">{{ t.label }}</option> }
+              </select>
+            </div>
+          }
+          <div class="field">
+            <label for="puTitleInput">Job title <span class="opt">(optional)</span></label>
+            <input id="puTitleInput" class="input" list="puTitles" autocomplete="off" maxlength="60" placeholder="e.g. Master Tailor" [value]="f.job_title"
+              (input)="patchForm({ job_title: $any($event.target).value })" />
+            <datalist id="puTitles">@for (t of titles; track t) { <option [value]="t"></option> }</datalist>
+          </div>
+        </div>
+
+        @if (f.isOwner) {
+          <p class="owner-note">This is the partner owner. The owner always has every module the partner has; change the partner's modules instead.</p>
+        } @else {
+          <app-permission-matrix [modules]="modules()" [available]="ceiling()" [(value)]="formPerms" [disabled]="saving()"
+            [unavailableHint]="api().kind === 'admin' ? 'This module is not enabled for the partner' : 'Your partner does not have this'" />
+          @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so this person will not be able to open any page.</p> }
+        }
+
+        @if (!f.id) {
+          <div class="field pw-field">
+            <label for="puPassword">Temporary password <span class="opt">(optional)</span></label>
+            <span class="pw-wrap">
+              <input id="puPassword" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [value]="f.password"
+                [attr.aria-invalid]="showErrors() && passwordError() ? 'true' : null" [attr.aria-describedby]="'puPwHint' + (showErrors() && passwordError() ? ' puPwErr' : '')"
+                (input)="patchForm({ password: $any($event.target).value })" />
+              <button type="button" class="btn btn-sm btn-ghost" [attr.aria-pressed]="showPassword()" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
+            </span>
+            @if (showErrors() && passwordError()) { <span class="error" id="puPwErr">{{ passwordError() }}</span> }
+            <span class="hint" id="puPwHint">Leave empty to generate one. Either way they must choose their own password at first sign-in.</span>
+          </div>
+        }
+
+        @if (formError()) { <p class="form-error" role="alert">{{ formError() }}</p> }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="closeForm()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Create login' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}
+
+@if (credential(); as c) {
+  <app-temp-password-dialog [title]="c.title" [name]="c.name" [email]="c.email" [password]="c.password" (closed)="closeCredential()" />
+}

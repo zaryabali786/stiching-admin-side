@@ -1,0 +1,272 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Masters and tailors</span>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Teams and capacity', 'ٹیمیں اور گنجائش') }}</h1>
+      <p class="subtitle" [class.urdu]="lang.isUrdu()">
+        {{ lang.t('Each master cuts for their own tailors. New work goes to the least busy team and person.', 'ہر ماسٹر اپنے درزیوں کے لیے کٹنگ کرتا ہے۔ نیا کام سب سے کم مصروف ٹیم کے پاس جاتا ہے۔') }}
+      </p>
+    </div>
+    <div *can="'teams.update'" class="actions">
+      <button type="button" class="btn" (click)="openAdd('tailor')" [disabled]="!activeMasters().length" [title]="activeMasters().length ? '' : 'Add a master first'">
+        <span [class.urdu]="lang.isUrdu()">+ {{ lang.t('Add tailor', 'درزی شامل کریں') }}</span>
+      </button>
+      <button type="button" class="btn btn-primary" (click)="openAdd('master')">
+        <span [class.urdu]="lang.isUrdu()">+ {{ lang.t('Add master', 'ماسٹر شامل کریں') }}</span>
+      </button>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <div class="stat-grid">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <div class="stat"><span class="skeleton" style="width: 55%"></span><span class="skeleton" style="height: 28px; width: 40%"></span></div>
+      }
+    </div>
+    <div class="team-grid">
+      @for (i of [1, 2, 3]; track i) {
+        <div class="card"><span class="skeleton" style="width: 50%; height: 22px"></span><span class="skeleton" style="height: 10px; margin: 18px 0"></span><span class="skeleton" style="height: 120px"></span></div>
+      }
+    </div>
+  } @else if (error() && !data()) {
+    <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
+  } @else if (data()) {
+    @if (stats(); as s) {
+      <section class="stat-grid">
+        <div class="stat">
+          <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Load today', 'آج کا بوجھ') }}</span>
+          <span class="stat-value">{{ s.loadPct }}%</span>
+          <span class="stat-sub">{{ s.masters }} masters · {{ s.tailors }} tailors</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('In cutting', 'کٹنگ میں') }}</span>
+          <span class="stat-value">{{ s.cutting }}</span>
+          <span class="stat-sub">articles across {{ s.masters }} masters</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('In stitching', 'سلائی میں') }}</span>
+          <span class="stat-value">{{ s.stitching }}</span>
+          <span class="stat-sub">daily tailor capacity {{ s.tailorCapacity }}</span>
+        </div>
+        <div class="stat free">
+          <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Free right now', 'ابھی فارغ') }}</span>
+          <span class="stat-value names">{{ s.free.length ? s.free.slice(0, 3).join(', ') : '—' }}</span>
+          <span class="stat-sub">{{ s.free.length > 3 ? '+' + (s.free.length - 3) + ' more · ' : '' }}{{ s.free.length ? 'suggested for the next stitching jobs' : 'every tailor has work' }}</span>
+        </div>
+      </section>
+    }
+
+    <div class="toolbar">
+      <span class="muted small">Load = assigned work ÷ daily capacity set for each person.</span>
+      <label class="check">
+        <input type="checkbox" [checked]="showInactive()" (change)="toggleInactive($any($event.target).checked)" />
+        Show removed people
+      </label>
+    </div>
+
+    @if (!masters().length && !unassigned().length) {
+      <div class="card">
+        <app-empty-state title="No team yet — add your first master" message="Masters cut the fabric for their own tailors. Add a master, then the tailors who work with them.">
+          <button *can="'teams.update'" type="button" class="btn btn-primary btn-sm" (click)="openAdd('master')">+ Add master</button>
+        </app-empty-state>
+      </div>
+    } @else {
+      <section class="team-grid">
+        @for (team of masters(); track team.id) {
+          <article class="card team" [class.suggested]="team.id === suggestedId()" [class.inactive]="!team.is_active">
+            <div class="team-head">
+              <span class="avatar" aria-hidden="true">{{ initial(team.name) }}</span>
+              <div class="team-title">
+                <h3>{{ team.name }}</h3>
+                @if (team.login) { <span class="muted tiny login-tag" [title]="'Login: ' + team.login.email">🔑 {{ team.login.email }}{{ team.login.is_active ? '' : ' (off)' }}</span> }
+                @else if (access() && team.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(team)">+ Create login</button> }
+                <span class="muted small">Cutting · {{ activeTailors(team) }} tailor{{ activeTailors(team) === 1 ? '' : 's' }} · {{ team.daily_capacity }}/day</span>
+              </div>
+              @if (!team.is_active) {
+                <span class="badge">Removed</span>
+              } @else if (team.id === suggestedId()) {
+                <span class="badge green" [class.urdu]="lang.isUrdu()">{{ lang.t('Suggested next', 'اگلا تجویز کردہ') }}</span>
+              } @else if (team.team_load_pct >= 90) {
+                <span class="badge red" [class.urdu]="lang.isUrdu()">{{ lang.t('Nearly full', 'تقریباً بھرا') }}</span>
+              }
+            </div>
+
+            <div class="load">
+              <div class="load-labels">
+                <span>Team load</span>
+                <span><b>{{ team.team_assigned }}</b> / {{ team.team_capacity }} · <b [class]="'tone-' + loadTone(team.team_load_pct)">{{ team.team_load_pct }}% <span [class.urdu]="lang.isUrdu()">{{ loadWord(team.team_load_pct) }}</span></b></span>
+              </div>
+              <div class="track" role="meter" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="team.team_load_pct" [attr.aria-label]="'Team load ' + team.team_load_pct + '%'"><div [class]="'fill ' + loadTone(team.team_load_pct)" [style.width.%]="team.team_load_pct > 100 ? 100 : team.team_load_pct"></div></div>
+              <span class="muted small">{{ team.assigned }} in cutting queue</span>
+            </div>
+
+            <ul class="tailors">
+              @for (t of team.tailors; track t.id) {
+                <li [class.inactive]="!t.is_active">
+                  <span class="avatar sm" aria-hidden="true">{{ initial(t.name) }}</span>
+                  <div class="t-info">
+                    <span class="t-name">{{ t.name }}</span>
+                    @if (t.login) { <span class="muted tiny login-tag" [title]="'Login: ' + t.login.email">🔑 {{ t.login.email }}{{ t.login.is_active ? '' : ' (off)' }}</span> }
+                    @else if (access() && t.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(t)">+ Create login</button> }
+                    <span class="muted tiny">{{ t.assigned === 0 ? 'No jobs' : t.assigned + (t.assigned === 1 ? ' job' : ' jobs') }} · {{ t.daily_capacity }}/day</span>
+                  </div>
+                  <div class="t-track" aria-hidden="true"><div [class]="'fill ' + loadTone(t.load_pct)" [style.width.%]="t.load_pct > 100 ? 100 : t.load_pct"></div></div>
+                  <span [class]="'badge dot ' + statusTone(t)" [class.urdu]="lang.isUrdu()">{{ statusLabel(t) }} @if (t.is_active) { <span class="pct">{{ t.load_pct }}%</span> }</span>
+                  <div class="row-actions">
+                    @if (t.is_active) {
+                      <button *can="'teams.update'" type="button" class="btn btn-sm row-btn" (click)="openEdit(t)" [attr.aria-label]="'Edit ' + t.name">Edit</button>
+                      <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm row-btn danger" [disabled]="isBusy('m:' + t.id)" (click)="remove(t)" [attr.aria-label]="'Remove ' + t.name">
+                        @if (isBusy('m:' + t.id)) { <ion-spinner name="crescent" /> } Remove
+                      </button>
+                    } @else {
+                      <button *can="'teams.update'" type="button" class="btn btn-sm row-btn" [disabled]="isBusy('m:' + t.id)" (click)="restore(t)" [attr.aria-label]="'Restore ' + t.name">
+                        @if (isBusy('m:' + t.id)) { <ion-spinner name="crescent" /> } Restore
+                      </button>
+                    }
+                  </div>
+                </li>
+              } @empty {
+                <li class="none muted small">No tailors in this team yet.</li>
+              }
+            </ul>
+
+            <div class="team-foot">
+              @if (team.is_active) {
+                <button *can="'teams.update'" type="button" class="btn btn-sm" (click)="openAdd('tailor', team.id)" [attr.aria-label]="'Add tailor to ' + team.name">+ <span [class.urdu]="lang.isUrdu()">{{ lang.t('Add tailor', 'درزی شامل کریں') }}</span></button>
+                <span class="spacer"></span>
+                <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm" (click)="openEdit(team)" [attr.aria-label]="'Edit ' + team.name">Edit master</button>
+                <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm danger" [disabled]="isBusy('m:' + team.id)" (click)="remove(team)" [attr.aria-label]="'Remove ' + team.name">
+                  @if (isBusy('m:' + team.id)) { <ion-spinner name="crescent" /> } Remove
+                </button>
+              } @else {
+                <button *can="'teams.update'" type="button" class="btn btn-sm" [disabled]="isBusy('m:' + team.id)" (click)="restore(team)">
+                  @if (isBusy('m:' + team.id)) { <ion-spinner name="crescent" /> } Restore master
+                </button>
+              }
+            </div>
+          </article>
+        }
+      </section>
+
+      @if (unassigned().length) {
+        <section class="card unassigned">
+          <div class="card-head">
+            <h3 class="card-title">Tailors without a master</h3>
+            <span class="badge amber">{{ unassigned().length }} need a master</span>
+          </div>
+          <p class="muted small">These tailors won't get work automatically until they are added to a team. Edit them to choose a master.</p>
+          <ul class="tailors">
+            @for (t of unassigned(); track t.id) {
+              <li [class.inactive]="!t.is_active">
+                <span class="avatar sm" aria-hidden="true">{{ initial(t.name) }}</span>
+                <div class="t-info">
+                  <span class="t-name">{{ t.name }}</span>
+                  <span class="muted tiny">{{ t.assigned === 0 ? 'No jobs' : t.assigned + ' jobs' }} · {{ t.daily_capacity }}/day</span>
+                </div>
+                <div class="t-track" aria-hidden="true"><div [class]="'fill ' + loadTone(t.load_pct)" [style.width.%]="t.load_pct > 100 ? 100 : t.load_pct"></div></div>
+                <span [class]="'badge dot ' + statusTone(t)" [class.urdu]="lang.isUrdu()">{{ statusLabel(t) }} @if (t.is_active) { <span class="pct">{{ t.load_pct }}%</span> }</span>
+                <div class="row-actions">
+                  @if (t.is_active) {
+                    <button *can="'teams.update'" type="button" class="btn btn-sm row-btn" (click)="openEdit(t)" [attr.aria-label]="'Choose master for ' + t.name">Choose master</button>
+                    <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm row-btn danger" [disabled]="isBusy('m:' + t.id)" (click)="remove(t)" [attr.aria-label]="'Remove ' + t.name">Remove</button>
+                  } @else {
+                    <button *can="'teams.update'" type="button" class="btn btn-sm row-btn" [disabled]="isBusy('m:' + t.id)" (click)="restore(t)" [attr.aria-label]="'Restore ' + t.name">Restore</button>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    }
+  }
+</div>
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="closeForm()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tm-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.id ? 'Edit' : 'New' }} {{ f.role }}</span>
+          <h3 id="tm-title" [class.urdu]="lang.isUrdu()">
+            @if (f.id) { {{ f.name || 'Team member' }} }
+            @else if (f.role === 'master') { {{ lang.t('Add master', 'ماسٹر شامل کریں') }} }
+            @else { {{ lang.t('Add tailor', 'درزی شامل کریں') }} }
+          </h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeForm()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="tm-name">Name *</label>
+          <input id="tm-name" class="input" [ngModel]="f.name" (ngModelChange)="patchForm({ name: $event })" [placeholder]="f.role === 'master' ? 'e.g. Master Farooq' : 'e.g. Tariq'" maxlength="80" />
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="tm-role">Role</label>
+            <select id="tm-role" class="select" [ngModel]="f.role" (ngModelChange)="setRole($event)" [disabled]="!!f.id">
+              <option value="master">Master (cutting)</option>
+              <option value="tailor">Tailor (stitching)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tm-cap">Daily capacity *</label>
+            <input id="tm-cap" class="input" type="number" min="1" max="100" [ngModel]="f.daily_capacity" (ngModelChange)="patchForm({ daily_capacity: $event })" />
+            <span class="hint">Articles per day</span>
+          </div>
+        </div>
+        @if (f.role === 'tailor') {
+          <div class="field">
+            <label for="tm-master">Works under *</label>
+            <select id="tm-master" class="select" [ngModel]="f.master_id" (ngModelChange)="patchForm({ master_id: $event })">
+              <option [ngValue]="null" disabled>Choose a master…</option>
+              @for (m of activeMasters(); track m.id) {
+                <option [ngValue]="m.id">{{ m.name }} · {{ m.team_load_pct }}% load</option>
+              }
+            </select>
+          </div>
+        }
+        @if (canCreateLogin() && access()) {
+          <div class="login-box">
+            <label class="login-toggle">
+              <input type="checkbox" [ngModel]="f.withLogin" (ngModelChange)="patchForm({ withLogin: $event })" />
+              <span>{{ f.id ? 'Create a login for this person' : 'Give them their own login' }}</span>
+            </label>
+            @if (f.withLogin) {
+              <div class="form-grid">
+                <div class="field">
+                  <label for="tm-email">Email (their login) *</label>
+                  <input id="tm-email" class="input" type="email" autocomplete="off" maxlength="160" [ngModel]="f.email" (ngModelChange)="patchForm({ email: $event })" />
+                </div>
+                <div class="field">
+                  <label for="tm-pw">Temporary password <span class="muted">(optional)</span></label>
+                  <span class="pw-wrap">
+                    <input id="tm-pw" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [ngModel]="f.password" (ngModelChange)="patchForm({ password: $event })" />
+                    <button type="button" class="btn btn-sm btn-ghost" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
+                  </span>
+                  <span class="hint">Leave empty to generate one. They choose their own at first sign-in.</span>
+                </div>
+              </div>
+              <app-permission-matrix [modules]="access()!.modules" [available]="access()!.delegable" [(value)]="formPerms" [disabled]="saving()" />
+              @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so they will not be able to open any page.</p> }
+            }
+          </div>
+        }
+        @if (formTouched() && formError(f); as msg) {
+          <p class="form-error" role="alert">{{ msg }}</p>
+        }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="closeForm()" [disabled]="saving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> }
+          {{ f.id ? 'Save changes' : 'Add ' + f.role }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (credential(); as c) {
+  <app-temp-password-dialog title="Login created" [name]="c.name" [email]="c.email" [password]="c.password" (closed)="credential.set(null)" />
+}

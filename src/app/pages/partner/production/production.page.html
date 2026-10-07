@@ -1,0 +1,296 @@
+<div class="page board-page">
+  <header class="page-header">
+    <div>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Production', 'پروڈکشن') }}</h1>
+      <p class="subtitle">
+        {{ todayLabel }} · <b>{{ totalArticles() }}</b> {{ totalArticles() === 1 ? 'article' : 'articles' }}
+        @if (hasFilters()) { <span class="filtered">(filtered)</span> }
+        <span *can="'production.update'" class="sub-hint"> · drag a card to the next column, or scan its job card</span>
+      </p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-icon refresh-btn" (click)="reload()" [disabled]="loading()" title="Refresh board" aria-label="Refresh board">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 4a8 8 0 0 1 7.75 6h-2.08A6 6 0 1 0 18 14h2.05A8 8 0 1 1 12 4Zm5-1h3v6h-6V7h2.3A6 6 0 0 0 17 6.4V3Z"/></svg>
+      </button>
+      <button type="button" class="btn btn-primary scan-btn" (click)="openScan()">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 5a2 2 0 0 1 2-2h3v2H5v3H3V5Zm13-2h3a2 2 0 0 1 2 2v3h-2V5h-3V3ZM3 16h2v3h3v2H5a2 2 0 0 1-2-2v-3Zm16 0h2v3a2 2 0 0 1-2 2h-3v-2h3v-3ZM7 7h2v10H7V7Zm3 0h1v10h-1V7Zm2 0h2v10h-2V7Zm3 0h2v10h-2V7Z"/></svg>
+        <span [class.urdu]="lang.isUrdu()">{{ lang.t('Scan job card', 'جاب کارڈ اسکین کریں') }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Search + filters -->
+  <div class="board-toolbar">
+    @for (k of [searchKey()]; track k) {
+      <app-search-input placeholder="Search order, customer code or article…" [value]="filters().search" (search)="onSearch($event)" />
+    }
+
+    <div class="filter-row" role="group" aria-label="Filter the board">
+      <div class="chip-group teams" role="group" aria-labelledby="fg-team">
+        <span class="group-label" id="fg-team" [class.urdu]="lang.isUrdu()">{{ lang.t('Team', 'ٹیم') }}</span>
+        <button type="button" class="chip" [class.active]="!filters().masterId" (click)="setMaster(null)" [attr.aria-pressed]="!filters().masterId">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t('All', 'تمام') }}</span>
+        </button>
+        @for (m of masters(); track m.id) {
+          <button type="button" class="chip" [class.active]="filters().masterId === m.id" (click)="setMaster(m.id)" [attr.aria-pressed]="filters().masterId === m.id">
+            <span class="avatar-xs" aria-hidden="true">{{ initial(m.name) }}</span>
+            {{ masterLabel(m.name) }}
+          </button>
+        }
+      </div>
+
+      <span class="chip-divider" aria-hidden="true"></span>
+
+      <div class="chip-group flags" role="group" aria-labelledby="fg-show">
+        <span class="group-label" id="fg-show" [class.urdu]="lang.isUrdu()">{{ lang.t('Show', 'دکھائیں') }}</span>
+        <button type="button" class="chip chip-rush" [class.active]="filters().rush" (click)="toggleRush()" [attr.aria-pressed]="filters().rush">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Rush only', 'صرف جلدی') }}</span>
+        </button>
+        <button type="button" class="chip chip-delayed" [class.active]="filters().delayed" [class.has-delayed]="delayedCount() > 0" (click)="toggleDelayed()" [attr.aria-pressed]="filters().delayed"
+          [attr.aria-label]="'Delayed only' + (delayedCount() ? ', ' + delayedCount() + ' delayed' : '')">
+          @if (delayedCount() > 0) { <span class="pulse" aria-hidden="true"></span> }
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Delayed', 'تاخیر') }}</span>
+          @if (delayedCount() > 0) { <span class="count">{{ delayedCount() }}</span> }
+        </button>
+      </div>
+
+      @if (hasFilters()) {
+        <button type="button" class="btn btn-ghost btn-sm clear-btn" (click)="clearFilters()">
+          <span aria-hidden="true">×</span> Clear filters
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="card">
+      <app-empty-state kind="error" title="Could not load the production board" [message]="error()" (retry)="reload()" />
+    </div>
+  } @else if (loading() && !columns().length) {
+    <!-- Initial skeleton -->
+    <div class="board" aria-busy="true">
+      @for (s of stages; track s) {
+        <section class="column" [style.--col]="meta(s).color">
+          <header class="col-head">
+            <div class="col-title-row">
+              <span class="col-dot"></span>
+              <h3 [class.urdu]="lang.isUrdu()">{{ stageLabel(s) }}</h3>
+              <span class="skeleton pill-skel"></span>
+            </div>
+            <p class="col-sub">{{ lang.t(meta(s).subEn, meta(s).subUr) }}</p>
+          </header>
+          <div class="col-body">
+            @for (i of skeletonCards; track i) {
+              <div class="ticket ticket-skel">
+                <div class="ticket-top">
+                  <span class="skeleton swatch"></span>
+                  <div class="grow">
+                    <span class="skeleton" style="width: 70%"></span>
+                    <span class="skeleton" style="width: 90%; margin-top: 8px; height: 16px"></span>
+                  </div>
+                </div>
+                <span class="skeleton" style="width: 55%; margin-top: 12px"></span>
+                <span class="skeleton" style="width: 80%; margin-top: 10px; height: 20px"></span>
+              </div>
+            }
+          </div>
+        </section>
+      }
+    </div>
+  } @else {
+    <div class="board-wrap">
+      @if (loading()) { <div class="board-progress" aria-hidden="true"></div> }
+      <div class="board" cdkScrollable cdkDropListGroup [class.reloading]="loading()" [class.is-dragging]="dragging()">
+        @for (col of columns(); track col.stage) {
+          <section class="column" [style.--col]="meta(col.stage).color" [attr.aria-label]="meta(col.stage).en">
+            <header class="col-head">
+              <div class="col-title-row">
+                <span class="col-dot"></span>
+                <h3 [class.urdu]="lang.isUrdu()">{{ stageLabel(col.stage) }}</h3>
+                <span class="col-count" [attr.aria-label]="col.total + (col.total === 1 ? ' card' : ' cards')">{{ col.total }}</span>
+              </div>
+              <p class="col-sub" [class.urdu]="lang.isUrdu()">{{ lang.t(meta(col.stage).subEn, meta(col.stage).subUr) }}</p>
+            </header>
+
+            <div
+              class="col-body"
+              #scroller
+              cdkDropList
+              [cdkDropListDisabled]="!canEdit()"
+              [id]="'col-' + col.stage"
+              [cdkDropListData]="col.stage"
+              (cdkDropListDropped)="drop($event)">
+              @for (card of col.items; track card.id) {
+                <article
+                  class="ticket"
+                  [class.is-busy]="isBusy(card.id)"
+                  [class.is-delayed]="card.status === 'delayed'"
+                  [class.is-rush]="card.priority === 'rush'"
+                  [class.read-only]="!canEdit()"
+                  cdkDrag
+                  [cdkDragData]="card"
+                  [cdkDragDisabled]="isBusy(card.id) || !canEdit()"
+                  [cdkDragStartDelay]="dragDelay"
+                  (cdkDragStarted)="onDragStart()"
+                  (cdkDragEnded)="onDragEnd()"
+                  (click)="open(card)"
+                  (keydown.enter)="open(card)"
+                  tabindex="0"
+                  role="button"
+                  [attr.aria-label]="card.unit_title + ', ' + card.order_reference + '. Open job card'">
+                  <div class="ticket-placeholder" *cdkDragPlaceholder><span>{{ lang.t('Drop here', 'یہاں چھوڑیں') }}</span></div>
+
+                  <div class="ticket-inner">
+                    <div class="ticket-top">
+                      <span class="swatch" [style.background]="swatch(card)" aria-hidden="true"></span>
+                      <div class="ticket-ids">
+                        <span class="code"><b>{{ card.customer_code || '—' }}</b> · {{ card.order_reference }}</span>
+                        <h4 class="title">{{ card.unit_title }}</h4>
+                      </div>
+                      @if (isBusy(card.id)) {
+                        <ion-spinner name="crescent" class="ticket-spinner" />
+                      } @else if (canEdit()) {
+                        <svg class="grip" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm-1.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM18 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm-1.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM18 19a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"/></svg>
+                      }
+                    </div>
+
+                    @if (col.stage !== 'to_assign') {
+                      <div class="assignee">
+                        @if (card.master) {
+                          <span class="avatar-sm" aria-hidden="true">{{ initial(card.master.name) }}</span>
+                          <span class="who">{{ masterLabel(card.master.name) }}</span>
+                          @if (card.tailor) {
+                            <span class="sep" aria-hidden="true">›</span>
+                            <span class="who tailor">{{ card.tailor.name }}</span>
+                          }
+                        } @else {
+                          <span class="no-team">Not assigned</span>
+                        }
+                      </div>
+                    }
+
+                    <!-- One line of meta: state tag · due date · comments -->
+                    <div class="ticket-meta">
+                      @if (card.status === 'delayed') {
+                        <span class="badge red">{{ card.days_late }} {{ card.days_late === 1 ? 'day' : 'days' }} late</span>
+                      }
+                      @if (card.priority === 'rush' || card.status === 'rush') { <span class="badge red tag-rush">Rush</span> }
+                      @if (cardLabel(card); as shown) { <span [class]="'badge ' + cardTone(card)">{{ shown }}</span> }
+                      @if (col.stage === 'qc' && card.qc_passed) { <span class="badge blue">QC passed ✓</span> }
+                      @if (card.approval_status === 'pending' || card.approval_status === 'changes_requested') { <app-approval-chip [status]="card.approval_status" [short]="true" /> }
+                      @if (card.due_date) { <span class="due" [class.late]="card.status === 'delayed'">Due {{ shortDate(card.due_date) }}</span> }
+                      @if (card.comments_count > 0) {
+                        <span class="comments" [attr.aria-label]="card.comments_count + (card.comments_count === 1 ? ' comment' : ' comments')">
+                          <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2Z"/></svg>
+                          {{ card.comments_count }}
+                        </span>
+                      }
+                    </div>
+
+                    @if (col.stage === 'to_assign' && canEdit()) {
+                      <div class="suggest" (click)="$event.stopPropagation()">
+                        @if (suggestion()?.master; as s) {
+                          <span class="suggest-text">
+                            <span class="suggest-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Suggested', 'تجویز') }}</span>
+                            <strong>{{ masterLabel(s.name) }}</strong>
+                            <span class="suggest-load">{{ s.load_pct }}% busy</span>
+                          </span>
+                          <button type="button" class="btn btn-green assign-btn" (click)="assign(card, $event)" [disabled]="isBusy(card.id)" (keydown.enter)="$event.stopPropagation()"
+                            [attr.aria-label]="'Assign ' + card.unit_title + ' to ' + masterLabel(s.name)">
+                            @if (isBusy(card.id)) { <ion-spinner name="crescent" /> }
+                            <span [class.urdu]="lang.isUrdu()">{{ lang.t('Assign', 'تفویض کریں') }}</span>
+                          </button>
+                        } @else {
+                          <span class="suggest-text muted">No master available — add one in Teams.</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </article>
+              }
+
+              @if (!col.items.length && !col.loadingMore) {
+                <div class="drop-hint">
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M11 4h2v9.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V4ZM5 19h14v2H5v-2Z"/></svg>
+                  {{ canEdit() ? lang.t('Drop cards here', 'کارڈ یہاں چھوڑیں') : lang.t('No cards', 'کوئی کارڈ نہیں') }}
+                </div>
+              }
+
+              @if (col.loadingMore) {
+                <div class="col-loading" role="status"><ion-spinner name="crescent" /> Loading more…</div>
+              } @else if (col.loadError) {
+                <button type="button" class="btn btn-sm btn-ghost col-retry" (click)="loadMore(col.stage)">Could not load more · Retry</button>
+              } @else if (col.nextCursor) {
+                <div class="sentinel" appInView [inViewRoot]="scroller" (inView)="loadMore(col.stage)"></div>
+              } @else if (col.items.length > 4) {
+                <div class="col-end">End of column</div>
+              }
+            </div>
+          </section>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+<!-- Scan job card -->
+@if (scanOpen()) {
+  <div class="modal-backdrop" (click)="closeScan()">
+    <div class="modal scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Production</span>
+          <h3 id="scan-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Scan job card', 'جاب کارڈ اسکین کریں') }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeScan()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <form (submit)="$event.preventDefault(); submitScan()">
+          <div class="field">
+            <label for="scan-code">Order reference or customer code</label>
+            <div class="scan-row">
+              <input
+                id="scan-code"
+                class="input scan-input"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="SA-1001 or STX-10001"
+                [value]="scanCode()"
+                (input)="scanCode.set($any($event.target).value)" />
+              <button type="submit" class="btn btn-primary" [disabled]="scanning() || !scanCode().trim()">
+                @if (scanning()) { <ion-spinner name="crescent" /> }
+                Find
+              </button>
+            </div>
+            <span class="hint">Scan the barcode on the job card, or type the code and press Enter.</span>
+          </div>
+        </form>
+
+        @if (scanMessage()) {
+          <p class="scan-message">{{ scanMessage() }}</p>
+        }
+
+        @if (scanResults(); as results) {
+          @if (results.length) {
+            <p class="scan-count">{{ results.length }} job cards found</p>
+            <ul class="scan-results">
+              @for (c of results; track c.id) {
+                <li>
+                  <button type="button" class="scan-result" (click)="openScanned(c)">
+                    <span class="swatch sm" [style.background]="swatch(c)" aria-hidden="true"></span>
+                    <span class="grow">
+                      <span class="code">{{ c.customer_code }} · {{ c.order_reference }}</span>
+                      <strong>{{ c.unit_title }}</strong>
+                    </span>
+                    <span class="badge stage-tag" [style.--col]="meta(c.stage).color"><span class="col-dot" aria-hidden="true"></span>{{ stageLabel(c.stage) }}</span>
+                    <span class="chev" aria-hidden="true">›</span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+    </div>
+  </div>
+}

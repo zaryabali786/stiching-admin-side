@@ -1,0 +1,126 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Partner payouts</span>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Earnings', 'کمائی') }}</h1>
+      <p class="subtitle">Your share of every invoice. It counts as earned once the customer has paid.</p>
+    </div>
+  </header>
+
+  @if (summaryLoading()) {
+    <div class="stat-grid">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <div class="stat"><span class="skeleton" style="width: 55%"></span><span class="skeleton" style="height: 28px; width: 70%"></span></div>
+      }
+    </div>
+    <div class="card chart-card"><span class="skeleton" style="height: 160px"></span></div>
+  } @else if (summaryError()) {
+    <div class="card chart-card"><app-empty-state kind="error" [message]="summaryError()" (retry)="retrySummary()" /></div>
+  } @else if (summary(); as s) {
+    <section class="stat-grid">
+      <div class="stat highlight">
+        <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('This month', 'اس ماہ') }}</span>
+        <span class="stat-value money">{{ s.thisMonth | pkr }}</span>
+        <span class="stat-sub">paid invoices</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Pending', 'زیر التوا') }}</span>
+        <span class="stat-value money">{{ s.pending | pkr }}</span>
+        <span class="stat-sub">invoiced, not paid yet</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Last six months', 'پچھلے چھ ماہ') }}</span>
+        <span class="stat-value money">{{ s.lastSixMonths | pkr }}</span>
+        <span class="stat-sub">lifetime {{ s.lifetime | pkr }}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Articles this month', 'اس ماہ کے آرٹیکل') }}</span>
+        <span class="stat-value">{{ s.articlesThisMonth }}</span>
+        <span class="stat-sub">packed since the 1st</span>
+      </div>
+    </section>
+
+    <section class="card chart-card">
+      <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Paid per month', 'ماہانہ ادائیگی') }}</h3>
+      @if (!hasMonthly()) {
+        <app-empty-state title="No paid invoices in the last six months" message="Your monthly earnings will appear here once customers pay." />
+      } @else {
+        <div class="months" role="img" [attr.aria-label]="monthsLabel()">
+          @for (m of s.monthly; track m.key; let last = $last) {
+            <div class="month" [title]="m.month + ': ' + (m.amount | pkr)">
+              <span class="m-val">{{ m.amount ? compact(m.amount) : '' }}</span>
+              <div class="m-track"><div class="m-bar" [class.current]="last" [style.height.%]="m.pct"></div></div>
+              <span class="m-label" [class.current]="last">{{ m.month }}</span>
+            </div>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  <div class="toolbar">
+    <div class="chips" role="tablist" aria-label="Invoice status">
+      @for (f of filters; track f.value) {
+        <button type="button" class="chip" role="tab" [class.active]="status() === f.value" [attr.aria-selected]="status() === f.value" (click)="setStatus(f.value)">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t(f.en, f.ur) }}</span>
+        </button>
+      }
+    </div>
+    <app-search-input placeholder="Invoice no., order ref, customer…" [value]="search()" (search)="onSearch($event)" />
+  </div>
+
+  <section class="table-card">
+    @if (loading()) {
+      <div class="sk-wrap">
+        @for (i of [1, 2, 3, 4, 5]; track i) { <span class="skeleton" style="height: 38px"></span> }
+      </div>
+    } @else if (error()) {
+      <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
+    } @else if (!rows().length) {
+      @if (search()) {
+        <app-empty-state title="No invoices match your search" [message]="'Nothing found for “' + search() + '”.'" />
+      } @else {
+        <app-empty-state title="No invoices yet" message="Invoices appear here once admin issues them for your packed orders." />
+      }
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Invoice</th>
+              <th>Order</th>
+              <th>Customer</th>
+              <th class="num">Articles</th>
+              <th class="num">Your amount</th>
+              <th>Status</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of rows(); track r.id) {
+              <tr>
+                <td><span class="cell-main">{{ r.number }}</span></td>
+                <td>{{ r.order?.reference || '—' }}</td>
+                <td>
+                  <span class="cell-main">{{ r.order?.customer_name || '—' }}</span>
+                  <span class="cell-sub">{{ r.order?.customer_code }}</span>
+                </td>
+                <td class="num">{{ r.order?.units_count ?? '—' }}</td>
+                <td class="num"><span class="amount">{{ r.partner_total_pkr | pkr }}</span></td>
+                <td><app-status-badge [status]="r.status === 'paid' ? 'paid' : 'issued'" [label]="statusLabel(r.status)" /></td>
+                <td>
+                  @if (r.status === 'paid') {
+                    {{ r.paid_at | day }} <span class="cell-sub">paid</span>
+                  } @else {
+                    {{ r.issued_at | day }} <span class="cell-sub">issued</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="meta()" (pageChange)="goToPage($event)" />
+    }
+  </section>
+</div>

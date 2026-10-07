@@ -1,0 +1,126 @@
+<h1 class="sr-only">Messages</h1>
+
+<div class="msg-shell" [class.has-active]="!!activeId()">
+  <!-- ═════════ Conversation list ═════════ -->
+  <section class="list-pane" aria-label="Conversations">
+    <div class="list-head">
+      <div class="list-title">
+        <h2>Conversations</h2>
+        @if (unreadTotal() > 0) { <span class="badge amber">{{ unreadTotal() }} unread</span> }
+      </div>
+      <app-search-input placeholder="Search order, customer, brand…" [value]="search()" (search)="onSearch($event)" />
+      <div class="chips" role="group" aria-label="Show">
+        @for (f of filters; track f) {
+          <button type="button" class="chip" [class.active]="filter() === f" [attr.aria-pressed]="filter() === f" (click)="setFilter(f)">
+            {{ f === 'all' ? 'All' : 'Unread' }}
+            @if (f === 'unread' && unreadTotal() > 0) { <span class="count">{{ unreadTotal() }}</span> }
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="list-body">
+      @if (loading()) {
+        @for (i of skeleton; track i) {
+          <div class="conv skel" aria-hidden="true"><span class="skeleton av"></span><span class="skeleton-lines"><span class="skeleton" style="width: 60%"></span><span class="skeleton" style="width: 90%"></span></span></div>
+        }
+      } @else if (error()) {
+        <app-empty-state kind="error" [message]="error()" (retry)="load()" />
+      } @else {
+        <ul class="conv-list">
+          @for (c of items(); track c.order_id) {
+            <li class="conv-item" [class.open]="c.order_id === activeId()">
+              <a class="conv" [routerLink]="[base, c.order_id]" [queryParams]="{ unit: null }" queryParamsHandling="merge" [class.active]="c.order_id === activeId()" [class.unread]="c.unread > 0"
+                [attr.aria-current]="c.order_id === activeId() ? 'page' : null"
+                [attr.aria-label]="(c.customer_name || 'Customer') + ', order ' + c.reference + (c.unread ? ', ' + c.unread + ' unread' : '')">
+                <span class="av" aria-hidden="true">{{ initial(c) }}</span>
+                <span class="conv-main">
+                  <span class="conv-top">
+                    <span class="conv-name">{{ c.customer_name || 'Customer' }}<span class="conv-code">{{ c.customer_code }}</span></span>
+                    <span class="conv-time">{{ c.last_message_at | timeAgo }}</span>
+                  </span>
+                  <span class="conv-order">{{ c.reference }}@if (c.brand) { · {{ c.brand }} }</span>
+                  <span class="conv-bottom">
+                    <span class="conv-preview">
+                      @if (fromStaff(c)) { <span class="you">You: </span> }
+                      @if (isVoice(c)) {
+                        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+                        Voice message
+                      } @else { {{ c.last_message_preview }} }
+                    </span>
+                    @if (c.unread > 0) { <span class="pill" [attr.aria-label]="c.unread + ' unread'">{{ c.unread > 99 ? '99+' : c.unread }}</span> }
+                  </span>
+                </span>
+              </a>
+              @if (c.chats?.length) {
+                <div class="chat-chips" role="group" [attr.aria-label]="'Chats of ' + c.reference">
+                  @for (ch of c.chats; track ch.unit_id || 'general') {
+                    <a class="chat-chip" [routerLink]="[base, c.order_id]" [queryParams]="chatQuery(ch)" queryParamsHandling="merge"
+                      [class.active]="isOpenChat(c.order_id, ch)" [class.unread]="ch.unread > 0" [attr.aria-current]="isOpenChat(c.order_id, ch) ? 'true' : null"
+                      [attr.aria-label]="chatLabel(ch) + ' chat' + (ch.unread ? ', ' + ch.unread + ' new' : '')">
+                      <span class="cc-title">{{ chatLabel(ch) }}</span>
+                      @if (ch.unread > 0) { <span class="cc-new">· {{ ch.unread }} new</span> }
+                    </a>
+                  }
+                </div>
+              }
+            </li>
+          } @empty {
+            <li class="list-empty">
+              <app-empty-state
+                [title]="search() ? 'No matching conversations' : filter() === 'unread' ? 'You are all caught up' : 'No conversations yet'"
+                [message]="search() ? 'Try another order number or customer name.' : filter() === 'unread' ? 'Nothing is waiting for a reply.' : 'When a customer writes about an order, it appears here. You can also start one from a job card with Message customer.'" />
+            </li>
+          }
+        </ul>
+        @if (hasMore()) {
+          <div class="more">
+            <button type="button" class="btn btn-sm" [disabled]="loadingMore()" (click)="loadMore()">
+              @if (loadingMore()) { <ion-spinner name="crescent" /> } Load more
+            </button>
+          </div>
+        }
+      }
+    </div>
+  </section>
+
+  <!-- ═════════ Thread ═════════ -->
+  <section class="thread-pane" aria-label="Conversation">
+    @if (activeId(); as id) {
+      @if (header(); as h) {
+        <header class="thread-head">
+          <a class="back" [routerLink]="base" [queryParams]="{ unit: null }" queryParamsHandling="merge" aria-label="Back to conversations">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="m15.4 5.4-1.4-1.4-8 8 8 8 1.4-1.4L8.8 12l6.6-6.6Z"/></svg>
+          </a>
+          <div class="thread-who">
+            <strong>{{ h.customer_name || 'Order conversation' }}@if (h.customer_code) { <span class="code">{{ h.customer_code }}</span> }</strong>
+            <span class="thread-sub">
+              @if (h.reference) { <span class="ref">{{ h.reference }}</span> } @else { <span class="muted">Order</span> }
+              @if (h.status) { <app-status-badge [status]="h.status" [label]="h.status_label" /> }
+            </span>
+          </div>
+          @if (orderLink; as l) {
+            <a class="btn btn-sm" [routerLink]="l.commands" [queryParams]="l.params">{{ l.label }}</a>
+          }
+        </header>
+      }
+      @if (activeScope() === 'general') {
+        <div class="scope-title"><span>Chat: <strong>General</strong> · about the order as a whole</span></div>
+      } @else if (activeArticle(); as a) {
+        <div class="scope-title">
+          @if (a.image_url) { <img [src]="a.image_url" alt="" /> }
+          <span>Chat about <strong>article {{ a.line_no ?? '' }} · {{ a.title }}</strong></span>
+        </div>
+      }
+      @if (panelReady()) {
+        <app-chat-panel class="panel" [orderId]="id" [unitId]="activeScope()" (activity)="refresh$.next()" />
+      } @else {
+        <div class="panel panel-wait"><span class="skeleton" style="height: 44px; width: 60%; margin: 16px"></span></div>
+      }
+    } @else {
+      <div class="thread-empty">
+        <app-empty-state title="Select a conversation" message="Choose a customer on the left to read and reply." />
+      </div>
+    }
+  </section>
+</div>

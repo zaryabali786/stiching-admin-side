@@ -1,0 +1,117 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Operations</span>
+      <h1>Orders</h1>
+      <p class="subtitle">Every order from parcel arrival to delivery. Filter by stage, then open an order to update it.</p>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Filter by stage">
+      @for (g of groups; track g.key) {
+        <button type="button" class="chip" [class.active]="query().group === g.key" [attr.aria-pressed]="query().group === g.key"
+          [class.attn]="g.tone === 'attn' && !!count(g.key)" [class.bad]="g.tone === 'bad' && !!count(g.key)" (click)="setGroup(g.key)">
+          {{ g.label }}
+          @if (count(g.key) !== null) { <span class="count">{{ count(g.key) }}</span> }
+        </button>
+      }
+    </div>
+    <div class="toolbar-end">
+      @if (partners().length > 1 || query().partner) {
+        <label class="page-size">
+          Partner
+          <select class="select" aria-label="Filter by partner" (change)="setPartner($any($event.target).value)">
+            <option value="" [selected]="!query().partner">All partners</option>
+            @for (p of partners(); track p.id) { <option [value]="p.id" [selected]="p.id === query().partner">{{ p.name }}</option> }
+          </select>
+        </label>
+      }
+      <app-search-input placeholder="Search reference, customer, brand, tracking…" [value]="query().search" (search)="onSearch($event)" />
+      <label class="page-size">
+        Rows
+        <select class="select" (change)="setLimit($any($event.target).value)">
+          @for (s of pageSizes; track s) { <option [value]="s" [selected]="s === query().limit">{{ s }}</option> }
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll" [class.sticky-head]="query().limit > 15">
+        <table class="data-table">
+          <caption class="sr-only">Orders, {{ groupLabel() }}. Select a row to open the order.</caption>
+          <thead>
+            <tr>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('reference')" (click)="sortBy('reference')" (keydown.enter)="sortBy('reference')">Order<span class="sort" aria-hidden="true">{{ sortIcon('reference') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('customer_name')" (click)="sortBy('customer_name')" (keydown.enter)="sortBy('customer_name')">Customer<span class="sort" aria-hidden="true">{{ sortIcon('customer_name') }}</span></th>
+              <th>Ships to</th>
+              <th>Brand</th>
+              <th>Partner</th>
+              <th class="num">Articles</th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('created_at')" (click)="sortBy('created_at')" (keydown.enter)="sortBy('created_at')">Created<span class="sort" aria-hidden="true">{{ sortIcon('created_at') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('due_date')" (click)="sortBy('due_date')" (keydown.enter)="sortBy('due_date')">Due<span class="sort" aria-hidden="true">{{ sortIcon('due_date') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('status')" (click)="sortBy('status')" (keydown.enter)="sortBy('status')">Status<span class="sort" aria-hidden="true">{{ sortIcon('status') }}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>
+                  @for (c of [1, 2, 3, 4, 5, 6, 7, 8, 9]; track c) { <td><span class="skeleton"></span></td> }
+                </tr>
+              }
+            } @else {
+              @for (o of list.items(); track o.id) {
+                <tr class="clickable" tabindex="0" [class.selected]="openRef() === o.reference" [attr.aria-label]="'Open order ' + o.reference"
+                  (click)="open(o)" (keydown.enter)="open(o)">
+                  <td>
+                    <span class="cell-main nowrap-id">{{ o.reference }}</span>
+                    @if (o.priority === 'rush' || o.has_issue) {
+                      <span class="flags">
+                        @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
+                        @if (o.has_issue) { <span class="badge red">Issue</span> }
+                      </span>
+                    }
+                  </td>
+                  <td>
+                    <span class="cell-main">{{ o.customer_name || '—' }}</span>
+                    <span class="cell-sub">{{ o.customer_code }}</span>
+                  </td>
+                  <td>{{ o.destination_city || '—' }}@if (o.destination_country) {<span class="cell-sub">{{ o.destination_country }}</span>}</td>
+                  <td>{{ o.brand || '—' }}</td>
+                  <td>@if (o.partner) { <span class="badge">{{ o.partner.name }}</span> } @else { — }</td>
+                  <td class="num">{{ o.units_count }}</td>
+                  <td class="nowrap">{{ o.created_at | day }}</td>
+                  <td class="nowrap">
+                    <span [class.overdue]="isOverdue(o)">{{ o.due_date | day }}</span>
+                    @if (isOverdue(o)) { <span class="overdue-tag">Overdue</span> }
+                  </td>
+                  <td><app-status-badge [status]="o.status" [label]="o.status_label" /></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="9">
+                  <app-empty-state
+                    [title]="query().search ? 'No matching orders' : 'No orders here'"
+                    [message]="query().search ? 'Try a different reference, customer code or brand.' : 'Orders in this stage will show up here.'">
+                    @if (query().search || query().group !== 'all' || query().partner) {
+                      <button type="button" class="btn btn-sm" (click)="clearFilters()">Show all orders</button>
+                    }
+                  </app-empty-state>
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (openRef(); as ref) {
+  <app-order-drawer [reference]="ref" (closed)="closeDrawer()" (changed)="list.reload()" />
+}

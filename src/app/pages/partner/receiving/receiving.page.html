@@ -1,0 +1,312 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Parcels in</span>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Receiving', 'وصولی') }}</h1>
+      <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Type the customer code from the parcel label, then mark each piece received. Photos are optional — only if something is wrong.', 'پارسل کے لیبل سے کسٹمر کوڈ لکھیں، پھر ہر پیس کو وصول کریں۔ تصاویر صرف مسئلے کی صورت میں، لازمی نہیں۔') }}</p>
+    </div>
+    <div *can="'receiving.update'" class="actions">
+      <button type="button" class="btn" (click)="openUnmatched()">
+        <span [class.urdu]="lang.isUrdu()">{{ lang.t('Log unmatched parcel', 'نامعلوم پارسل درج کریں') }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Lookup: the customer code on the label is the key -->
+  <div class="lookup">
+    <span class="lookup-label" aria-hidden="true" [class.urdu]="lang.isUrdu()">{{ lang.t('Find a parcel', 'پارسل تلاش کریں') }}</span>
+    <app-search-input class="search-lg" placeholder="Customer code on the label (e.g. STX-10480), order ref, name, tracking…" [value]="search()" (search)="onSearch($event)" />
+  </div>
+
+  <div class="toolbar">
+    <div class="chips" role="tablist" aria-label="Parcels">
+      @for (t of tabs; track t.value) {
+        <button type="button" class="chip" role="tab" [class.active]="tab() === t.value" [attr.aria-selected]="tab() === t.value" (click)="setTab(t.value)">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t(t.en, t.ur) }}</span>
+          @if (meta()) { <span class="count" [class.alert]="t.value === 'issues' && count(t.value) > 0">{{ count(t.value) }}</span> }
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="layout">
+    <section class="main-col">
+      @if (loading()) {
+        @for (i of [1, 2, 3]; track i) {
+          <div class="card order-card">
+            <span class="skeleton" style="width: 30%"></span>
+            <span class="skeleton" style="width: 55%; height: 24px; margin: 10px 0"></span>
+            <span class="skeleton" style="width: 70%"></span>
+            <span class="skeleton" style="height: 52px; margin-top: 16px"></span>
+          </div>
+        }
+      } @else if (error()) {
+        <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
+      } @else if (!orders().length) {
+        <div class="card">
+          @if (search()) {
+            <app-empty-state title="No parcels match your search" [message]="'Nothing found for “' + search() + '”. Check the customer code on the label, or log it as an unmatched parcel.'">
+              <button *can="'receiving.update'" type="button" class="btn btn-sm" (click)="openUnmatched()">Log unmatched parcel</button>
+            </app-empty-state>
+          } @else if (tab() === 'expected') {
+            <app-empty-state title="No parcels expected" message="New customer orders will appear here until their parcel arrives." />
+          } @else if (tab() === 'issues') {
+            <app-empty-state title="No open issues" message="Units reported as missing, damaged or wrong appear here." />
+          } @else {
+            <app-empty-state title="Nothing received in the last 7 days" />
+          }
+        </div>
+      } @else {
+        @for (o of orders(); track o.id) {
+          <article class="card order-card" [class.has-issue]="o.has_issue">
+            <div class="order-head">
+              <div class="label-code" [attr.aria-label]="'Customer code ' + (o.customer_code || 'missing')">
+                <span class="lc-caption">Code</span>
+                <span class="lc-value">{{ o.customer_code || '—' }}</span>
+              </div>
+              <div class="order-id">
+                <h3 class="customer">{{ o.customer_name || 'Customer' }}</h3>
+                <span class="brand-ref">{{ o.brand || 'Brand' }} · {{ o.reference }}@if (o.brand_order_number) { <span class="muted"> · brand order {{ o.brand_order_number }}</span> }</span>
+                <div class="meta-line">
+                  @if (o.tracking_number) { <span>Tracking <b>{{ o.tracking_number }}</b></span> } @else { <span>No tracking number</span> }
+                  <span>Ordered {{ o.created_at | day }}</span>
+                  @if (destination(o)) { <span>Ships to {{ destination(o) }}</span> }
+                  @if (o.received_at) { <span>Received {{ o.received_at | timeAgo }}</span> }
+                </div>
+              </div>
+              <div class="badges">
+                @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
+                @if (o.has_issue) { <span class="badge red dot">Has issue</span> }
+                <app-status-badge [status]="o.status" [label]="o.status_label" />
+              </div>
+            </div>
+
+            @if (o.customer_notes) {
+              <p class="notes"><b>Customer notes:</b> {{ o.customer_notes }}</p>
+            }
+
+            <ul class="units" [attr.aria-label]="'Pieces in ' + o.reference">
+              @for (u of o.units; track u.id) {
+                <li class="unit" [class.has-issue]="u.status === 'issue'" [class.done]="u.status === 'received'">
+                  <div class="unit-row">
+                    <span class="line" aria-hidden="true">{{ u.line_no }}</span>
+                    <div class="unit-info">
+                      <strong>{{ u.unit_title }}@if (u.quantity > 1) { <span class="qty"> × {{ u.quantity }}</span> }</strong>
+                      @if (u.stitching_type) { <span class="muted small">{{ u.stitching_type }}</span> }
+                      @if (u.notes) { <span class="small unit-note">Customer note: {{ u.notes }}</span> }
+                      <app-voice-note-play [note]="u.notes_audio" label="Article note, voice" />
+                    </div>
+                    <span [class]="'badge dot unit-status ' + unitTone(u.status)" [class.urdu]="lang.isUrdu()">{{ unitLabel(u.status) }}</span>
+                    @if (u.status !== 'received') {
+                      <div *can="'receiving.update'" class="unit-actions">
+                        @if (u.status !== 'issue') {
+                          <button type="button" class="btn btn-issue" [disabled]="isBusy('unit:' + u.id)" (click)="openIssue(o, u)" [attr.aria-label]="'Report issue with ' + u.unit_title">
+                            <span [class.urdu]="lang.isUrdu()">{{ lang.t('Report issue', 'مسئلہ بتائیں') }}</span>
+                          </button>
+                        }
+                        <button type="button" class="btn btn-green btn-floor" [disabled]="isBusy('unit:' + u.id)" (click)="receiveUnit(u)" [attr.aria-label]="'Mark ' + u.unit_title + ' received'">
+                          @if (isBusy('unit:' + u.id)) { <ion-spinner name="crescent" /> } @else { <span aria-hidden="true">✓</span> }
+                          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Received', 'وصول') }}</span>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                  @if (u.status === 'issue') {
+                    <div class="issue-box" role="note">
+                      <div><b>{{ issueLabel(u.issue_type) }}</b>@if (u.issue_note) { · {{ u.issue_note }} }</div>
+                      <app-voice-note-play [note]="u.issue_audio" label="Issue, voice" />
+                      @if (u.issue_media?.length) {
+                        <div class="thumbs">
+                          @for (m of u.issue_media; track m.url) {
+                            <a [href]="m.url" target="_blank" rel="noopener" class="thumb" [title]="m.name || 'Open'" [attr.aria-label]="'Open issue ' + (m.type === 'video' ? 'video' : 'photo') + ' ' + ($index + 1)">
+                              @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Issue photo" loading="lazy" /> }
+                            </a>
+                          }
+                        </div>
+                      }
+                      <span *can="'receiving.update'" class="hint">Once sorted, press “Received”.</span>
+                    </div>
+                  }
+                </li>
+              }
+            </ul>
+
+            <div class="order-foot">
+              <div class="progress">
+                <div class="progress-track" aria-hidden="true">
+                  <span class="seg ok" [style.width.%]="(receivedCount(o) / (o.units.length || 1)) * 100"></span>
+                  <span class="seg bad" [style.width.%]="(issueCount(o) / (o.units.length || 1)) * 100"></span>
+                </div>
+                <span class="progress-text">
+                  <b>{{ receivedCount(o) }} of {{ o.units.length }}</b> received
+                  @if (issueCount(o)) { · <span class="bad-text">{{ issueCount(o) }} issue</span> }
+                  @if (pendingCount(o)) { · {{ pendingCount(o) }} to check }
+                </span>
+              </div>
+              @if (pendingCount(o) > 0) {
+                <button *can="'receiving.update'" type="button" class="btn btn-primary btn-floor all-btn" [disabled]="isBusy('order:' + o.id)" (click)="receiveAll(o)">
+                  @if (isBusy('order:' + o.id)) { <ion-spinner name="crescent" /> } @else { <span aria-hidden="true">✓✓</span> }
+                  <span [class.urdu]="lang.isUrdu()">{{ lang.t('Mark all received', 'سب وصول') }}</span>
+                  @if (pendingCount(o) > 1) { <span class="all-count">{{ pendingCount(o) }}</span> }
+                </button>
+              }
+            </div>
+          </article>
+        }
+        <div class="card pager-card"><app-pagination [meta]="meta()" (pageChange)="goToPage($event)" /></div>
+      }
+    </section>
+
+    <aside class="side-col">
+      @if (suggestion(); as sg) {
+        <div class="suggestion" role="note">
+          <span class="avatar">{{ sg.master.name.charAt(0) }}</span>
+          <div>
+            <span class="eyebrow-sm" [class.urdu]="lang.isUrdu()">{{ lang.t('Suggested team', 'تجویز کردہ ٹیم') }}</span>
+            <strong>{{ sg.master.name }} · least busy</strong>
+            <span class="muted small">
+              {{ sg.master.assigned }} in cutting queue
+              @if (sg.tailor; as t) { · next tailor {{ t.name }} }
+            </span>
+          </div>
+        </div>
+      }
+
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Unmatched parcels', 'نامعلوم پارسل') }}</h3>
+          @if (unmatchedTotal()) { <span class="badge amber">{{ unmatchedTotal() }} open</span> }
+        </div>
+        <p class="muted small">No customer code on the label? Log the brand and tracking number; admin will find the customer.</p>
+        @if (unmatchedLoading()) {
+          <span class="skeleton" style="height: 40px; margin-top: 10px"></span>
+          <span class="skeleton" style="height: 40px; margin-top: 8px"></span>
+        } @else if (unmatchedError()) {
+          <app-empty-state kind="error" [message]="unmatchedError()" (retry)="retryUnmatched()" />
+        } @else if (!unmatched().length) {
+          <p class="muted small none">No open unmatched parcels.</p>
+        } @else {
+          <ul class="unmatched">
+            @for (p of unmatched(); track p.id) {
+              <li>
+                <strong>{{ p.brand || 'Unknown brand' }}</strong>
+                <span class="small">{{ p.label_text || '—' }}@if (p.tracking_number) { · {{ p.tracking_number }} }</span>
+                @if (p.notes) { <span class="muted small">{{ p.notes }}</span> }
+                <span class="muted tiny">Logged {{ p.created_at | timeAgo }}</span>
+              </li>
+            }
+          </ul>
+          @if (unmatchedTotal() > unmatched().length) {
+            <p class="muted tiny">+ {{ unmatchedTotal() - unmatched().length }} more waiting for admin</p>
+          }
+        }
+        <button *can="'receiving.update'" type="button" class="btn btn-sm btn-block" (click)="openUnmatched()">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Log unmatched parcel', 'نامعلوم پارسل درج کریں') }}</span>
+        </button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Report issue -->
+@if (issue(); as f) {
+  <div class="modal-backdrop" (click)="closeIssue()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="issue-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.order.reference }} · {{ f.order.customer_code }}</span>
+          <h3 id="issue-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Report issue', 'مسئلہ بتائیں') }}</h3>
+          <p class="muted small">{{ f.unit.unit_title }}</p>
+        </div>
+        <button type="button" class="close-btn" (click)="closeIssue()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <span class="label" id="issue-type-label">Issue</span>
+          <div class="chips" role="group" aria-labelledby="issue-type-label">
+            @for (t of issueTypes; track t.value) {
+              <button type="button" class="chip" [class.active]="f.issueType === t.value" [attr.aria-pressed]="f.issueType === t.value" (click)="patchIssue({ issueType: t.value })">
+                <span [class.urdu]="lang.isUrdu()">{{ lang.t(t.en, t.ur) }}</span>
+              </button>
+            }
+          </div>
+        </div>
+        <div class="field">
+          <label for="issue-note">What is wrong? *</label>
+          <textarea id="issue-note" class="textarea" rows="3" placeholder="e.g. Dupatta not in the brand packet"
+            [ngModel]="f.note" (ngModelChange)="patchIssue({ note: $event })"></textarea>
+          <app-voice-note-field [value]="f.audio" (valueChange)="patchIssue({ audio: $event })" [(pending)]="voiceBusy" label="Say it instead" />
+          @if (issueTouched() && !f.note.trim() && !f.audio) { <span class="error">Write or record what is wrong so admin can tell the customer.</span> }
+        </div>
+        <div class="field">
+          <label>Photos or video <span class="optional">optional</span></label>
+          <div class="media-grid">
+            @for (m of f.media; track $index) {
+              <div class="media-item">
+                @if (isVideo(m)) { <span class="video">▶ {{ m.name }}</span> } @else { <img [src]="m.dataUrl" [alt]="m.name" /> }
+                <button type="button" class="remove" (click)="removeMedia($index)" [attr.aria-label]="'Remove ' + m.name">×</button>
+              </div>
+            }
+            @if (f.media.length < maxMedia) {
+              <label class="media-add" [class.disabled]="mediaReading()">
+                @if (mediaReading()) { <ion-spinner name="crescent" /> } @else { <span>+ Add</span> }
+                <input type="file" accept="image/*,video/*" multiple hidden [disabled]="mediaReading()" (change)="onMediaPicked($any($event.target))" />
+              </label>
+            }
+          </div>
+          <span class="hint">Not required. Add up to {{ maxMedia }} if it helps admin explain the problem to the customer. Photos are resized before upload; videos up to 8 MB.</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="closeIssue()" [disabled]="issueSaving()">Cancel</button>
+        <button type="button" class="btn btn-danger" (click)="submitIssue()" [disabled]="issueSaving() || mediaReading() || voiceBusy()">
+          @if (issueSaving()) { <ion-spinner name="crescent" /> }
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Report issue', 'مسئلہ بتائیں') }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Log unmatched parcel -->
+@if (unmatchedForm(); as f) {
+  <div class="modal-backdrop" (click)="closeUnmatched()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="um-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Receiving</span>
+          <h3 id="um-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Log unmatched parcel', 'نامعلوم پارسل درج کریں') }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeUnmatched()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">Enter what is written on the label or the tracking number. Admin will match it to a customer.</p>
+        <div class="field">
+          <label for="um-label">Text on the label</label>
+          <input id="um-label" class="input" [ngModel]="f.label_text" (ngModelChange)="patchUnmatched('label_text', $event)" placeholder="Name, phone or any code on the label" />
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="um-brand">Brand</label>
+            <input id="um-brand" class="input" [ngModel]="f.brand" (ngModelChange)="patchUnmatched('brand', $event)" />
+          </div>
+          <div class="field">
+            <label for="um-track">Tracking number</label>
+            <input id="um-track" class="input" [ngModel]="f.tracking_number" (ngModelChange)="patchUnmatched('tracking_number', $event)" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="um-notes">Notes</label>
+          <textarea id="um-notes" class="textarea" rows="2" [ngModel]="f.notes" (ngModelChange)="patchUnmatched('notes', $event)" placeholder="What is inside, number of pieces…"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="closeUnmatched()" [disabled]="unmatchedSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="submitUnmatched()" [disabled]="unmatchedSaving()">
+          @if (unmatchedSaving()) { <ion-spinner name="crescent" /> }
+          Log parcel
+        </button>
+      </div>
+    </div>
+  </div>
+}

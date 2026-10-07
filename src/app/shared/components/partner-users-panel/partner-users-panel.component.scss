@@ -1,0 +1,62 @@
+@use '../../../pages/admin/admin-page';
+
+:host { display: block; }
+
+.toolbar { justify-content: space-between; }
+
+tr.inactive td { color: var(--c-muted); }
+tr.inactive .cell-main { color: var(--c-ink-2); }
+
+.cell-sub { display: block; font-size: 11.5px; color: var(--c-muted); margin-top: 2px; }
+.tag { margin-left: 6px; font-size: 10.5px; padding: 1px 7px; }
+.c-email { overflow-wrap: anywhere; }
+
+.access { cursor: help; border-radius: 4px; &:focus-visible { outline: none; box-shadow: var(--focus-ring); } }
+.locked { font-size: 12px; color: var(--c-muted); }
+
+.opt { font-weight: 400; color: var(--c-faint); }
+.field .hint { font-size: 11.5px; color: var(--c-faint); }
+
+app-permission-matrix { margin: 4px 0 16px; }
+.owner-note, .hint-line { margin: 4px 0 14px; font-size: 12.5px; color: var(--c-muted); }
+.owner-note { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--c-bg-soft); }
+
+.pw-wrap { display: flex; gap: 8px; align-items: center; .input { flex: 1; min-width: 0; } }
+
+.form-error {
+  margin: 14px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--c-red-soft);
+  color: var(--c-red);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* Phones: each row becomes a small card, no sideways scrolling */
+@media (max-width: 640px) {
+  .toolbar { flex-direction: column; align-items: stretch; app-search-input { max-width: none; } }
+
+  table.data-table.stack {
+    thead { display: none; }
+    tbody, tr { display: block; }
+    tr:not(.empty-row) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--c-line-soft);
+    }
+    tr:last-child { border-bottom: none; }
+    td { display: block; padding: 0; border: none; min-width: 0; }
+    td.c-name { grid-column: 1; grid-row: 1; align-self: center; overflow-wrap: anywhere; }
+    td.c-status { grid-column: 2; grid-row: 1; justify-self: end; text-align: right; }
+    td.c-email { grid-column: 1 / -1; grid-row: 2; font-size: 12.5px; }
+    td.c-phone { grid-column: 1 / -1; grid-row: 3; font-size: 12.5px; color: var(--c-muted); }
+    td.c-access { grid-column: 1 / -1; grid-row: 4; font-size: 12.5px; }
+    td.c-access::before { content: 'Access: '; color: var(--c-muted); }
+    td.c-actions { grid-column: 1 / -1; grid-row: 5; display: flex; flex-wrap: wrap; gap: 8px; text-align: left; margin-top: 8px; }
+    td.actions-cell .btn + .btn { margin-left: 0; }
+    .empty-row td { display: block; }
+  }
+}

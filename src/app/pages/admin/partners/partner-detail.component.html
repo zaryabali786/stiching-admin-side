@@ -1,0 +1,188 @@
+<div class="drawer-backdrop" (click)="closed.emit()"></div>
+<aside #drawer class="drawer" role="dialog" aria-modal="true" aria-labelledby="pdTitle" tabindex="-1">
+  <div class="drawer-head">
+    <div class="head-main">
+      <span class="eyebrow">Partner</span>
+      @if (renaming()) {
+        <form class="rename" novalidate (submit)="$event.preventDefault(); saveName()">
+          <label for="pdName" class="sr-only">Partner name</label>
+          <input id="pdName" class="input" autocomplete="off" maxlength="120" [value]="nameDraft()"
+            [attr.aria-invalid]="nameError() ? 'true' : null" [attr.aria-describedby]="nameError() ? 'pdNameErr' : null"
+            (input)="nameDraft.set($any($event.target).value)" (keydown.escape)="$event.stopPropagation(); renaming.set(false)" />
+          <button type="submit" class="btn btn-sm btn-primary" [disabled]="nameBusy() || !!nameError()">
+            @if (nameBusy()) { <ion-spinner name="crescent" /> } Save
+          </button>
+          <button type="button" class="btn btn-sm btn-ghost" [disabled]="nameBusy()" (click)="renaming.set(false)">Cancel</button>
+        </form>
+        @if (nameError()) { <span class="error" id="pdNameErr">{{ nameError() }}</span> }
+      } @else {
+        <div class="title-row">
+          <h3 id="pdTitle">{{ partner()?.name || 'Partner' }}</h3>
+          @if (partner(); as p) {
+            @if (p.is_default) { <span class="badge gold">Default</span> }
+            <span class="badge dot" [class.green]="p.status === 'active'">{{ p.status === 'active' ? 'Active' : 'Switched off' }}</span>
+            <button type="button" class="btn btn-sm btn-ghost" (click)="startRename()" [attr.aria-label]="'Rename ' + p.name">Rename</button>
+          }
+        </div>
+      }
+    </div>
+    <button type="button" class="close-btn" (click)="closed.emit()" aria-label="Close">×</button>
+  </div>
+
+  <div class="drawer-body">
+    @if (error() && !data()) {
+      <app-empty-state kind="error" [message]="error()" (retry)="load()" />
+    } @else if (loading() && !data()) {
+      <span class="skeleton" style="height: 56px"></span>
+      <span class="skeleton" style="height: 140px; margin-top: 14px"></span>
+      <span class="skeleton" style="height: 200px; margin-top: 14px"></span>
+    } @else if (data(); as d) {
+      <section class="control-strip" aria-label="Status and default">
+        <div class="control">
+          <button type="button" class="switch" role="switch" id="pdStatus" aria-labelledby="pdStatusLabel"
+            [attr.aria-checked]="d.partner.status === 'active'" [class.on]="d.partner.status === 'active'"
+            [disabled]="statusBusy() || (d.partner.is_default && d.partner.status === 'active')"
+            [attr.title]="d.partner.is_default && d.partner.status === 'active' ? 'Make another partner the default before switching this one off' : null"
+            (click)="toggleStatus()"><span></span></button>
+          <label id="pdStatusLabel" for="pdStatus">{{ d.partner.status === 'active' ? 'Active' : 'Switched off' }}</label>
+          @if (statusBusy()) { <ion-spinner name="crescent" /> }
+        </div>
+        <div class="control grow">
+          @if (d.partner.is_default) {
+            <span class="muted-note">This is the default partner: new customer orders go here.</span>
+          } @else {
+            <button type="button" class="btn btn-sm" [disabled]="defaultBusy() || d.partner.status !== 'active'"
+              [attr.title]="d.partner.status !== 'active' ? 'Switch the partner on first' : null" (click)="makeDefault()">
+              @if (defaultBusy()) { <ion-spinner name="crescent" /> } Make default
+            </button>
+            <span class="muted-note">New customer orders go to the default partner.</span>
+          }
+        </div>
+      </section>
+
+      <div class="tabs" role="tablist" aria-label="Partner sections">
+        @for (t of tabs; track t.id; let i = $index) {
+          <button type="button" role="tab" class="chip" [id]="'pdTab-' + t.id" [class.active]="tab() === t.id"
+            [attr.aria-selected]="tab() === t.id" [attr.aria-controls]="'pdPanel-' + t.id" [attr.tabindex]="tab() === t.id ? 0 : -1"
+            (click)="setTab(t.id)" (keydown)="onTabKey($event, i)">{{ t.label }}</button>
+        }
+      </div>
+
+      @switch (tab()) {
+        @case ('overview') {
+          <div role="tabpanel" id="pdPanel-overview" aria-labelledby="pdTab-overview">
+            <section class="partner-card">
+              <div class="pc-head">
+                <div>
+                  <span class="pc-eyebrow">Owner</span>
+                  <h2>{{ d.owner?.full_name || 'No owner login' }}</h2>
+                  <p>{{ d.owner?.email || '—' }}@if (d.owner && !d.owner.is_active) { · switched off }</p>
+                </div>
+                <div class="pc-load">
+                  <span class="pc-eyebrow">Current load</span>
+                  <strong>{{ d.stats.currentLoadPct }}% <small>{{ toneLabel(pctTone(d.stats.currentLoadPct)) }}</small></strong>
+                  <div class="load-track dark" role="progressbar" aria-label="Partner load" [attr.aria-valuenow]="d.stats.currentLoadPct" aria-valuemin="0" aria-valuemax="100">
+                    <div [class]="'load-fill ' + pctTone(d.stats.currentLoadPct)" [style.width.%]="clamp(d.stats.currentLoadPct)"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="pc-stats">
+                <div><span>Masters</span><strong>{{ d.stats.activeMasters }}</strong></div>
+                <div><span>Tailors</span><strong>{{ d.stats.activeTailors }}</strong></div>
+                <div><span>Daily capacity</span><strong>{{ d.stats.dailyCapacity }}</strong><small>articles / day</small></div>
+                <div><span>Active orders</span><strong>{{ d.stats.activeOrders }}</strong></div>
+                <div><span>In production</span><strong>{{ d.stats.inProduction }}</strong><small>job cards</small></div>
+                <div><span>Payout this month</span><strong>{{ d.stats.payoutThisMonthPkr | pkr }}</strong><small>{{ d.stats.payoutPaidThisMonthPkr | pkr }} from paid invoices</small></div>
+              </div>
+            </section>
+
+            <div class="card-head section-head">
+              <h4 class="card-title">Masters and their tailors</h4>
+              <div class="load-legend" aria-label="Load legend">
+                <span><i class="lg free"></i>Free &lt; 70%</span>
+                <span><i class="lg busy"></i>Busy 70–99%</span>
+                <span><i class="lg full"></i>Full 100%+</span>
+              </div>
+            </div>
+
+            <div class="masters-grid">
+              @for (m of d.masters; track m.id) {
+                <section class="card master">
+                  <div class="m-head">
+                    <div class="avatar" aria-hidden="true">{{ m.name.charAt(0) }}</div>
+                    <div class="m-name">
+                      <strong>{{ m.name }}</strong>
+                      <span class="cell-sub">Master · {{ m.tailors.length }} {{ m.tailors.length === 1 ? 'tailor' : 'tailors' }}</span>
+                    </div>
+                    <span [class]="'badge ' + badgeTone(pctTone(m.team_load_pct))">Team {{ m.team_load_pct }}% · {{ toneLabel(pctTone(m.team_load_pct)) }}</span>
+                  </div>
+                  <div class="member">
+                    <span class="mem-name">Cutting</span>
+                    <div class="load-track" aria-hidden="true"><div [class]="'load-fill ' + loadTone(m)" [style.width.%]="clamp(m.load_pct)"></div></div>
+                    <span class="mem-val" [class.full]="loadTone(m) === 'full'">{{ m.assigned }}/{{ m.daily_capacity }}</span>
+                  </div>
+                  @for (t of m.tailors; track t.id) {
+                    <div class="member">
+                      <span class="mem-name">{{ t.name }}</span>
+                      <div class="load-track" aria-hidden="true"><div [class]="'load-fill ' + loadTone(t)" [style.width.%]="clamp(t.load_pct)"></div></div>
+                      <span class="mem-val" [class.full]="loadTone(t) === 'full'">{{ t.assigned }}/{{ t.daily_capacity }}</span>
+                    </div>
+                  } @empty {
+                    <p class="muted small">No tailors in this team.</p>
+                  }
+                </section>
+              } @empty {
+                <div class="card span-all">
+                  <app-empty-state title="No masters yet" message="The partner adds masters and tailors in its own portal under Teams." />
+                </div>
+              }
+            </div>
+
+            @if (d.unassignedTailors.length) {
+              <section class="card unassigned">
+                <h4 class="card-title">Tailors without a master</h4>
+                @for (t of d.unassignedTailors; track t.id) {
+                  <div class="member">
+                    <span class="mem-name">{{ t.name }}</span>
+                    <div class="load-track" aria-hidden="true"><div [class]="'load-fill ' + loadTone(t)" [style.width.%]="clamp(t.load_pct)"></div></div>
+                    <span class="mem-val" [class.full]="loadTone(t) === 'full'">{{ t.assigned }}/{{ t.daily_capacity }}</span>
+                  </div>
+                }
+              </section>
+            }
+          </div>
+        }
+
+        @case ('modules') {
+          <div role="tabpanel" id="pdPanel-modules" aria-labelledby="pdTab-modules">
+            <p class="lead">Choose which modules {{ d.partner.name }} may use. Its owner gets all of them; the partner then decides which of these each of its users gets.</p>
+            <app-permission-matrix [modules]="catalogue()" [(value)]="modulesDraft" [disabled]="modulesBusy()" legend="Modules for this partner" />
+            @if (removedModules().length) {
+              <p class="warn" role="status"><strong>Heads up:</strong> taking away {{ removedModules().join(', ') }} also removes it from this partner's users.</p>
+            }
+            @if (modulesError()) { <p class="form-error" role="alert">{{ modulesError() }}</p> }
+            <div class="module-actions">
+              <button type="button" class="btn btn-ghost" [disabled]="modulesBusy() || !modulesDirty()" (click)="resetModules()">Discard changes</button>
+              <button type="button" class="btn btn-primary" [disabled]="modulesBusy() || !modulesDirty()" (click)="saveModules()">
+                @if (modulesBusy()) { <ion-spinner name="crescent" /> } Save modules
+              </button>
+            </div>
+          </div>
+        }
+
+        @case ('users') {
+          <div role="tabpanel" id="pdPanel-users" aria-labelledby="pdTab-users">
+            <p class="lead">Logins for {{ d.partner.name }}. The owner can also manage these in the partner portal if it has the Users module.</p>
+            <app-partner-users-panel
+              [api]="usersApi()"
+              [modules]="catalogue()"
+              [ceiling]="d.partner.permissions"
+              [canCreate]="true"
+              [canUpdate]="true"
+              (changed)="changed.emit()" />
+          </div>
+        }
+      }
+    }
+  </div>
+</aside>

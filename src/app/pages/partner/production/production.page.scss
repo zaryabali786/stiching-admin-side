@@ -1,0 +1,808 @@
+/* ════════════════════════════════════════════════════════════════
+   Partner production board — CDK drag & drop job cards
+   ════════════════════════════════════════════════════════════════ */
+
+:host {
+  display: block;
+}
+
+.page.board-page {
+  max-width: none;
+  padding-bottom: 24px;
+}
+
+.page-header {
+  margin-bottom: 16px;
+
+  h1.urdu { line-height: 1.9; }
+
+  .subtitle {
+    b { color: var(--c-ink); font-weight: 600; }
+    .filtered { color: var(--c-gold-dark); font-weight: 600; }
+  }
+}
+
+.refresh-btn {
+  width: 44px;
+  height: 44px;
+  color: var(--c-ink-2);
+}
+
+/* Scanning is the fastest way to move work on the floor — make it the obvious action */
+.scan-btn {
+  min-height: 44px;
+  padding: 10px 20px;
+  font-size: 14.5px;
+}
+
+/* ───────── Toolbar: search + one wrapping row of filter groups ───────── */
+.board-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+
+  app-search-input { max-width: 460px; width: 100%; }
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.chip-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin-right: 2px;
+
+  &.urdu { text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 1.9; }
+}
+
+.chip {
+  min-height: 36px;
+
+  .avatar-xs {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--c-dark-2);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &.active .avatar-xs {
+    background: var(--c-gold);
+    color: var(--c-dark);
+  }
+
+  /* "Delayed" doubles as the delayed indicator: red count + pulse while anything is late */
+  &.chip-delayed.has-delayed:not(.active) {
+    border-color: rgba(180, 35, 24, 0.45);
+    color: var(--c-red);
+    font-weight: 600;
+
+    .count { background: var(--c-red); color: #fff; }
+  }
+
+  &.chip-delayed.active {
+    background: var(--c-red);
+    border-color: var(--c-red);
+  }
+
+  .pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.8s infinite;
+  }
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(180, 35, 24, 0.45); }
+  70% { box-shadow: 0 0 0 7px rgba(180, 35, 24, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, 0); }
+}
+
+.chip-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--c-line);
+  margin: 0 2px;
+}
+
+.clear-btn { color: var(--c-ink-2); }
+
+/* ───────── Board ───────── */
+.board-wrap {
+  position: relative;
+}
+
+.board-progress {
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--c-line-soft);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 30%;
+    background: var(--c-gold);
+    border-radius: 99px;
+    animation: progress 1s ease-in-out infinite;
+  }
+}
+
+@keyframes progress {
+  from { left: -30%; }
+  to { left: 100%; }
+}
+
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(268px, 1fr);
+  gap: 14px;
+  align-items: start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 14px;
+  scroll-snap-type: x proximity;
+  transition: opacity 0.2s ease;
+
+  &.reloading {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+}
+
+.column {
+  --col: var(--c-gold);
+  background: var(--c-line-soft);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--c-line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  scroll-snap-align: start;
+  overflow: hidden;
+}
+
+.col-head {
+  padding: 14px 14px 10px;
+  border-top: 3px solid var(--col);
+}
+
+.col-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  h3 {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+
+    &.urdu {
+      font-size: 14px;
+      line-height: 2;
+    }
+  }
+}
+
+.col-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--col);
+  flex-shrink: 0;
+}
+
+.col-count {
+  min-width: 30px;
+  text-align: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  border: 1px solid var(--c-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.pill-skel {
+  width: 28px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.col-sub {
+  margin: 3px 0 0 17px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+
+  &.urdu {
+    font-size: 11px;
+    line-height: 1.9;
+  }
+}
+
+.col-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 10px 12px;
+  min-height: 140px;
+  max-height: calc(100vh - 260px);
+  max-height: calc(100dvh - 260px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* The list that can receive the current drag, and the one being hovered */
+.col-body.cdk-drop-list-receiving {
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 2px var(--c-line);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* The column under the pointer */
+.col-body.cdk-drop-list-dragging {
+  background: var(--c-gold-soft);
+  box-shadow: inset 0 0 0 2px var(--c-gold);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+
+  .drop-hint { opacity: 0; }
+}
+
+.drop-hint {
+  position: absolute;
+  inset: 8px 10px 12px;
+  border: 1.5px dashed var(--c-line);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--c-faint);
+  font-size: 12.5px;
+  font-weight: 600;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.col-loading,
+.col-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+  padding: 8px 0 2px;
+
+  ion-spinner {
+    width: 16px;
+    height: 16px;
+    color: var(--c-gold-dark);
+  }
+}
+
+.col-end {
+  color: var(--c-faint);
+  font-size: 11px;
+}
+
+.col-retry {
+  align-self: center;
+  color: var(--c-red);
+}
+
+.sentinel {
+  height: 1px;
+  flex-shrink: 0;
+}
+
+/* ───────── Ticket card ───────── */
+.ticket {
+  position: relative;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 11px 12px 10px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  flex-shrink: 0;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+
+  &:hover {
+    border-color: var(--c-ink-2);
+    box-shadow: var(--shadow);
+
+    .grip { color: var(--c-ink-2); }
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: var(--c-green);
+    box-shadow: var(--focus-ring);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  /* View-only: cards open but cannot be dragged */
+  &.read-only,
+  &.read-only:active {
+    cursor: pointer;
+  }
+
+  &.is-delayed {
+    border-left: 4px solid var(--c-red);
+    padding-left: 9px;
+  }
+
+  &.is-busy {
+    cursor: progress;
+
+    .ticket-inner { opacity: 0.7; }
+  }
+}
+
+.ticket-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+
+  &.sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+}
+
+.ticket-ids {
+  flex: 1;
+  min-width: 0;
+
+  .code {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--c-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+
+    b { color: var(--c-ink-2); font-weight: 700; letter-spacing: 0.02em; }
+  }
+
+  .title {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 1px;
+    color: var(--c-ink);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Drag affordance */
+.grip {
+  flex-shrink: 0;
+  color: var(--c-faint);
+  opacity: 0.7;
+  margin: 1px -4px 0 0;
+  transition: color 0.15s;
+}
+
+.ticket-spinner {
+  width: 16px;
+  height: 16px;
+  color: var(--c-gold-dark);
+  flex-shrink: 0;
+}
+
+.assignee {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  min-width: 0;
+
+  .who {
+    font-weight: 600;
+    color: var(--c-ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tailor {
+    font-weight: 500;
+  }
+
+  .sep {
+    color: var(--c-faint);
+  }
+
+  .no-team {
+    color: var(--c-muted);
+    font-style: italic;
+  }
+}
+
+.avatar-sm {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--c-dark-2);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ticket-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--c-muted);
+
+  &:empty { display: none; }
+
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+
+  .tag-rush {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+
+  .due {
+    font-weight: 500;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+
+    &.late { color: var(--c-red); font-weight: 600; }
+  }
+
+  .comments {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    font-weight: 600;
+  }
+}
+
+.suggest {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--c-bg-soft);
+  border: 1px solid var(--c-line-soft);
+  border-radius: 10px;
+  padding: 6px 6px 6px 10px;
+  cursor: default;
+
+  .suggest-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.25;
+
+    strong {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .suggest-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--c-gold-dark);
+
+    &.urdu { letter-spacing: 0; text-transform: none; font-size: 11px; line-height: 1.9; }
+  }
+
+  .suggest-load {
+    font-size: 11px;
+    color: var(--c-muted);
+  }
+}
+
+/* Floor action: ≥ 44 px on touch screens */
+.assign-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 8px 16px;
+
+  @media (pointer: coarse) { min-height: 44px; }
+}
+
+/* Skeleton tickets */
+.ticket-skel {
+  cursor: default;
+
+  .grow {
+    flex: 1;
+  }
+
+  .skeleton {
+    display: block;
+  }
+}
+
+/* ───────── CDK drag & drop ───────── */
+.ticket-placeholder {
+  min-height: 84px;
+  border-radius: var(--radius);
+  border: 2px dashed var(--c-gold-dark);
+  background: var(--c-surface);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--c-gold-dark);
+}
+
+/* The floating preview is a clone of the ticket (keeps these component styles). */
+.ticket.cdk-drag-preview {
+  box-sizing: border-box;
+  cursor: grabbing;
+  border-color: var(--c-gold-dark);
+  box-shadow: var(--shadow-lg);
+
+  .ticket-inner {
+    transform: rotate(2.2deg);
+  }
+}
+
+.ticket.cdk-drag-animating {
+  transition: transform 220ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.col-body.cdk-drop-list-dragging .ticket:not(.cdk-drag-placeholder) {
+  transition: transform 220ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.board.is-dragging .ticket:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+/* ───────── Scan modal ───────── */
+.scan-modal {
+  max-width: 560px;
+
+  .scan-row {
+    display: flex;
+    gap: 8px;
+
+    .btn { min-height: 48px; padding: 10px 22px; }
+  }
+
+  .scan-input {
+    min-height: 48px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+
+    &::placeholder {
+      text-transform: none;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+  }
+}
+
+.scan-message {
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--c-bg-soft);
+  color: var(--c-ink-2);
+  font-size: 13px;
+}
+
+.scan-count {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.scan-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scan-result {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--c-ink);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+
+  min-height: 52px;
+
+  &:hover {
+    border-color: var(--c-ink-2);
+    background: var(--c-bg-soft);
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: var(--c-green);
+    box-shadow: var(--focus-ring);
+  }
+
+  .grow {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .code {
+    font-size: 10.5px;
+    color: var(--c-muted);
+    font-weight: 600;
+  }
+
+  strong {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stage-tag {
+    background: var(--c-bg-soft);
+    color: var(--c-ink-2);
+    gap: 6px;
+
+    .col-dot { width: 7px; height: 7px; }
+  }
+
+  .chev {
+    color: var(--c-faint);
+    font-size: 18px;
+  }
+}
+
+/* ───────── Responsive ───────── */
+@media (max-width: 1200px) {
+  .board {
+    grid-auto-columns: 280px;
+  }
+}
+
+@media (max-width: 900px) {
+  .page-header {
+    .sub-hint { display: none; }
+
+    .actions {
+      width: 100%;
+      flex-wrap: nowrap;
+    }
+
+    .scan-btn { flex: 1; min-height: 48px; }
+  }
+
+  .board-toolbar app-search-input { max-width: none; }
+
+  /* Filters: one horizontally scrolling strip instead of three wrapped rows */
+  .filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 -16px;
+    padding: 2px 16px 6px;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  .chip-group { flex-wrap: nowrap; }
+  /* Rush / Delayed first on phones so the delayed count is always visible */
+  .chip-group.flags { order: -2; }
+  .chip-divider { order: -1; flex-shrink: 0; }
+  .chip { white-space: nowrap; flex-shrink: 0; }
+
+  /* Columns ≈ 85 % of the screen, snapping one at a time */
+  .board {
+    grid-auto-columns: 85vw;
+    margin: 0 -16px;
+    padding: 2px 16px 14px;
+    scroll-padding: 0 16px;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+  }
+
+  .column {
+    scroll-snap-align: start;
+  }
+
+  .col-body {
+    max-height: calc(100vh - 240px);
+    max-height: calc(100dvh - 240px);
+  }
+}

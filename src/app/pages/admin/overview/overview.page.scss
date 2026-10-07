@@ -1,0 +1,179 @@
+@use '../admin-page';
+
+.pill-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+
+  button {
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    min-height: 32px;
+    padding: 6px 16px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--c-muted);
+    cursor: pointer;
+
+    &:hover:not(.active) { color: var(--c-ink); }
+    &:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+    &.active { background: var(--c-dark-2); color: var(--c-surface); }
+  }
+}
+
+.overview-body { transition: opacity .2s; }
+.overview-body.dim { opacity: .55; pointer-events: none; }
+
+.group-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin: 4px 0 10px;
+}
+
+.action-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 26px;
+
+  &.wide-left { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 1100px) {
+  .grid-2, .grid-2.wide-left { grid-template-columns: minmax(0, 1fr); }
+}
+
+.card-head { flex-wrap: wrap; }
+.card-title { display: inline-flex; align-items: center; gap: 8px; }
+.card-meta { font-size: 11.5px; color: var(--c-muted); }
+
+/* ---- Needs your action ---- */
+.action-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--c-line-soft);
+
+  &:last-child { border-bottom: none; }
+}
+
+.action-tag { justify-content: center; }
+
+.action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  span { font-size: 12.5px; color: var(--c-muted); }
+}
+
+@media (max-width: 520px) {
+  .action-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .action-tag { grid-column: 1 / -1; justify-self: start; }
+}
+
+/* ---- Bars ---- */
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--c-muted);
+
+  span { display: inline-flex; align-items: center; gap: 6px; }
+}
+
+.dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+.dot.intl, .bar.intl { background: var(--c-green); }
+.dot.pk, .bar.pk { background: var(--c-gold); }
+
+.chart-scroll { overflow-x: auto; }
+
+.column-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  height: 230px;
+  min-width: 360px;
+  padding-top: 20px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.col-group {
+  flex: 1;
+  min-width: 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+}
+
+.bar {
+  position: relative;
+  width: min(26px, 40%);
+  min-height: 2px;
+  border-radius: 6px 6px 0 0;
+  transition: height .5s ease;
+}
+
+/* value on top of each column (not .bar-val — that belongs to global .bar-row) */
+.col-val {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.col-label { text-align: center; font-size: 12px; color: var(--c-muted); padding-bottom: 6px; }
+
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bar-row .bar-val { color: var(--c-ink); }
+
+.status-row {
+  text-decoration: none;
+  color: inherit;
+  border-radius: 8px;
+  padding: 5px 8px;
+  margin: 0 -8px 4px;
+
+  &:hover { background: var(--c-bg-soft); }
+  &:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+}
+
+.bar-fill.gold { background: var(--c-gold); }
+
+.chart-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--c-muted);
+}

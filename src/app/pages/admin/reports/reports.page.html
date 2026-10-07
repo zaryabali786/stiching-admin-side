@@ -1,0 +1,200 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Finance</span>
+      <h1>Reports</h1>
+      <p class="subtitle">Revenue, partner payouts and platform margin from paid invoices over the last {{ months() }} months.</p>
+    </div>
+    <div class="actions">
+      <div class="pill-toggle" role="group" aria-label="Range">
+        @for (m of monthOptions; track m) {
+          <button type="button" [class.active]="months() === m" [attr.aria-pressed]="months() === m" (click)="setMonths(m)">{{ m }} months</button>
+        }
+      </div>
+      <button type="button" class="btn" [disabled]="!data() || loading()" (click)="exportCsv()">Export CSV</button>
+    </div>
+  </header>
+
+  @if (error() && !data()) {
+    <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
+  } @else if (loading() && !data()) {
+    <div class="stat-grid">
+      @for (i of [1, 2, 3, 4]; track i) { <div class="stat"><span class="skeleton" style="width: 60%"></span><span class="skeleton" style="height: 30px; margin-top: 6px"></span></div> }
+    </div>
+    <div class="card"><span class="skeleton" style="height: 240px"></span></div>
+  } @else if (data(); as d) {
+    <div [class.dim]="loading()" [attr.aria-busy]="loading()">
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">Revenue</span>
+          <span class="stat-value money"><span class="cur">PKR</span>{{ d.totals.revenuePkr | number: '1.0-0' }}</span>
+          <span class="stat-sub">{{ d.totals.paidInvoices }} paid invoices</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Partner payouts</span>
+          <span class="stat-value money"><span class="cur">PKR</span>{{ d.totals.partnerPayoutPkr | number: '1.0-0' }}</span>
+          <span class="stat-sub">owed to the partner</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Platform margin</span>
+          <span class="stat-value money" [class.pos]="d.totals.marginPkr >= 0" [class.neg]="d.totals.marginPkr < 0"><span class="cur">PKR</span>{{ d.totals.marginPkr | number: '1.0-0' }}</span>
+          <span class="stat-sub">{{ d.totals.marginPct }}% of revenue</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Discounts given</span>
+          <span class="stat-value money"><span class="cur">PKR</span>{{ d.totals.discountsPkr | number: '1.0-0' }}</span>
+          <span class="stat-sub">on paid invoices</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Orders</span>
+          <span class="stat-value">{{ d.totals.orders }}</span>
+          <span class="stat-sub" [class.bad]="d.totals.cancelled > 0">{{ d.totals.cancelled }} cancelled</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Avg. turnaround</span>
+          <span class="stat-value">{{ d.totals.avgTurnaroundDays ?? '—' }}@if (d.totals.avgTurnaroundDays !== null) { <span class="unit">days</span> }</span>
+          <span class="stat-sub">from order to shipped</span>
+        </div>
+      </div>
+
+      <section class="card" aria-labelledby="monthlyTitle">
+        <div class="card-head">
+          <div>
+            <h3 class="card-title" id="monthlyTitle">Revenue by month</h3>
+            <p class="card-sub">Each bar is the month's revenue, split into what the partner earns and what the platform keeps.</p>
+          </div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="dot mar"></i>Platform margin</span>
+            <span><i class="dot pay"></i>Partner payout</span>
+          </div>
+        </div>
+        @if (hasRevenue()) {
+          <div class="chart-scroll">
+            <div class="chart" role="img" [attr.aria-label]="chartSummary()">
+              <div class="y-axis" aria-hidden="true">
+                @for (t of ticks(); track t) { <span [style.bottom.%]="(t / niceMax()) * 100">{{ compact(t) }}</span> }
+              </div>
+              <div class="plot">
+                @for (t of ticks(); track t) { <i class="grid-line" [style.bottom]="'calc(26px + (100% - 48px) * ' + t / niceMax() + ')'"></i> }
+                @for (m of d.monthly; track m.key) {
+                  <div class="col-group">
+                    <div class="bars">
+                      <div class="stack" [style.height.%]="h(m.payout + positive(m.margin))"
+                        [title]="m.month + ': revenue PKR ' + m.revenue.toLocaleString() + ', payout PKR ' + m.payout.toLocaleString() + ', margin PKR ' + m.margin.toLocaleString()">
+                        <span class="col-val">{{ compact(m.revenue) }}</span>
+                        <div class="seg mar" [style.flex-grow]="positive(m.margin)"></div>
+                        <div class="seg pay" [style.flex-grow]="m.payout"></div>
+                      </div>
+                    </div>
+                    <span class="col-label">{{ m.month }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        } @else {
+          <app-empty-state title="No paid invoices yet" message="Revenue appears here once customers pay their invoices." />
+        }
+
+        <div class="table-scroll monthly">
+          <table class="data-table">
+            <caption class="sr-only">Monthly revenue, payout and margin</caption>
+            <thead><tr><th>Month</th><th class="num">Orders</th><th class="num">Revenue</th><th class="num">Partner payout</th><th class="num">Margin</th><th class="num">Margin %</th></tr></thead>
+            <tbody>
+              @for (m of d.monthly; track m.key) {
+                <tr>
+                  <td class="cell-main">{{ m.month }}</td>
+                  <td class="num">{{ m.orders }}</td>
+                  <td class="num nowrap">{{ m.revenue | pkr }}</td>
+                  <td class="num nowrap">{{ m.payout | pkr }}</td>
+                  <td class="num nowrap" [class.pos]="m.margin > 0" [class.neg]="m.margin < 0">{{ m.margin | pkr }}</td>
+                  <td class="num">{{ pct(m.margin, m.revenue) }}%</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td class="num">{{ d.totals.orders }}</td>
+                <td class="num nowrap">{{ d.totals.revenuePkr | pkr }}</td>
+                <td class="num nowrap">{{ d.totals.partnerPayoutPkr | pkr }}</td>
+                <td class="num nowrap">{{ d.totals.marginPkr | pkr }}</td>
+                <td class="num">{{ d.totals.marginPct }}%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <div class="grid-2">
+        <section class="table-card charges" aria-labelledby="chargesTitle">
+          <div class="pad-head">
+            <h3 class="card-title" id="chargesTitle">Charges by type</h3>
+            <span class="card-sub">from paid invoice lines</span>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Type</th><th class="num">Customer</th><th class="num">Partner</th><th class="num">Margin</th></tr></thead>
+              <tbody>
+                @for (r of d.byChargeType; track r.kind) {
+                  <tr>
+                    <td class="cell-main">{{ r.kind | humanize }}</td>
+                    <td class="num nowrap" [class.neg]="r.kind === 'discount'">{{ r.kind === 'discount' ? '−' : '' }}{{ r.customer | pkr }}</td>
+                    <td class="num nowrap">{{ r.partner | pkr }}</td>
+                    <td class="num nowrap">{{ r.margin | pkr }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4"><app-empty-state title="No charges yet" message="Invoice lines from paid invoices are summarised here." /></td></tr>
+                }
+              </tbody>
+              @if (d.byChargeType.length) {
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td class="num nowrap">{{ chargeTotals().customer | pkr }}</td>
+                    <td class="num nowrap">{{ chargeTotals().partner | pkr }}</td>
+                    <td class="num nowrap">{{ chargeTotals().margin | pkr }}</td>
+                  </tr>
+                </tfoot>
+              }
+            </table>
+          </div>
+        </section>
+
+        <div class="side-stack">
+          <section class="card" aria-labelledby="brandsTitle">
+            <div class="card-head">
+              <h3 class="card-title" id="brandsTitle">Top brands</h3>
+              <span class="card-sub">orders</span>
+            </div>
+            @for (b of d.topBrands; track b.name) {
+              <div class="bar-row">
+                <span class="ellipsis" [title]="b.name">{{ b.name }}</span>
+                <div class="bar-track" aria-hidden="true"><div class="bar-fill" [style.width.%]="(b.count / brandMax()) * 100"></div></div>
+                <span class="bar-val">{{ b.count }}</span>
+              </div>
+            } @empty {
+              <app-empty-state title="No orders in range" />
+            }
+          </section>
+
+          <section class="card" aria-labelledby="destTitle">
+            <div class="card-head">
+              <h3 class="card-title" id="destTitle">Top destinations</h3>
+              <span class="card-sub">orders</span>
+            </div>
+            @for (c of d.topCountries; track $index) {
+              <div class="bar-row">
+                <span class="ellipsis" [title]="c.name">{{ c.name }}</span>
+                <div class="bar-track" aria-hidden="true"><div class="bar-fill gold" [style.width.%]="(c.count / countryMax()) * 100"></div></div>
+                <span class="bar-val">{{ c.count }}</span>
+              </div>
+            } @empty {
+              <app-empty-state title="No orders in range" />
+            }
+          </section>
+        </div>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,150 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">People</span>
+      <h1>Partners</h1>
+      <p class="subtitle">Each partner has its own login, its own team and only the modules you enable. New customer orders go to the default partner.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" [disabled]="list.loading() || list.refreshing()" (click)="list.reload()">@if (list.refreshing()) { <ion-spinner name="crescent" /> } Refresh</button>
+      <button type="button" class="btn btn-primary" [disabled]="opening()" (click)="openNew()">
+        @if (opening()) { <ion-spinner name="crescent" /> } + New partner
+      </button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Status">
+      @for (s of statuses; track s) {
+        <button type="button" class="chip" [class.active]="query().status === s" [attr.aria-pressed]="query().status === s" (click)="setStatus(s)">{{ statusLabel(s) }}</button>
+      }
+    </div>
+    <div class="toolbar-end">
+      <app-search-input placeholder="Search partners…" [value]="query().search" (search)="onSearch($event)" />
+    </div>
+  </div>
+
+  @if (list.error()) {
+    <div class="card"><app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" /></div>
+  } @else if (list.loading()) {
+    <div class="partner-grid">
+      @for (i of skeleton; track i) {
+        <div class="card"><span class="skeleton" style="width: 55%; height: 22px"></span><span class="skeleton" style="height: 14px; margin-top: 12px; width: 75%"></span><span class="skeleton" style="height: 56px; margin-top: 18px"></span></div>
+      }
+    </div>
+  } @else {
+    <div class="partner-grid" [class.refreshing]="list.refreshing()">
+      @for (p of list.items(); track p.id) {
+        <article class="card partner" [class.off]="p.status !== 'active'" [class.current]="openId() === p.id">
+          <div class="p-top">
+            <h2 class="p-name">
+              <button type="button" class="p-open" (click)="open(p)" [attr.aria-label]="'Open ' + p.name">{{ p.name }}</button>
+            </h2>
+            <span class="p-badges">
+              @if (p.is_default) { <span class="badge gold">Default</span> }
+              <span class="badge dot" [class.green]="p.status === 'active'">{{ p.status === 'active' ? 'Active' : 'Switched off' }}</span>
+            </span>
+          </div>
+          <p class="p-owner">
+            @if (p.owner) {
+              <span class="owner-name">{{ p.owner.full_name || '—' }}</span>
+              <span class="owner-mail">{{ p.owner.email }}</span>
+              @if (!p.owner.is_active) { <span class="owner-off">Owner login is off</span> }
+            } @else {
+              <span class="owner-off">No owner login</span>
+            }
+          </p>
+          <dl class="p-stats">
+            <div><dt>Modules</dt><dd>{{ moduleCount(p) }}<small> of {{ modules().length || '–' }}</small></dd></div>
+            <div><dt>Users</dt><dd>{{ p.users_count }}</dd></div>
+            <div><dt>Active orders</dt><dd>{{ p.active_orders }}</dd></div>
+            <div><dt>In production</dt><dd>{{ p.in_production }}</dd></div>
+          </dl>
+        </article>
+      } @empty {
+        <div class="card span-all">
+          <app-empty-state
+            [title]="query().search ? 'No matching partners' : query().status !== 'all' ? 'None in this view' : 'No partners yet'"
+            [message]="query().search ? 'Try another name, or clear the search.' : query().status !== 'all' ? 'Switch to All to see everything.' : 'Create the first partner. It gets its own login and the modules you choose, and becomes the default for new orders.'">
+            @if (!query().search && query().status === 'all') { <button type="button" class="btn btn-sm btn-primary" (click)="openNew()">+ New partner</button> }
+          </app-empty-state>
+        </div>
+      }
+    </div>
+    <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+  }
+</div>
+
+@if (openId(); as id) {
+  <app-partner-detail [partnerId]="id" [modulesFallback]="modules()" (closed)="closeDetail()" (changed)="list.reload()" />
+}
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="!saving() && closeForm()">
+    <form class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="npTitle" novalidate (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Partners</span>
+          <h3 id="npTitle">New partner</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeForm()" [disabled]="saving()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field span-2">
+            <label for="npName">Partner name</label>
+            <input id="npName" class="input" required autocomplete="off" maxlength="100" placeholder="e.g. Al-Noor Stitching" [value]="f.name"
+              [attr.aria-invalid]="showErrors() && nameError() ? 'true' : null" [attr.aria-describedby]="showErrors() && nameError() ? 'npNameErr' : null"
+              (input)="patchForm({ name: $any($event.target).value })" />
+            @if (showErrors() && nameError()) { <span class="error" id="npNameErr">{{ nameError() }}</span> }
+          </div>
+          <div class="field">
+            <label for="npOwner">Owner full name</label>
+            <input id="npOwner" class="input" required autocomplete="off" maxlength="100" [value]="f.owner_name"
+              [attr.aria-invalid]="showErrors() && ownerNameError() ? 'true' : null" [attr.aria-describedby]="showErrors() && ownerNameError() ? 'npOwnerErr' : null"
+              (input)="patchForm({ owner_name: $any($event.target).value })" />
+            @if (showErrors() && ownerNameError()) { <span class="error" id="npOwnerErr">{{ ownerNameError() }}</span> }
+          </div>
+          <div class="field">
+            <label for="npEmail">Owner email (their login)</label>
+            <input id="npEmail" class="input" type="email" required autocomplete="off" maxlength="160" [value]="f.owner_email"
+              [attr.aria-invalid]="showErrors() && emailError() ? 'true' : null" [attr.aria-describedby]="showErrors() && emailError() ? 'npEmailErr' : null"
+              (input)="patchForm({ owner_email: $any($event.target).value })" />
+            @if (showErrors() && emailError()) { <span class="error" id="npEmailErr">{{ emailError() }}</span> }
+          </div>
+          <div class="field">
+            <label for="npPhone">Owner phone <span class="opt">(optional)</span></label>
+            <input id="npPhone" class="input" type="tel" autocomplete="off" maxlength="40" [value]="f.owner_phone" (input)="patchForm({ owner_phone: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="npPassword">Temporary password <span class="opt">(optional)</span></label>
+            <span class="pw-wrap">
+              <input id="npPassword" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [value]="f.password"
+                [attr.aria-invalid]="showErrors() && passwordError() ? 'true' : null" [attr.aria-describedby]="'npPwHint' + (showErrors() && passwordError() ? ' npPwErr' : '')"
+                (input)="patchForm({ password: $any($event.target).value })" />
+              <button type="button" class="btn btn-sm btn-ghost" [attr.aria-pressed]="showPassword()" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
+            </span>
+            @if (showErrors() && passwordError()) { <span class="error" id="npPwErr">{{ passwordError() }}</span> }
+            <span class="hint" id="npPwHint">Leave empty to generate one. The owner must choose their own at first sign-in.</span>
+          </div>
+        </div>
+
+        <app-permission-matrix [modules]="modules()" [(value)]="formPerms" [disabled]="saving()" legend="Modules this partner may use" />
+        @if (showErrors() && modulesError()) { <p class="field-error" role="alert">{{ modulesError() }}</p> }
+        <p class="hint-line">The owner gets all of these modules. The partner chooses which of them each of its own users gets.</p>
+
+        @if (formError()) { <p class="form-error" role="alert">{{ formError() }}</p> }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="closeForm()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } Create partner
+        </button>
+      </div>
+    </form>
+  </div>
+}
+
+@if (credential(); as c) {
+  <app-temp-password-dialog title="Partner created" [name]="c.name" [email]="c.email" [password]="c.password" (closed)="closeCredential()" />
+}

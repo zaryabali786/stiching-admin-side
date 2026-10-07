@@ -1,0 +1,306 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Catalogue</span>
+      <h1>Articles</h1>
+      <p class="subtitle">Create article types (for example Neckline, Sleeves or Collar) and the articles inside them. Customers see one dropdown per type on the order form.</p>
+    </div>
+  </header>
+
+  <div class="split">
+    <!-- ═════════ Article types ═════════ -->
+    <section class="card pane types-pane" aria-labelledby="typesTitle">
+      <div class="card-head">
+        <h2 class="card-title" id="typesTitle">Article types</h2>
+        <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-primary" (click)="openNewType()">+ Add article type</button>
+      </div>
+
+      <app-search-input class="pane-search" placeholder="Search types…" [value]="tq().tsearch" (search)="onTypeSearch($event)" />
+
+      @if (typeNotice(); as n) {
+        <div class="notice" role="alert">
+          <strong>“{{ n.name }}” can't be deleted yet</strong>
+          <p>{{ n.message }}</p>
+          <div *can="'catalogue.update'" class="notice-actions">
+            <button type="button" class="btn btn-sm" [disabled]="typeBusy() === n.typeId" (click)="deactivateType(n.typeId)">
+              @if (typeBusy() === n.typeId) { <ion-spinner name="crescent" /> } Set inactive instead
+            </button>
+            <button type="button" class="btn btn-sm btn-ghost" (click)="typeNotice.set(null)">Dismiss</button>
+          </div>
+        </div>
+      }
+
+      @if (types.error()) {
+        <app-empty-state kind="error" [message]="types.error()" (retry)="types.reload()" />
+      } @else {
+        <ul class="type-list" [class.refreshing]="types.refreshing()" aria-label="Article types">
+          @if (types.loading()) {
+            @for (i of skeleton; track i) { <li class="type-row"><span class="skeleton" style="height: 44px; width: 100%"></span></li> }
+          } @else {
+            @for (t of types.items(); track t.id) {
+              <li class="type-row" [class.selected]="t.id === aq().type" [class.inactive]="t.status !== 'active'">
+                <button type="button" class="type-pick" (click)="selectType(t)" [attr.aria-pressed]="t.id === aq().type" [attr.aria-label]="'Show articles of ' + t.name">
+                  <span class="type-name">{{ t.name }}</span>
+                  <span class="type-meta">
+                    {{ t.articles_count }} {{ t.articles_count === 1 ? 'article' : 'articles' }} · order {{ t.sort_order }}
+                    @if (t.status !== 'active') { <span class="badge">Inactive</span> }
+                  </span>
+                </button>
+                <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost btn-icon" [attr.aria-label]="'Edit type ' + t.name" (click)="openEditType(t)"><ion-icon name="create-outline" aria-hidden="true"></ion-icon></button>
+                <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost btn-icon danger" [disabled]="typeBusy() === t.id" [attr.aria-label]="'Delete type ' + t.name" (click)="removeType(t)">
+                  @if (typeBusy() === t.id) { <ion-spinner name="crescent" /> } @else { <ion-icon name="trash-outline" aria-hidden="true"></ion-icon> }
+                </button>
+              </li>
+            } @empty {
+              <li class="type-empty">
+                <app-empty-state [title]="tq().tsearch ? 'No matching types' : 'No article types yet'"
+                  [message]="tq().tsearch ? 'Try another name.' : 'Add your first type, such as Neckline or Sleeves, then add articles to it.'">
+                  @if (!tq().tsearch) { <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-primary" (click)="openNewType()">+ Add article type</button> }
+                </app-empty-state>
+              </li>
+            }
+          }
+        </ul>
+        <app-pagination [meta]="types.meta()" (pageChange)="goToTypePage($event)" />
+      }
+    </section>
+
+    <!-- ═════════ Articles of the selected type ═════════ -->
+    <section class="card pane articles-pane" #detail aria-labelledby="articlesTitle">
+      @if (!aq().type) {
+        <div class="card-head"><h2 class="card-title" id="articlesTitle">Articles</h2></div>
+        @if (types.loading()) {
+          <span class="skeleton" style="height: 120px"></span>
+        } @else {
+          <app-empty-state title="Choose an article type" message="Pick a type on the left to see and edit its articles." />
+        }
+      } @else {
+        <div class="card-head">
+          <div class="head-title">
+            <h2 class="card-title" id="articlesTitle">Articles in {{ selectedName() }}</h2>
+            <span class="internal-note">Customer price, partner cost and margin are internal: customers never see them</span>
+          </div>
+          <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-primary" (click)="openNewArticle()">+ Add article</button>
+        </div>
+
+        <div class="toolbar">
+          <div class="chips" role="group" aria-label="Status">
+            @for (s of statuses; track s) {
+              <button type="button" class="chip" [class.active]="aq().status === s" [attr.aria-pressed]="aq().status === s" (click)="setArticleStatus(s)">{{ statusLabel(s) }}</button>
+            }
+          </div>
+          <div class="toolbar-end">
+            <app-search-input placeholder="Search articles…" [value]="aq().search" (search)="onArticleSearch($event)" />
+          </div>
+        </div>
+
+        <div class="table-card inner" [class.refreshing]="articles.refreshing()">
+          @if (articles.error()) {
+            <app-empty-state kind="error" [message]="articles.error()" (retry)="articles.reload()" />
+          } @else {
+            <div class="table-scroll">
+              <table class="data-table stack">
+                <thead>
+                  <tr>
+                    <th class="c-img"><span class="sr-only">Picture</span></th>
+                    <th>Name</th>
+                    <th class="num">Customer price</th>
+                    <th class="num">Partner cost</th>
+                    <th class="num">Margin</th>
+                    <th>Status</th>
+                    <th><span class="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (articles.loading()) {
+                    @for (i of skeleton; track i) {
+                      <tr>@for (c of [1, 2, 3, 4, 5, 6, 7]; track c) { <td><span class="skeleton"></span></td> }</tr>
+                    }
+                  } @else {
+                    @for (a of articles.items(); track a.id) {
+                      <tr [class.inactive]="a.status !== 'active'">
+                        <td class="c-img">
+                          @if (a.image_url) {
+                            <img class="thumb" [src]="a.image_url" [alt]="a.name" loading="lazy" />
+                          } @else {
+                            <span class="thumb none" role="img" aria-label="No picture"><ion-icon name="image-outline" aria-hidden="true"></ion-icon></span>
+                          }
+                        </td>
+                        <td class="c-name"><span class="cell-main">{{ a.name }}</span><span class="cell-sub">Order {{ a.sort_order }}</span></td>
+                        <td class="num nowrap c-price"><span class="price-label">Customer price</span>{{ a.customer_price === null || a.customer_price === undefined ? '—' : (a.customer_price | pkr) }}</td>
+                        <td class="num nowrap c-price"><span class="price-label">Partner cost</span>{{ a.partner_cost === null || a.partner_cost === undefined ? '—' : (a.partner_cost | pkr) }}</td>
+                        <td class="num nowrap c-price c-margin" [class.neg]="(articleMargin(a) ?? 0) < 0"><span class="price-label">Margin</span>{{ articleMargin(a) === null ? '—' : (articleMargin(a)! | pkr) }}</td>
+                        <td class="c-status nowrap">
+                          <button *can="'catalogue.update'" type="button" class="switch" role="switch" [attr.aria-checked]="a.status === 'active'" [class.on]="a.status === 'active'" [disabled]="articleBusy() === a.id"
+                            [attr.aria-label]="'Show ' + a.name + ' on the order form'" (click)="toggleArticle(a)"><span></span></button>
+                          <app-status-badge [status]="a.status" [label]="a.status === 'active' ? 'Active' : 'Inactive'" />
+                        </td>
+                        <td class="actions-cell c-actions">
+                          <button *can="'catalogue.update'" type="button" class="btn btn-sm" [attr.aria-label]="'Edit ' + a.name" (click)="openEditArticle(a)">Edit</button>
+                          <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost danger" [disabled]="articleBusy() === a.id" [attr.aria-label]="'Delete ' + a.name" (click)="removeArticle(a)">
+                            @if (articleBusy() === a.id) { <ion-spinner name="crescent" /> } Delete
+                          </button>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr class="empty-row"><td colspan="7">
+                        <app-empty-state
+                          [title]="aq().search ? 'No matching articles' : aq().status !== 'all' ? 'None in this view' : 'No articles in ' + selectedName() + ' yet'"
+                          [message]="aq().search ? 'Try another name, or clear the search.' : aq().status !== 'all' ? 'Switch to All to see everything.' : 'Add the first article. Customers choose one per piece on the order form.'">
+                          @if (!aq().search && aq().status === 'all') { <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-primary" (click)="openNewArticle()">+ Add article</button> }
+                        </app-empty-state>
+                      </td></tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+            <app-pagination [meta]="articles.meta()" (pageChange)="goToArticlePage($event)" />
+          }
+        </div>
+      }
+    </section>
+  </div>
+</div>
+
+<!-- ═════════ Type modal ═════════ -->
+@if (typeForm(); as f) {
+  <div class="modal-backdrop" (click)="!typeSaving() && closeTypeForm()">
+    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="tyTitle" novalidate (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); saveType()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Article types</span>
+          <h3 id="tyTitle">{{ f.id ? 'Edit article type' : 'Add article type' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeTypeForm()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="tyName">Type name</label>
+          <input id="tyName" class="input" required autocomplete="off" placeholder="e.g. Collar" [value]="f.name"
+            [attr.aria-invalid]="typeShowErrors() && typeNameError() ? 'true' : null" [attr.aria-describedby]="typeShowErrors() && typeNameError() ? 'tyNameErr' : null"
+            (input)="patchType({ name: $any($event.target).value })" />
+          @if (typeShowErrors() && typeNameError()) { <span class="error" id="tyNameErr">{{ typeNameError() }}</span> }
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="tyOrder">Sort order</label>
+            <input id="tyOrder" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="Auto: end of list" [value]="f.sort_order"
+              [attr.aria-invalid]="typeShowErrors() && typeOrderError() ? 'true' : null" [attr.aria-describedby]="typeShowErrors() && typeOrderError() ? 'tyOrderErr' : 'tyOrderHint'"
+              (input)="patchType({ sort_order: $any($event.target).value })" />
+            @if (typeShowErrors() && typeOrderError()) { <span class="error" id="tyOrderErr">{{ typeOrderError() }}</span> }
+            @else { <span class="hint" id="tyOrderHint">Lower numbers appear first on the order form.</span> }
+          </div>
+          <div class="field">
+            <label for="tyStatus">Status</label>
+            <select id="tyStatus" class="select" (change)="patchType({ active: $any($event.target).value === 'active' })">
+              <option value="active" [selected]="f.active">Active</option>
+              <option value="inactive" [selected]="!f.active">Inactive</option>
+            </select>
+          </div>
+        </div>
+        @if (typeFormError()) { <p class="form-error" role="alert">{{ typeFormError() }}</p> }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="typeSaving()" (click)="closeTypeForm()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="typeSaving()">
+          @if (typeSaving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add type' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}
+
+<!-- ═════════ Article modal ═════════ -->
+@if (articleForm(); as f) {
+  <div class="modal-backdrop" (click)="!articleSaving() && closeArticleForm()">
+    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="arTitle" novalidate (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); saveArticle()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ selectedName() }}</span>
+          <h3 id="arTitle">{{ f.id ? 'Edit article' : 'Add article' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeArticleForm()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="arName">Article name</label>
+          <input id="arName" class="input" required autocomplete="off" placeholder="e.g. Chinese Collar" [value]="f.name"
+            [attr.aria-invalid]="articleShowErrors() && articleNameError() ? 'true' : null" [attr.aria-describedby]="articleShowErrors() && articleNameError() ? 'arNameErr' : null"
+            (input)="patchArticle({ name: $any($event.target).value })" />
+          @if (articleShowErrors() && articleNameError()) { <span class="error" id="arNameErr">{{ articleNameError() }}</span> }
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="arCustomerPrice">Customer price (PKR, optional)</label>
+            <input id="arCustomerPrice" class="input" type="number" min="0" step="any" inputmode="decimal" placeholder="Not set" [value]="f.customer_price"
+              [attr.aria-invalid]="articleShowErrors() && customerPriceError() ? 'true' : null" aria-describedby="arPriceHint"
+              (input)="patchArticle({ customer_price: $any($event.target).value })" />
+            @if (articleShowErrors() && customerPriceError()) { <span class="error">{{ customerPriceError() }}</span> }
+          </div>
+          <div class="field">
+            <label for="arPartnerCost">Partner cost (PKR, optional)</label>
+            <input id="arPartnerCost" class="input" type="number" min="0" step="any" inputmode="decimal" placeholder="Not set" [value]="f.partner_cost"
+              [attr.aria-invalid]="articleShowErrors() && partnerCostError() ? 'true' : null" aria-describedby="arPriceHint"
+              (input)="patchArticle({ partner_cost: $any($event.target).value })" />
+            @if (articleShowErrors() && partnerCostError()) { <span class="error">{{ partnerCostError() }}</span> }
+          </div>
+          <div class="field span-2">
+            <label for="arMargin">Margin (PKR)</label>
+            <output id="arMargin" class="input readonly margin-out" [class.neg]="(formMargin() ?? 0) < 0" for="arCustomerPrice arPartnerCost" aria-live="polite">{{ formMargin() === null ? '—' : (formMargin()! | pkr) }}</output>
+            <span class="hint" id="arPriceHint">Margin = customer price − partner cost, worked out for you. Customer price, partner cost and margin are internal: customers never see them.</span>
+          </div>
+          <div class="field">
+            <label for="arOrder">Sort order</label>
+            <input id="arOrder" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="Auto" [value]="f.sort_order"
+              [attr.aria-invalid]="articleShowErrors() && articleOrderError() ? 'true' : null"
+              (input)="patchArticle({ sort_order: $any($event.target).value })" />
+            @if (articleShowErrors() && articleOrderError()) { <span class="error">{{ articleOrderError() }}</span> }
+          </div>
+          <div class="field span-2">
+            <label for="arStatus">Status</label>
+            <select id="arStatus" class="select" (change)="patchArticle({ active: $any($event.target).value === 'active' })">
+              <option value="active" [selected]="f.active">Active: customers can choose it</option>
+              <option value="inactive" [selected]="!f.active">Inactive: hidden from the order form</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Picture -->
+        <div class="field">
+          <span class="label" id="arPicLabel">Picture</span>
+          <input #fileInput type="file" class="sr-only" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-hidden="true" (change)="onFile(fileInput)" />
+          @if (preview(); as src) {
+            <div class="pic-preview">
+              <img [src]="src" [alt]="f.name ? 'Picture of ' + f.name : 'Article picture'" />
+              <div class="pic-actions">
+                <button type="button" class="btn btn-sm" [disabled]="imageBusy()" (click)="browse()">Replace picture</button>
+                <button type="button" class="btn btn-sm btn-ghost danger" [disabled]="imageBusy()" (click)="removePicture()">Remove</button>
+              </div>
+            </div>
+          } @else {
+            <button type="button" class="dropzone" [class.dragging]="dragging()" aria-labelledby="arPicLabel" [disabled]="imageBusy()"
+              (click)="browse()" (dragover)="onDragOver($event)" (dragleave)="dragging.set(false)" (drop)="onDrop($event)">
+              @if (imageBusy()) { <ion-spinner name="crescent" /> <span>Preparing picture…</span> }
+              @else {
+                <ion-icon name="cloud-upload-outline" aria-hidden="true"></ion-icon>
+                <span class="dz-main">{{ f.removeImage ? 'Picture will be removed. Add a new one?' : 'Drop a picture here or choose a file' }}</span>
+                <span class="dz-sub">JPG, PNG or WebP. Resized to 1200 px before upload.</span>
+              }
+            </button>
+          }
+          @if (imageError()) { <span class="error" role="alert">{{ imageError() }}</span> }
+        </div>
+
+        @if (articleFormError()) { <p class="form-error" role="alert">{{ articleFormError() }}</p> }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="articleSaving()" (click)="closeArticleForm()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="articleSaving() || imageBusy()">
+          @if (articleSaving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add article' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}

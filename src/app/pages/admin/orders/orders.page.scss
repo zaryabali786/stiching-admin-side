@@ -1,0 +1,4 @@
+@use '../admin-page';
+
+.flags { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 1px; }
+.flags .badge { padding: 1px 7px; font-size: 10.5px; }

@@ -1,0 +1,106 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Finance</span>
+      <h1>Invoices</h1>
+      <p class="subtitle">Invoice packed orders first — the customer pays before anything ships. Then follow up on unpaid invoices.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="outstanding" (click)="setTab('issued')" [attr.aria-label]="'Outstanding: ' + (list.meta()?.outstandingPkr ?? 0) + ' PKR. Show issued invoices'">
+        <span class="o-label">Outstanding <span aria-hidden="true">→</span></span>
+        <strong>{{ list.meta()?.outstandingPkr ?? null | pkr }}</strong>
+        <span class="o-sub" [class.warn]="(count('issued') ?? 0) > 0">{{ count('issued') ?? 0 }} issued, waiting for payment</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Invoice stage">
+      @for (t of tabs; track t.key) {
+        <button type="button" class="chip" [class.active]="query().tab === t.key" [attr.aria-pressed]="query().tab === t.key"
+          [class.attn]="t.key === 'to_invoice' && !!count(t.key)" (click)="setTab(t.key)">
+          {{ t.label }} @if (count(t.key) !== null) { <span class="count">{{ count(t.key) }}</span> }
+        </button>
+      }
+    </div>
+    <div class="toolbar-end">
+      <app-search-input placeholder="Search order, customer, invoice no.…" [value]="query().search" (search)="onSearch($event)" />
+    </div>
+  </div>
+
+  <p class="next-step"><span class="step-tag">Next step</span>{{ tabHint() }}</p>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              @if (query().tab === 'to_invoice') {
+                <th>Order</th><th>Ships to</th><th class="num">Articles</th><th class="num">Weight</th><th>Packed</th><th>Invoice</th><th><span class="sr-only">Action</span></th>
+              } @else {
+                <th>Invoice</th><th>Order</th><th>{{ query().tab === 'paid' ? 'Paid' : 'Issued' }}</th><th class="num">Total PKR</th><th class="num">In customer currency</th><th class="num">Partner payout</th><th class="num">Margin</th><th>Status</th><th><span class="sr-only">Action</span></th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>@for (c of [1, 2, 3, 4, 5, 6, 7, 8]; track c) { <td><span class="skeleton"></span></td> }</tr>
+              }
+            } @else {
+              @for (r of list.items(); track r.invoice?.id || r.order?.id) {
+                <tr class="clickable" tabindex="0" [class.selected]="openOrderId() === r.order?.id" (click)="open(r)" (keydown.enter)="open(r)"
+                  [attr.aria-label]="(query().tab === 'to_invoice' ? 'Build invoice for ' : 'Open invoice ' + (r.invoice?.number || '') + ' for ') + r.order?.reference">
+                  @if (query().tab === 'to_invoice') {
+                    <td><span class="cell-main">{{ r.order?.reference }}</span><span class="cell-sub">{{ r.order?.customer_name }} · {{ r.order?.customer_code }}</span></td>
+                    <td>{{ r.order?.destination_city || '—' }}<span class="cell-sub">{{ r.order?.destination_country }}</span></td>
+                    <td class="num">{{ r.order?.units_count }}</td>
+                    <td class="num">@if (r.order?.weight_kg; as w) { {{ w }} kg } @else { — }</td>
+                    <td class="nowrap">{{ r.order?.packed_at | day }}@if (r.order?.packed_at; as packed) { <span class="cell-sub">{{ packed | timeAgo }}</span> }</td>
+                    <td>
+                      @if (r.invoice) { <app-status-badge status="draft" [label]="'Draft ' + (r.invoice.number || '')" /><span class="cell-sub">{{ r.invoice.total_pkr | pkr }}</span> }
+                      @else { <span class="muted">Not started</span> }
+                    </td>
+                    <td class="actions-cell"><button type="button" class="btn btn-sm btn-gold" tabindex="-1" (click)="$event.stopPropagation(); open(r)">{{ r.invoice ? 'Continue draft' : 'Build invoice' }}</button></td>
+                  } @else {
+                    <td><span class="cell-main nowrap-id">{{ r.invoice?.number }}</span></td>
+                    <td><span class="cell-main">{{ r.order?.reference || '—' }}</span><span class="cell-sub">{{ r.order?.customer_name }} · {{ r.order?.customer_code }}</span></td>
+                    <td class="nowrap">{{ (query().tab === 'paid' ? r.invoice?.paid_at : r.invoice?.issued_at) ?? null | day }}</td>
+                    <td class="num nowrap"><b>{{ r.invoice?.total_pkr ?? null | pkr }}</b></td>
+                    <td class="num nowrap">{{ r.invoice?.currency === 'PKR' ? '—' : (r.invoice?.total_foreign ?? null | pkr: r.invoice?.currency || 'PKR') }}</td>
+                    <td class="num nowrap">{{ r.invoice?.partner_total_pkr ?? null | pkr }}</td>
+                    <td class="num margin">{{ (r.invoice?.total_pkr || 0) - (r.invoice?.partner_total_pkr || 0) | pkr }}</td>
+                    <td><app-status-badge [status]="r.invoice?.status" /></td>
+                    <td class="actions-cell">
+                      <button type="button" class="btn btn-sm" tabindex="-1" (click)="$event.stopPropagation(); open(r)">{{ r.invoice?.status === 'issued' ? 'Record payment' : 'View' }}</button>
+                    </td>
+                  }
+                </tr>
+              } @empty {
+                <tr><td colspan="9">
+                  @if (query().search) {
+                    <app-empty-state title="No matches" message="Try another order reference, customer or invoice number." />
+                  } @else if (query().tab === 'to_invoice') {
+                    <app-empty-state icon="✓" title="Nothing to invoice" message="Packed orders waiting for an invoice will appear here." />
+                  } @else if (query().tab === 'issued') {
+                    <app-empty-state icon="✓" title="No unpaid invoices" message="Issued invoices waiting for payment appear here." />
+                  } @else {
+                    <app-empty-state title="No paid invoices yet" message="Invoices move here once payment is recorded." />
+                  }
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (openOrderId(); as id) {
+  <app-invoice-builder [orderId]="id" (closed)="closeBuilder()" (changed)="list.reload()" />
+}

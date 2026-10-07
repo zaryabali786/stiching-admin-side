@@ -1,0 +1,139 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">People</span>
+      <h1>Customers</h1>
+      <p class="subtitle">Find a customer to see their contact details, orders and saved size charts.</p>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <app-search-input placeholder="Search name, email, phone, code, city…" [value]="query().search" (search)="onSearch($event)" />
+    @if (list.meta(); as m) { <span class="result-count">{{ m.total }} {{ m.total === 1 ? 'customer' : 'customers' }}</span> }
+    <label class="page-size">
+      Rows
+      <select class="select" (change)="setLimit($any($event.target).value)">
+        @for (s of pageSizes; track s) { <option [value]="s" [selected]="s === query().limit">{{ s }}</option> }
+      </select>
+    </label>
+  </div>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll" [class.sticky-head]="query().limit > 15">
+        <table class="data-table">
+          <caption class="sr-only">Customers. Select a row to see the customer's details.</caption>
+          <thead>
+            <tr>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('customer_code')" (click)="sortBy('customer_code')" (keydown.enter)="sortBy('customer_code')">Code<span class="sort" aria-hidden="true">{{ sortIcon('customer_code') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('full_name')" (click)="sortBy('full_name')" (keydown.enter)="sortBy('full_name')">Customer<span class="sort" aria-hidden="true">{{ sortIcon('full_name') }}</span></th>
+              <th>Phone</th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('country')" (click)="sortBy('country')" (keydown.enter)="sortBy('country')">Location<span class="sort" aria-hidden="true">{{ sortIcon('country') }}</span></th>
+              <th class="num">Orders</th>
+              <th class="num">Active</th>
+              <th class="num">Total spent</th>
+              <th>Last order</th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('created_at')" (click)="sortBy('created_at')" (keydown.enter)="sortBy('created_at')">Joined<span class="sort" aria-hidden="true">{{ sortIcon('created_at') }}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>@for (c of [1, 2, 3, 4, 5, 6, 7, 8, 9]; track c) { <td><span class="skeleton"></span></td> }</tr>
+              }
+            } @else {
+              @for (c of list.items(); track c.id) {
+                <tr class="clickable" tabindex="0" [class.selected]="selected()?.id === c.id" [attr.aria-label]="'Open customer ' + (c.full_name || c.email)" (click)="open(c)" (keydown.enter)="open(c)">
+                  <td class="mono nowrap">{{ c.customer_code || '—' }}</td>
+                  <td>
+                    <span class="cell-main">{{ c.full_name || '—' }} @if (!c.is_active) { <span class="badge">Inactive</span> }</span>
+                    <span class="cell-sub">{{ c.email }}</span>
+                  </td>
+                  <td class="nowrap">{{ c.phone || '—' }}</td>
+                  <td>{{ c.city || '—' }}<span class="cell-sub">{{ c.country }}</span></td>
+                  <td class="num">{{ c.total_orders }}</td>
+                  <td class="num" [class.muted]="!c.active_orders">{{ c.active_orders }}</td>
+                  <td class="num nowrap">{{ c.total_spent_pkr | pkr }}</td>
+                  <td class="nowrap">{{ c.last_order_at ? (c.last_order_at | timeAgo) : '—' }}</td>
+                  <td class="nowrap">{{ c.created_at | day }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="9">
+                  <app-empty-state [title]="query().search ? 'No matching customers' : 'No customers yet'"
+                    [message]="query().search ? 'Try a different name, email or customer code.' : 'Customers appear here when they sign up in the customer app.'" />
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (selected(); as c) {
+  <div class="drawer-backdrop" (click)="close()"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" [attr.aria-label]="'Customer ' + (c.full_name || c.email)">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">Customer@if (c.customer_code) { · {{ c.customer_code }} }</span>
+        <h3>{{ c.full_name || c.email }}</h3>
+        <p class="head-sub">{{ c.city || '—' }}{{ c.country ? ', ' + c.country : '' }} · joined {{ c.created_at | day }}</p>
+      </div>
+      <button type="button" class="close-btn" (click)="close()" aria-label="Close customer">×</button>
+    </div>
+    <div class="drawer-body">
+      @if (detailLoading()) {
+        @for (i of [1, 2, 3]; track i) { <span class="skeleton" style="height: 70px; margin-bottom: 12px"></span> }
+      } @else if (detailError()) {
+        <app-empty-state kind="error" [message]="detailError()" (retry)="retryDetail()" />
+      } @else if (detail(); as d) {
+        <div class="mini-stats">
+          <div><span>Orders</span><strong>{{ c.total_orders }}</strong></div>
+          <div><span>Active now</span><strong>{{ c.active_orders }}</strong></div>
+          <div><span>Total spent</span><strong>{{ c.total_spent_pkr | pkr }}</strong></div>
+        </div>
+
+        <h4 class="sec">Contact &amp; account</h4>
+        <dl class="kv">
+          <dt>Email</dt><dd><a class="link" [href]="'mailto:' + d.email">{{ d.email }}</a></dd>
+          <dt>Phone</dt><dd>{{ d.phone || '—' }}</dd>
+          <dt>Address</dt><dd>{{ d.address || '—' }}@if (d.postal_code) { , {{ d.postal_code }} }</dd>
+          <dt>City / country</dt><dd>{{ d.city || '—' }}{{ d.country ? ', ' + d.country : '' }}</dd>
+          <dt>Joined</dt><dd>{{ d.created_at | day }}</dd>
+          <dt>Account</dt><dd>@if (d.is_active) { <span class="badge green">Active</span> } @else { <span class="badge">Inactive</span> }</dd>
+        </dl>
+
+        <h4 class="sec">Orders ({{ d.orders.length }})</h4>
+        @for (o of d.orders; track o.id) {
+          <a class="order-link" routerLink="/admin/orders" [queryParams]="{ ref: o.reference }" [attr.aria-label]="'Open order ' + o.reference">
+            <span>
+              <strong>{{ o.reference }}</strong>
+              <span class="cell-sub">{{ o.brand || 'No brand' }} · {{ o.units_count }} {{ o.units_count === 1 ? 'article' : 'articles' }} · {{ o.created_at | day }}</span>
+            </span>
+            <app-status-badge [status]="o.status" [label]="o.status_label" />
+          </a>
+        } @empty {
+          <p class="muted">No orders yet.</p>
+        }
+
+        <h4 class="sec">Size charts ({{ d.size_charts.length }})</h4>
+        @for (s of d.size_charts; track s.id) {
+          <div class="size-row"><span>{{ chartTitle(s) || s.name }}@if (s.nearest_size) { <span class="badge gold"> {{ s.nearest_size }}</span> }</span><span class="muted">updated {{ s.updated_at | day }}</span></div>
+        } @empty {
+          <p class="muted">No saved size charts.</p>
+        }
+      }
+    </div>
+    <div class="drawer-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
+      <span class="foot-spacer"></span>
+      @if (c.customer_code) {
+        <a class="btn btn-primary" routerLink="/admin/orders" [queryParams]="{ search: c.customer_code }">All orders for {{ c.customer_code }} →</a>
+      }
+    </div>
+  </aside>
+}

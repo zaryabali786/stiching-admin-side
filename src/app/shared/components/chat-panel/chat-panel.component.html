@@ -1,0 +1,135 @@
+@if (banner(); as text) {
+  <div class="banner" role="status"><span class="dot" aria-hidden="true"></span>{{ text }}</div>
+}
+
+<div class="thread-wrap">
+  <div class="thread" #scroller (scroll)="onScroll()" role="log" aria-live="polite" aria-label="Conversation messages" tabindex="0">
+    @if (loading()) {
+      <div class="skeletons" aria-hidden="true">
+        <span class="skeleton sk left"></span><span class="skeleton sk right"></span><span class="skeleton sk left short"></span><span class="skeleton sk right short"></span>
+      </div>
+    } @else if (error()) {
+      <div class="state error">
+        <strong>Could not load the conversation</strong>
+        <p>{{ error() }}</p>
+        <button type="button" class="btn btn-sm" (click)="retryLoad()">Try again</button>
+      </div>
+    } @else {
+      @if (hasMore()) {
+        <div class="older">
+          <button type="button" class="btn btn-sm" [disabled]="loadingOlder()" (click)="loadOlder()">
+            @if (loadingOlder()) { <ion-spinner name="crescent" /> } Load older messages
+          </button>
+        </div>
+      }
+
+      @for (r of rows(); track r.key) {
+        @if (r.type === 'day') {
+          <div class="day"><span>{{ r.label }}</span></div>
+        } @else {
+          <div class="row" [class.mine]="r.mine">
+            <div class="bubble" [class.mine]="r.mine" [class.failed]="r.m.state === 'failed'" [class.pending]="r.m.state === 'sending'">
+              @if (r.showName) { <span class="who">{{ r.mine ? 'You' : r.m.sender_name || roleLabel(r.m) }}</span> }
+              @if (r.m.kind === 'voice' && r.m.audio?.url) {
+                <app-voice-player [url]="r.m.audio!.url!" [duration]="r.m.audio!.duration" [mine]="r.mine" [mime]="r.m.audio!.mime" (failed)="onAudioFailed()" />
+              } @else if (r.m.kind === 'voice') {
+                <span class="muted-text">Voice message unavailable</span>
+              } @else {
+                <p class="text">{{ r.m.body }}</p>
+              }
+              <span class="meta">
+                {{ r.m.created_at | date: 'h:mm a' }}
+                @if (r.m.state === 'sending') { <span class="state"> · Sending…</span> }
+                @if (r.m.state === 'failed') { <span class="state fail"> · Not sent</span> }
+              </span>
+            </div>
+            @if (r.m.state === 'failed') {
+              <div class="fail-actions" role="alert">
+                <span class="fail-text">{{ r.m.error || 'This message was not sent.' }}</span>
+                <button type="button" class="btn btn-sm btn-primary" (click)="retry(r.m)">Retry</button>
+                <button type="button" class="btn btn-sm btn-ghost" (click)="discard(r.m)">Remove</button>
+              </div>
+            }
+            @if (r.seen) { <span class="seen">Seen {{ r.m.read_at | date: 'h:mm a' }}</span> }
+          </div>
+        }
+      } @empty {
+        <div class="state">
+          <strong>No messages yet</strong>
+          @if (canReply()) { <p>Write to the customer below, or send a voice note.</p> }
+        </div>
+      }
+    }
+  </div>
+
+  @if (newBelow() > 0) {
+    <button type="button" class="new-pill" (click)="scrollToBottom()">New messages ↓</button>
+  }
+</div>
+
+<div class="typing" aria-live="polite">
+  @if (typingName(); as who) { <span><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>{{ who }} is typing…</span> }
+</div>
+
+<!-- Composer -->
+@if (!canReply()) {
+  <div class="composer read-only"><p class="read-only-note" role="note">You can read messages but not reply.</p></div>
+} @else {
+<div class="composer" [class.recording]="rec() !== 'idle'">
+  @if (recError(); as err) {
+    <p class="rec-error" role="alert">{{ err }}
+      @if (recSilent() && voiceOk) { <button type="button" class="btn btn-sm btn-primary rec-again" (click)="startRecording()">Record again</button> }
+      <button type="button" class="link" (click)="recError.set(null); recSilent.set(false)">Dismiss</button>
+    </p>
+  }
+
+  @if (rec() === 'idle') {
+    <div class="compose-row">
+      <label class="sr-only" for="chatInput">Write a message</label>
+      <textarea id="chatInput" #composer class="input chat-input" rows="1" placeholder="Write a message…" [value]="draft()" [attr.maxlength]="maxText + 200"
+        (input)="onInput(composer)" (keydown.enter)="onEnter($event)" [attr.aria-invalid]="overLimit() ? 'true' : null"></textarea>
+      @if (voiceOk && !draft().trim()) {
+        <button type="button" class="round mic" (click)="startRecording()" aria-label="Record a voice message">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
+      } @else {
+        <button type="button" class="round send" (click)="send()" [disabled]="!canSend()" aria-label="Send message">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 20.5v-6.7L12 12 3 10.2V3.5L22 12 3 20.5Z"/></svg>
+        </button>
+      }
+    </div>
+    <div class="hint-row">
+      <span>Enter to send, Shift+Enter for a new line.</span>
+      @if (draft().length > maxText - 500) { <span class="count" [class.over]="overLimit()">{{ draft().length }} / {{ maxText }}</span> }
+      @if (!voiceOk) { <span>Voice notes need a microphone and a secure (https) page.</span> }
+    </div>
+  } @else if (rec() === 'starting') {
+    <div class="recbar starting"><ion-spinner name="crescent" /> <span>Waiting for the microphone…</span></div>
+  } @else {
+    <!-- Recording bar: replaces the composer row, pinned at the bottom -->
+    <div class="recbar" role="group" aria-label="Voice recorder">
+      <span class="sr-only" role="status">{{ recLimitHit() ? 'Maximum length reached' : rec() === 'sending' ? 'Sending' : 'Recording' }}</span>
+      <div class="recbar-row">
+        <button type="button" class="round trash" (click)="cancelRecording()" [disabled]="rec() === 'sending'" aria-label="Cancel recording">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-1 11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 9Zm4 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z"/></svg>
+        </button>
+        <div class="rec-pill">
+          <span class="rec-dot" [class.stopped]="recLimitHit()" aria-hidden="true"></span>
+          <span class="rec-time" aria-hidden="true">{{ clock(recSeconds()) }}<small> / {{ clock(maxVoice) }}</small></span>
+          <app-level-bars class="rec-bars" [level]="recLevel()" [quiet]="!recHeard()" [paused]="recLimitHit()" />
+        </div>
+        <button type="button" class="round send" (click)="sendRecording()" [disabled]="rec() === 'sending'" [attr.aria-label]="rec() === 'sending' ? 'Sending' : 'Send voice message'">
+          @if (rec() === 'sending') { <ion-spinner name="crescent" /> } @else {
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 20.5v-6.7L12 12 3 10.2V3.5L22 12 3 20.5Z"/></svg>
+          }
+        </button>
+      </div>
+      @if (recLimitHit()) {
+        <p class="rec-note">Maximum length reached. Send it, or cancel to start again.</p>
+      } @else if (warnNoSound()) {
+        <p class="rec-note warn" role="status">We can't hear you yet. Speak closer to the microphone, or check that it isn't muted.</p>
+      }
+    </div>
+  }
+</div>
+}

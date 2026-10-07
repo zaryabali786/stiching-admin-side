@@ -1,0 +1,123 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Catalogue</span>
+      <h1>{{ copy.title }}</h1>
+      <p class="subtitle">{{ copy.subtitle }}</p>
+    </div>
+    <div class="actions">
+      <button *can="'catalogue.update'" type="button" class="btn btn-primary" (click)="openNew()">+ Add {{ copy.one }}</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Status">
+      @for (s of statuses; track s) {
+        <button type="button" class="chip" [class.active]="query().status === s" [attr.aria-pressed]="query().status === s" (click)="setStatus(s)">{{ statusLabel(s) }}</button>
+      }
+    </div>
+    <div class="toolbar-end">
+      <app-search-input [placeholder]="copy.searchHint" [value]="query().search" (search)="onSearch($event)" />
+    </div>
+  </div>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table stack">
+          <thead>
+            <tr>
+              <th>Name</th>
+              @if (isCourier) { <th>Tracking number</th> }
+              <th>Status</th>
+              <th>Created</th>
+              <th><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>@for (c of (isCourier ? [1, 2, 3, 4, 5] : [1, 2, 3, 4]); track c) { <td><span class="skeleton"></span></td> }</tr>
+              }
+            } @else {
+              @for (r of list.items(); track r.id) {
+                <tr [class.inactive]="r.status !== 'active'">
+                  <td class="c-name"><span class="cell-main">{{ r.name }}</span></td>
+                  @if (isCourier) {
+                    <td class="c-extra">
+                      <span class="badge" [class.blue]="r.requires_tracking !== false">{{ r.requires_tracking !== false ? 'Required' : 'Optional' }}</span>
+                    </td>
+                  }
+                  <td class="c-status"><app-status-badge [status]="r.status" [label]="r.status === 'active' ? 'Active' : 'Inactive'" /></td>
+                  <td class="c-date nowrap">{{ r.created_at | day }}</td>
+                  <td class="actions-cell c-actions">
+                    <button *can="'catalogue.update'" type="button" class="btn btn-sm" [attr.aria-label]="'Edit ' + r.name" (click)="openEdit(r)">Edit</button>
+                    <button *can="'catalogue.update'" type="button" class="btn btn-sm toggle-btn" [disabled]="busyId() === r.id" (click)="toggleStatus(r)"
+                      [attr.aria-label]="(r.status === 'active' ? 'Deactivate ' : 'Activate ') + r.name">
+                      @if (busyId() === r.id) { <ion-spinner name="crescent" /> }
+                      {{ r.status === 'active' ? 'Deactivate' : 'Activate' }}
+                    </button>
+                    <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost danger" [disabled]="busyId() === r.id" [attr.aria-label]="'Delete ' + r.name" (click)="remove(r)">Delete</button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr class="empty-row"><td [attr.colspan]="isCourier ? 5 : 4">
+                  <app-empty-state
+                    [title]="query().search ? 'No matching ' + copy.title.toLowerCase() : query().status !== 'all' ? 'None in this view' : 'No ' + copy.title.toLowerCase() + ' yet'"
+                    [message]="query().search ? 'Try another name, or clear the search.' : query().status !== 'all' ? 'Switch to All to see everything.' : copy.empty">
+                    @if (!query().search && query().status === 'all') { <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-primary" (click)="openNew()">+ Add {{ copy.one }}</button> }
+                  </app-empty-state>
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="!saving() && closeForm()">
+    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="lkTitle" novalidate (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ copy.title }}</span>
+          <h3 id="lkTitle">{{ f.id ? 'Edit ' + copy.one : 'Add ' + copy.one }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeForm()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="lkName">{{ isCourier ? 'Courier name' : 'Brand name' }}</label>
+          <input id="lkName" class="input" required autocomplete="off" [attr.maxlength]="nameMax + 20"
+            [placeholder]="isCourier ? 'e.g. TCS' : 'e.g. Sapphire'" [value]="f.name"
+            [attr.aria-invalid]="showErrors() && nameError() ? 'true' : null" [attr.aria-describedby]="showErrors() && nameError() ? 'lkNameErr' : null"
+            (input)="patchForm({ name: $any($event.target).value })" />
+          @if (showErrors() && nameError()) { <span class="error" id="lkNameErr">{{ nameError() }}</span> }
+        </div>
+
+        @if (isCourier) {
+          <div class="switch-row">
+            <button type="button" class="switch" role="switch" id="lkTrack" [attr.aria-checked]="f.requires_tracking" [class.on]="f.requires_tracking"
+              (click)="patchForm({ requires_tracking: !f.requires_tracking })" aria-labelledby="lkTrackLabel"><span></span></button>
+            <label id="lkTrackLabel" for="lkTrack">Customers must enter a tracking number</label>
+          </div>
+        }
+
+        <label class="check"><input type="checkbox" [checked]="f.active" (change)="patchForm({ active: $any($event.target).checked })" /> Active: customers can choose it on the order form</label>
+
+        @if (formError()) { <p class="form-error" role="alert">{{ formError() }}</p> }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="closeForm()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add ' + copy.one }}
+        </button>
+      </div>
+    </form>
+  </div>
+}

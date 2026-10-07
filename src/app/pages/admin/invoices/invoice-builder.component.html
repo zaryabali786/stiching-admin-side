@@ -1,0 +1,305 @@
+<div class="modal-backdrop no-print" (click)="close()">
+  <div class="modal modal-xl builder" role="dialog" aria-modal="true" aria-label="Invoice builder" (click)="$event.stopPropagation()">
+    <div class="modal-head">
+      @if (order(); as o) {
+        <div class="head-text">
+          <span class="eyebrow">{{ canEdit() ? 'Invoice builder' : 'Invoice' }}@if (invoice()?.number) { · {{ invoice()!.number }} }</span>
+          <h3>{{ o.reference }} · {{ o.customer?.full_name || o.customer_name }}</h3>
+          <p class="sub">
+            {{ o.customer?.customer_code || o.customer_code }} · {{ totalUnits() }} {{ totalUnits() === 1 ? 'article' : 'articles' }}
+            @if (o.weight_kg) { · {{ o.weight_kg }} kg }
+            · {{ o.destination_city }}{{ o.destination_country ? ', ' + o.destination_country : '' }}
+            @if (o.packed_at) { · packed {{ o.packed_at | day }} }
+          </p>
+        </div>
+        <div class="head-right">
+          @if (invoice(); as inv) { <app-status-badge [status]="inv.status" [label]="inv.status === 'draft' ? 'Draft' : null" /> } @else { <span class="badge">Not started</span> }
+          <button type="button" class="close-btn" (click)="close()" aria-label="Close">×</button>
+        </div>
+      } @else {
+        <div class="head-text"><span class="eyebrow">Invoice builder</span><h3>Loading…</h3></div>
+        <button type="button" class="close-btn" (click)="close()" aria-label="Close">×</button>
+      }
+    </div>
+
+    <div class="modal-body">
+      @if (loading() && !data()) {
+        <div class="builder-grid">
+          <div><span class="skeleton" style="height: 260px"></span></div>
+          <div><span class="skeleton" style="height: 260px"></span></div>
+        </div>
+      } @else if (error()) {
+        <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
+      } @else if (data(); as d) {
+        @if (notPackedReason(); as reason) { <div class="banner warn">{{ reason }}</div> }
+        @if (invoice()?.status === 'issued') {
+          <div class="banner">Issued {{ invoice()!.issued_at | day: true }} · waiting for the customer to pay. Reopen it to make corrections.</div>
+        }
+        @if (invoice()?.status === 'paid') {
+          <div class="banner ok">Paid {{ invoice()!.paid_at | day: true }}.</div>
+        }
+
+        <div class="builder-grid" [class.dim]="loading()">
+          <!-- Lines -->
+          <section class="lines-col">
+            <div class="section-title">{{ canEdit() ? 'What to charge' : 'Charges' }}</div>
+            <div class="table-scroll lines-scroll">
+              <table class="data-table lines-table">
+                <thead>
+                  <tr>
+                    <th style="width: 150px">Type</th>
+                    <th>Charge</th>
+                    <th class="num" style="width: 70px">Qty</th>
+                    <th class="num" style="width: 130px">Customer PKR</th>
+                    <th class="num" style="width: 130px">Partner PKR</th>
+                    @if (canEdit()) { <th style="width: 40px"></th> }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (l of lines(); track l.key) {
+                    @if (canEdit()) {
+                      <tr [class.discount]="l.kind === 'discount'">
+                        <td data-label="Type">
+                          <select class="select sm" [attr.aria-label]="'Type of line ' + ($index + 1)" (change)="setKind(l, $any($event.target).value)">
+                            @for (k of kinds; track k.value) { <option [value]="k.value" [selected]="k.value === l.kind">{{ k.label }}</option> }
+                          </select>
+                        </td>
+                        <td data-label="Charge" class="charge-cell">
+                          <input class="input sm" placeholder="Charge (shown to customer)" [attr.aria-label]="'Charge name, line ' + ($index + 1)" [value]="l.label" (input)="updateLine(l.key, { label: $any($event.target).value })" />
+                          <input class="input sm desc" placeholder="Details (optional)" [attr.aria-label]="'Details, line ' + ($index + 1)" [value]="l.description" (input)="updateLine(l.key, { description: $any($event.target).value })" />
+                        </td>
+                        <td data-label="Qty"><input class="input sm num" type="number" min="1" step="1" [attr.aria-label]="'Quantity, line ' + ($index + 1)" [value]="l.quantity" (change)="setQty(l, $any($event.target).value)" /></td>
+                        <td data-label="Customer PKR"><input class="input sm num" type="number" min="0" step="1" [attr.aria-label]="'Customer amount in PKR, line ' + ($index + 1)" [value]="l.customer_amount" (input)="setAmount(l, 'customer_amount', $any($event.target).value)" /></td>
+                        <td data-label="Partner PKR">
+                          <input class="input sm num" type="number" min="0" step="1" [attr.aria-label]="'Partner payout in PKR, line ' + ($index + 1)" [value]="l.partner_amount" [disabled]="l.kind === 'discount'"
+                            (input)="setAmount(l, 'partner_amount', $any($event.target).value)" />
+                        </td>
+                        <td class="remove-cell"><button type="button" class="icon-btn" title="Remove line" [attr.aria-label]="'Remove line ' + ($index + 1) + (l.label ? ' (' + l.label + ')' : '')" (click)="removeLine(l)">×</button></td>
+                      </tr>
+                    } @else {
+                      <tr [class.discount]="l.kind === 'discount'">
+                        <td data-label="Type"><span class="badge">{{ kindLabel(l.kind) }}</span></td>
+                        <td data-label="Charge" class="charge-cell"><span class="cell-main">{{ l.label }}</span>@if (l.description) { <span class="cell-sub">{{ l.description }}</span> }</td>
+                        <td data-label="Qty" class="num">{{ l.quantity }}</td>
+                        <td data-label="Customer" class="num">{{ l.kind === 'discount' ? '−' : '' }}{{ l.customer_amount | pkr }}</td>
+                        <td data-label="Partner" class="num">{{ l.partner_amount | pkr }}</td>
+                      </tr>
+                    }
+                  } @empty {
+                    <tr><td [attr.colspan]="canEdit() ? 6 : 5" class="muted empty-lines">No charges yet — add from the price list or a custom line.</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if (canEdit()) {
+              <div class="add-row" role="group" aria-label="Add a charge">
+                <button type="button" class="btn btn-sm" [class.btn-primary]="picker() === 'price'" [attr.aria-expanded]="picker() === 'price'" (click)="openPicker('price')">+ From price list</button>
+                <button type="button" class="btn btn-sm" [class.btn-primary]="picker() === 'shipping'" [attr.aria-expanded]="picker() === 'shipping'" (click)="openPicker('shipping')">+ Shipping</button>
+                <button type="button" class="btn btn-sm btn-ghost" (click)="addCustom()">+ Custom line</button>
+                <button type="button" class="btn btn-sm btn-ghost" (click)="addDiscount()">+ Discount</button>
+              </div>
+
+              @if (picker() === 'price') {
+                <div class="picker">
+                  <div class="picker-head">
+                    <input class="input sm" placeholder="Filter price list…" aria-label="Filter price list" [value]="pickerSearch()" (input)="pickerSearch.set($any($event.target).value)" />
+                    <label class="qty">Qty <input class="input sm num" type="number" min="1" [value]="pickerQty()" (input)="pickerQty.set(+$any($event.target).value || 1)" /></label>
+                  </div>
+                  <div class="picker-list">
+                    @for (g of priceGroups(); track g.value) {
+                      <div class="picker-group">{{ g.label }}</div>
+                      @for (p of g.items; track p.id) {
+                        <button type="button" class="picker-item" (click)="addPriceItem(p)">
+                          <span class="pi-name">{{ p.name }}<span class="cell-sub">{{ p.unit }}</span></span>
+                          <span class="pi-price">{{ p.customer_price | pkr }}<span class="cell-sub">partner {{ p.partner_cost | pkr }}</span></span>
+                        </button>
+                      }
+                    } @empty {
+                      <p class="muted pad">No extra-charge items match. Article lines (stitching, accessories) are suggested from the order itself. <a routerLink="/admin/price-list">Manage price list</a></p>
+                    }
+                  </div>
+                </div>
+              }
+
+              @if (picker() === 'shipping') {
+                <div class="picker">
+                  <div class="picker-list">
+                    @for (s of d.shippingOptions; track s.id) {
+                      <button type="button" class="picker-item" [class.recommended]="s.recommended" (click)="addShipping(s)">
+                        <span class="pi-name">
+                          {{ s.courier }} · {{ s.zone }}
+                          @if (s.recommended) { <span class="badge green">Recommended</span> }
+                          <span class="cell-sub">{{ s.service | humanize }}@if (s.transit_time) { · {{ s.transit_time }} }@if (s.ddp_available) { · DDP +{{ s.ddp_fee | pkr }} }</span>
+                        </span>
+                        <span class="pi-price">{{ s.price_pkr | pkr }}</span>
+                      </button>
+                    } @empty {
+                      <p class="muted pad">No active shipping rates serve {{ d.order.destination_country || 'this destination' }}. <a routerLink="/admin/shipping">Add a rate</a></p>
+                    }
+                  </div>
+                </div>
+              }
+            }
+
+            <div class="field notes-field">
+              <label for="invNotes">Notes on the invoice</label>
+              @if (canEdit()) {
+                <textarea id="invNotes" class="textarea" placeholder="Optional — printed on the invoice" [value]="notes()" (input)="notes.set($any($event.target).value); dirty.set(true)"></textarea>
+              } @else {
+                <p class="static">{{ notes() || '—' }}</p>
+              }
+            </div>
+          </section>
+
+          <!-- Summary (sticky so totals stay visible while editing lines) -->
+          <aside class="summary-col" aria-label="Invoice totals">
+            <div class="section-title">Totals</div>
+            <div class="t-total" aria-live="polite">
+              <span class="t-label">Customer pays</span>
+              <strong>{{ totals().total | pkr }}</strong>
+              @if (currency() !== 'PKR') {
+                <span class="foreign">≈ {{ totals().foreign !== null ? (totals().foreign | pkr: currency()) : currency() + ' —' }}</span>
+              }
+            </div>
+            <div class="t-rows">
+              <div class="t-row"><span>Subtotal</span><b>{{ totals().subtotal | pkr }}</b></div>
+              @if (totals().discount) { <div class="t-row neg"><span>Discount</span><b>− {{ totals().discount | pkr }}</b></div> }
+            </div>
+            <div class="split">
+              <div class="split-item">
+                <span>Partner payout</span>
+                <b>{{ totals().payout | pkr }}</b>
+              </div>
+              <div class="split-item margin" [class.neg]="totals().margin < 0">
+                <span>Platform margin</span>
+                <b>{{ totals().margin | pkr }}</b>
+                <small>{{ totals().marginPct }}% of total{{ totals().margin < 0 ? ' · below cost' : '' }}</small>
+              </div>
+            </div>
+
+            <div class="section-title cur-title">Currency</div>
+            <div class="form-grid tight">
+              <div class="field">
+                <label for="cur">Customer pays in</label>
+                <select id="cur" class="select" [disabled]="!canEdit()" (change)="setCurrency($any($event.target).value)">
+                  @for (c of currencies; track c) { <option [value]="c" [selected]="c === currency()">{{ c }}</option> }
+                </select>
+              </div>
+              <div class="field">
+                <label for="fx">PKR per 1 {{ currency() }}</label>
+                <input id="fx" class="input" type="number" min="0" step="0.01" [disabled]="!canEdit() || currency() === 'PKR'" [class.invalid]="fxMissing()"
+                  [attr.aria-invalid]="fxMissing() && canEdit()" [value]="fxRate()" (input)="fxRate.set($any($event.target).value); dirty.set(true)" />
+                @if (fxMissing() && canEdit()) { <span class="error">Enter the exchange rate</span> }
+              </div>
+            </div>
+            <p class="hint">The rate is locked when the invoice is issued.</p>
+
+            @if (invoice()?.status === 'issued' && showPayment()) {
+              <div class="pay-box">
+                <div class="section-title">Record payment</div>
+                <div class="field">
+                  <label for="payMethod">Method</label>
+                  <select id="payMethod" class="select" (change)="payMethod.set($any($event.target).value)">
+                    <option value="bank_transfer" [selected]="payMethod() === 'bank_transfer'">Bank transfer</option>
+                    <option value="manual" [selected]="payMethod() === 'manual'">Manual / cash</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="payRef">Reference</label>
+                  <input id="payRef" class="input" placeholder="Bank reference or note" [value]="payReference()" (input)="payReference.set($any($event.target).value)" />
+                </div>
+                <div class="pay-actions">
+                  <button type="button" class="btn btn-sm btn-ghost" (click)="showPayment.set(false)">Cancel</button>
+                  <button type="button" class="btn btn-sm btn-green" [disabled]="!!busy()" (click)="markPaid()">
+                    @if (busy() === 'paid') { <ion-spinner name="crescent" /> } Mark paid
+                  </button>
+                </div>
+              </div>
+            }
+          </aside>
+        </div>
+      }
+    </div>
+
+    @if (data()) {
+      <div class="modal-foot">
+        @if (canEdit()) {
+          <span class="foot-total" aria-hidden="true">Customer pays <b>{{ totals().total | pkr }}</b> · margin <b [class.neg]="totals().margin < 0">{{ totals().margin | pkr }}</b></span>
+          <span class="foot-note">@if (dirty()) { <b class="unsaved">Unsaved changes · </b> }Issuing sets the order to Awaiting payment and notifies the customer.</span>
+          <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
+          <button type="button" class="btn" [disabled]="!!busy() || !lines().length" (click)="saveDraft()">
+            @if (busy() === 'save') { <ion-spinner name="crescent" /> } Save draft
+          </button>
+          <button type="button" class="btn btn-green" [disabled]="!!busy() || !lines().length || totals().total <= 0" (click)="issue()">
+            @if (busy() === 'issue') { <ion-spinner name="crescent" /> } Issue invoice
+          </button>
+        } @else {
+          <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
+          @if (invoice()) { <button type="button" class="btn" (click)="print()">Print</button> }
+          @if (invoice()?.status === 'issued') {
+            <button type="button" class="btn" [disabled]="!!busy()" (click)="reopen()">
+              @if (busy() === 'reopen') { <ion-spinner name="crescent" /> } Reopen to edit
+            </button>
+            @if (!showPayment()) { <button type="button" class="btn btn-green" [disabled]="!!busy()" (click)="showPayment.set(true)">Mark paid…</button> }
+          }
+        }
+      </div>
+    }
+  </div>
+</div>
+
+<!-- Printable invoice (hidden on screen) -->
+@if (invoice(); as inv) {
+  @if (order(); as o) {
+    <div class="printable print-sheet">
+      <div class="ps-head">
+        <div>
+          <h1>{{ config()?.name || 'Invoice' }}</h1>
+          @if (config()?.shipToAddress) { <p>{{ config()?.shipToAddress }}@if (config()?.shipToCity) {, {{ config()?.shipToCity }}}</p> }
+          @if (config()?.shipToPhone) { <p>{{ config()?.shipToPhone }}</p> }
+        </div>
+        <div class="ps-meta">
+          <h2>Invoice {{ inv.number }}</h2>
+          <p>Order {{ o.reference }}</p>
+          <p>Issued {{ inv.issued_at | day }}</p>
+          <p>Status: {{ inv.status | humanize }}@if (inv.paid_at) { · paid {{ inv.paid_at | day }} }</p>
+        </div>
+      </div>
+      <div class="ps-bill">
+        <div>
+          <span class="ps-label">Billed to</span>
+          <p><b>{{ o.customer?.full_name || o.customer_name }}</b> ({{ o.customer?.customer_code || o.customer_code }})</p>
+          @if (o.customer?.email; as email) { <p>{{ email }}</p> }
+          @if (o.customer?.phone; as phone) { <p>{{ phone }}</p> }
+        </div>
+        <div>
+          <span class="ps-label">Ships to</span>
+          @if (o.destination_address) { <p>{{ o.destination_address }}</p> }
+          <p>{{ o.destination_city }}{{ o.destination_country ? ', ' + o.destination_country : '' }}</p>
+        </div>
+      </div>
+      <table class="ps-table">
+        <thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Amount (PKR)</th></tr></thead>
+        <tbody>
+          @for (l of lines(); track l.key) {
+            <tr>
+              <td>{{ l.label }}@if (l.description) { <br /><small>{{ l.description }}</small> }</td>
+              <td class="r">{{ l.quantity }}</td>
+              <td class="r">{{ l.kind === 'discount' ? '−' : '' }}{{ l.customer_amount | pkr }}</td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr><td colspan="2" class="r">Subtotal</td><td class="r">{{ inv.subtotal_pkr | pkr }}</td></tr>
+          @if (inv.discount_pkr) { <tr><td colspan="2" class="r">Discount</td><td class="r">− {{ inv.discount_pkr | pkr }}</td></tr> }
+          <tr class="grand"><td colspan="2" class="r">Total</td><td class="r">{{ inv.total_pkr | pkr }}</td></tr>
+          @if (inv.currency !== 'PKR') {
+            <tr class="grand"><td colspan="2" class="r">Total in {{ inv.currency }} (1 {{ inv.currency }} = {{ inv.fx_rate }} PKR)</td><td class="r">{{ inv.total_foreign | pkr: inv.currency }}</td></tr>
+          }
+        </tfoot>
+      </table>
+      @if (inv.notes) { <p class="ps-notes">{{ inv.notes }}</p> }
+    </div>
+  }
+}

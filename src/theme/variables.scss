@@ -1,0 +1,50 @@
+// V360 portal — Ionic color overrides (matches design tokens in global.scss)
+:root {
+  /** Primary - Haute Couture Indigo **/
+  --ion-color-primary: #1E6B48;
+  --ion-color-primary-rgb: 30, 107, 72;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #185A3C;
+  --ion-color-primary-tint: #357A5B;
+
+  /** Secondary - Champagne Gold **/
+  --ion-color-secondary: #f59e0b;
+  --ion-color-secondary-rgb: 245, 158, 11;
+  --ion-color-secondary-contrast: #000000;
+  --ion-color-secondary-contrast-rgb: 0, 0, 0;
+  --ion-color-secondary-shade: #d97706;
+  --ion-color-secondary-tint: #fbbf24;
+
+  /** Tertiary - Violet Aura **/
+  --ion-color-tertiary: #a855f7;
+  --ion-color-tertiary-rgb: 168, 85, 247;
+  --ion-color-tertiary-contrast: #ffffff;
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: #9333ea;
+  --ion-color-tertiary-tint: #c084fc;
+
+  /** Success - Emerald Artisan **/
+  --ion-color-success: #10b981;
+  --ion-color-success-rgb: 16, 185, 129;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #059669;
+  --ion-color-success-tint: #34d399;
+
+  /** Warning - Warm Ochre **/
+  --ion-color-warning: #f97316;
+  --ion-color-warning-rgb: 249, 115, 22;
+  --ion-color-warning-contrast: #ffffff;
+  --ion-color-warning-contrast-rgb: 255, 255, 255;
+  --ion-color-warning-shade: #ea580c;
+  --ion-color-warning-tint: #fb923c;
+
+  /** Danger - Crimson Velvet **/
+  --ion-color-danger: #ef4444;
+  --ion-color-danger-rgb: 239, 68, 68;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #dc2626;
+  --ion-color-danger-tint: #f87171;
+}

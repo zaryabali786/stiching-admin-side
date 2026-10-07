@@ -1,0 +1,190 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">{{ today }}</span>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Overview', 'جائزہ') }}</h1>
+      <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Start with today’s work. Tap a tile to open the list.', 'آج کے کام سے شروع کریں۔ فہرست کھولنے کے لیے ٹائل دبائیں۔') }}</p>
+    </div>
+  </header>
+
+  @if (error() && !data()) {
+    <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
+  } @else if (loading() && !data()) {
+    <div class="task-grid sk">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <div class="task-tile"><span class="skeleton" style="width: 60%"></span><span class="skeleton" style="height: 34px; width: 35%"></span><span class="skeleton" style="width: 50%"></span></div>
+      }
+    </div>
+    <div class="chart-grid">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <div class="card"><span class="skeleton" style="width: 40%; height: 18px; margin-bottom: 18px"></span><span class="skeleton" style="height: 150px"></span></div>
+      }
+    </div>
+  } @else if (data(); as d) {
+    @if (error()) {
+      <div class="inline-error">{{ error() }} <button type="button" class="btn btn-xs" (click)="retry()">Try again</button></div>
+    }
+
+    <!-- Today's work: what needs doing now, each tile opens the page where it is done -->
+    <section class="today" aria-labelledby="today-title">
+      <h2 id="today-title" class="section-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Today’s work', 'آج کا کام') }}</h2>
+      <div class="task-grid">
+        <a class="task-tile" routerLink="/partner/production" [class.tone-amber]="d.dueToday > 0">
+          <span class="tile-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Due today', 'آج مکمل ہونے والے') }}</span>
+          <span class="tile-value">{{ d.dueToday }}</span>
+          <span class="tile-sub">
+            @if (d.rushDueToday > 0) { <span class="badge red">{{ d.rushDueToday }} rush</span> }
+            {{ d.dueToday === 1 ? 'article' : 'articles' }} to finish
+          </span>
+          <span class="tile-cta"><span [class.urdu]="lang.isUrdu()">{{ lang.t('Production board', 'پروڈکشن بورڈ') }}</span> <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="task-tile" routerLink="/partner/production" [queryParams]="{ delayed: 'true' }" [class.tone-red]="d.delayed > 0">
+          <span class="tile-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Delayed', 'تاخیر شدہ') }}</span>
+          <span class="tile-value">{{ d.delayed }}</span>
+          <span class="tile-sub">{{ d.delayed > 0 ? 'past the due date' : 'nothing late' }}</span>
+          <span class="tile-cta"><span [class.urdu]="lang.isUrdu()">{{ lang.t('Show delayed', 'تاخیر شدہ دیکھیں') }}</span> <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="task-tile" routerLink="/partner/receiving" [class.tone-amber]="(badges.partner()?.receiving ?? 0) > 0">
+          <span class="tile-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Waiting to be received', 'وصولی کے منتظر') }}</span>
+          <span class="tile-value">{{ badges.partner()?.receiving ?? '—' }}</span>
+          <span class="tile-sub">parcels expected</span>
+          <span class="tile-cta"><span [class.urdu]="lang.isUrdu()">{{ lang.t('Receiving', 'وصولی') }}</span> <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="task-tile" routerLink="/partner/quality-check" [class.tone-amber]="(badges.partner()?.qualityCheck ?? 0) > 0">
+          <span class="tile-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Quality check queue', 'کوالٹی چیک کی قطار') }}</span>
+          <span class="tile-value">{{ badges.partner()?.qualityCheck ?? '—' }}</span>
+          <span class="tile-sub">articles to check</span>
+          <span class="tile-cta"><span [class.urdu]="lang.isUrdu()">{{ lang.t('Quality check', 'کوالٹی چیک') }}</span> <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Key numbers -->
+    <section class="kpi-row" aria-label="Key numbers">
+      <a class="kpi" routerLink="/partner/production">
+        <span class="kpi-label" [class.urdu]="lang.isUrdu()">{{ lang.t('In production', 'پیداوار میں') }}</span>
+        <span class="kpi-value">{{ d.inProduction }}</span>
+        <span class="kpi-sub">articles on the board</span>
+      </a>
+      <div class="kpi">
+        <span class="kpi-label" [class.urdu]="lang.isUrdu()">{{ lang.t('On time', 'بروقت') }}</span>
+        <span class="kpi-value">{{ d.onTimeRate === null ? '—' : d.onTimeRate + '%' }}</span>
+        <span class="kpi-sub">last 30 days</span>
+      </div>
+      <a class="kpi" routerLink="/partner/warehouse">
+        <span class="kpi-label" [class.urdu]="lang.isUrdu()">{{ lang.t('In warehouse', 'گودام میں') }}</span>
+        <span class="kpi-value">{{ d.inWarehouse }}</span>
+        <span class="kpi-sub">{{ d.awaitingPayment }} awaiting payment</span>
+      </a>
+      <a class="kpi" routerLink="/partner/earnings">
+        <span class="kpi-label" [class.urdu]="lang.isUrdu()">{{ lang.t('Earnings this month', 'اس ماہ کی کمائی') }}</span>
+        <span class="kpi-value money">{{ d.earningsThisMonth | pkr }}</span>
+        <span class="kpi-sub">paid invoices</span>
+      </a>
+    </section>
+
+    <div class="trends-head">
+      <h2 class="section-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Trends', 'رجحانات') }}</h2>
+      <div class="range-pill" role="group" aria-label="Period for the charts">
+        @for (r of ranges; track r.value) {
+          <button type="button" [class.active]="range() === r.value" [attr.aria-pressed]="range() === r.value" [class.urdu]="lang.isUrdu()" (click)="setRange(r.value)">
+            {{ lang.t(r.en, r.ur) }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <section class="chart-grid" [class.refreshing]="loading()">
+      <!-- Articles finished per day -->
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Articles finished per day', 'روزانہ مکمل آرٹیکل') }}</h3>
+          @if (d.dailyCapacity > 0) {
+            <span class="cap-tag"><i></i> Daily capacity {{ d.dailyCapacity }}</span>
+          }
+        </div>
+        @if (finishedTotal() === 0) {
+          <app-empty-state title="No articles finished in this period yet" message="Packed articles will show up here day by day." />
+        } @else {
+          <div class="vchart">
+            <div class="plot">
+              @if (d.capacityPct !== null) {
+                <div class="cap-line" [style.bottom.%]="d.capacityPct"></div>
+              }
+              @for (day of d.dailyFinished; track day.date) {
+                <div class="col" [title]="barTitle(day)">
+                  @if ((day.isPeak || day.isToday) && day.count > 0) {
+                    <span class="col-val" [style.bottom]="labelBottom(day.pct)">{{ day.count }}</span>
+                  }
+                  <div class="col-bar" [class.today]="day.isToday" [style.height.%]="day.pct"></div>
+                </div>
+              }
+            </div>
+            <div class="xaxis">
+              @for (day of d.dailyFinished; track day.date; let i = $index, c = $count) {
+                <span [class.today]="day.isToday">{{ (c - 1 - i) % labelEvery() === 0 ? day.day : '' }}</span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Work by stage -->
+      <div class="card">
+        <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Work by stage', 'مرحلہ وار کام') }}</h3>
+        @if (stageTotal() === 0) {
+          <app-empty-state title="Nothing in production right now" message="Received articles appear here as they move through the stages." />
+        } @else {
+          @for (s of d.workByStage; track s.stage) {
+            <a class="bar-row clickable" [routerLink]="s.stage === 'packed' ? '/partner/warehouse' : '/partner/production'" [attr.aria-label]="stageLabel(s.stage) + ': ' + s.count + '. Open'">
+              <span class="row-label" [class.urdu]="lang.isUrdu()">{{ stageLabel(s.stage) }}</span>
+              <span class="bar-track"><span class="bar-fill" [style.width.%]="s.pct"></span></span>
+              <span class="bar-val">{{ s.count }}</span>
+            </a>
+          }
+        }
+      </div>
+
+      <!-- Team load -->
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Team load', 'ٹیم کا بوجھ') }}</h3>
+          <a routerLink="/partner/teams" class="link" [class.urdu]="lang.isUrdu()">{{ lang.t('Manage teams', 'ٹیمیں سنبھالیں') }}</a>
+        </div>
+        @if (d.teamLoad.length === 0) {
+          <app-empty-state title="No teams yet" message="Add masters and tailors to see how busy each team is.">
+            <a routerLink="/partner/teams" class="btn btn-sm">Add your first master</a>
+          </app-empty-state>
+        } @else {
+          @for (t of d.teamLoad; track t.id) {
+            <div class="bar-row load-row">
+              <span class="row-label strong">{{ t.name }}</span>
+              <span class="bar-track">
+                <span [class]="'bar-fill ' + loadTone(t.load_pct)" [style.width.%]="t.pct"></span>
+              </span>
+              <span [class]="'bar-val load-val tone-' + loadTone(t.load_pct)">
+                {{ t.load_pct }}% · <span [class.urdu]="lang.isUrdu()">{{ loadText(t.load_pct) }}</span>
+              </span>
+            </div>
+          }
+        }
+      </div>
+
+      <!-- Tailor output -->
+      <div class="card">
+        <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Tailor output this week', 'اس ہفتے درزیوں کی کارکردگی') }}</h3>
+        @if (outputTotal() === 0) {
+          <app-empty-state title="No finished articles this week yet" message="Articles count here when a tailor sends them to quality check." />
+        } @else {
+          @for (t of d.tailorOutput; track t.id) {
+            <div class="bar-row">
+              <span class="row-label">{{ t.name }}</span>
+              <span class="bar-track"><span class="bar-fill" [style.width.%]="t.pct"></span></span>
+              <span class="bar-val">{{ t.count }}</span>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  }
+</div>

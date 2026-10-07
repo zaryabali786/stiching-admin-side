@@ -1,0 +1,254 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Operations</span>
+      <h1>Warehouse</h1>
+      <p class="subtitle">Receive paid parcels from the partner, label them, then hand them to the courier.</p>
+    </div>
+  </header>
+
+  <div class="stat-grid">
+    <button type="button" class="stat" [class.current]="query().tab === 'transfers'" [attr.aria-pressed]="query().tab === 'transfers'" (click)="setTab('transfers')">
+      <span class="stat-label">In transit from partner</span>
+      @if (summary(); as s) {
+        <span class="stat-value">{{ s.parcelsInTransit }}</span>
+        <span class="stat-sub">parcels in {{ s.transfersInTransit }} {{ s.transfersInTransit === 1 ? 'transfer' : 'transfers' }}</span>
+      } @else { <span class="skeleton" style="width: 50%; height: 30px"></span> }
+    </button>
+    <button type="button" class="stat" [class.current]="query().tab === 'needs_label'" [class.attn]="(summary()?.needsLabel ?? 0) > 0" [attr.aria-pressed]="query().tab === 'needs_label'" (click)="setTab('needs_label')">
+      <span class="stat-label">Needs label</span>
+      @if (summary(); as s) {
+        <span class="stat-value">{{ s.needsLabel }}</span>
+        <span class="stat-sub" [class.warn]="s.needsLabel > 0">{{ s.needsLabel > 0 ? 'At the warehouse — create labels' : 'All parcels labelled' }}</span>
+      } @else { <span class="skeleton" style="width: 50%; height: 30px"></span> }
+    </button>
+    <button type="button" class="stat" [class.current]="query().tab === 'labelled'" [attr.aria-pressed]="query().tab === 'labelled'" (click)="setTab('labelled')">
+      <span class="stat-label">Ready for courier</span>
+      @if (summary(); as s) {
+        <span class="stat-value">{{ s.readyForCourier }}</span>
+        <span class="stat-sub" [class.warn]="s.readyForCourier > 0">{{ s.readyForCourier > 0 ? 'Labelled — hand to courier' : 'Nothing waiting' }}</span>
+      } @else { <span class="skeleton" style="width: 50%; height: 30px"></span> }
+    </button>
+    <button type="button" class="stat" [class.current]="query().tab === 'handed_to_courier'" [attr.aria-pressed]="query().tab === 'handed_to_courier'" (click)="setTab('handed_to_courier')">
+      <span class="stat-label">Shipped today</span>
+      @if (summary(); as s) {
+        <span class="stat-value">{{ s.shippedToday }}</span>
+        <span class="stat-sub">handed to couriers</span>
+      } @else { <span class="skeleton" style="width: 50%; height: 30px"></span> }
+    </button>
+  </div>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Warehouse stage">
+      @for (t of tabs; track t.key) {
+        <button type="button" class="chip" [class.active]="query().tab === t.key" [attr.aria-pressed]="query().tab === t.key"
+          [class.attn]="t.key !== 'transfers' && !!tabCount(t.key)" (click)="setTab(t.key)">
+          {{ t.label }} @if (tabCount(t.key) !== null) { <span class="count">{{ tabCount(t.key) }}</span> }
+        </button>
+      }
+    </div>
+    <div class="toolbar-end">
+      <app-search-input [placeholder]="isTransfers() ? 'Search transfer code…' : 'Search order, customer, tracking…'" [value]="query().search" (search)="onSearch($event)" />
+    </div>
+  </div>
+
+  <p class="next-step"><span class="step-tag">Next step</span>{{ tabHint() }}</p>
+
+  @if (isTransfers()) {
+    <!-- Incoming transfers -->
+    @if (transfers.error()) {
+      <div class="card"><app-empty-state kind="error" [message]="transfers.error()" (retry)="transfers.reload()" /></div>
+    } @else if (transfers.loading()) {
+      @for (i of [1, 2]; track i) { <div class="card transfer"><span class="skeleton" style="width: 30%"></span><span class="skeleton" style="height: 80px; margin-top: 12px"></span></div> }
+    } @else {
+      <div [class.refreshing]="transfers.refreshing()">
+        @for (t of transfers.items(); track t.id) {
+          <section class="transfer">
+            <div class="transfer-head">
+              <div>
+                <span class="t-eyebrow">On the way · dispatched {{ t.dispatched_at | day: true }}</span>
+                <h2>Transfer {{ t.code }}</h2>
+                <p>{{ t.orders.length }} {{ t.orders.length === 1 ? 'parcel' : 'parcels' }}@if (totalWeight(t)) { · {{ totalWeight(t) }} kg }@if (t.notes) { · {{ t.notes }} }</p>
+              </div>
+              <button type="button" class="btn btn-gold" [disabled]="busyId() === t.id" [attr.aria-label]="'Receive transfer ' + t.code" (click)="receive(t)">
+                @if (busyId() === t.id) { <ion-spinner name="crescent" /> } Receive transfer
+              </button>
+            </div>
+            <div class="transfer-orders">
+              @for (o of t.orders; track o.id) {
+                <div class="t-order">
+                  <strong>{{ o.reference }}</strong>
+                  <span>{{ o.customer_name }} · {{ o.customer_code }}</span>
+                  <span class="muted">{{ o.destination_city }}{{ o.destination_country ? ', ' + o.destination_country : '' }}@if (o.weight_kg) { · {{ o.weight_kg }} kg }</span>
+                </div>
+              } @empty {
+                <span class="muted">No parcels listed on this transfer.</span>
+              }
+            </div>
+          </section>
+        } @empty {
+          <div class="card">
+            <app-empty-state icon="✓" [title]="query().search ? 'No matching transfers' : 'Nothing on the way'"
+              [message]="query().search ? 'Try another transfer code.' : 'When the partner dispatches paid parcels to you, the transfer appears here.'" />
+          </div>
+        }
+        <app-pagination [meta]="transfers.meta()" (pageChange)="goTo($event)" />
+      </div>
+    }
+  } @else {
+    <!-- Parcels -->
+    <div class="table-card" [class.refreshing]="parcels.refreshing()">
+      @if (parcels.error()) {
+        <app-empty-state kind="error" [message]="parcels.error()" (retry)="parcels.reload()" />
+      } @else {
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Parcel</th>
+                <th>Ships to</th>
+                <th>Service</th>
+                <th class="num">Weight</th>
+                @if (query().tab === 'needs_label') { <th>Paid</th> }
+                @else { <th>Courier · tracking</th> }
+                @if (query().tab === 'labelled') { <th>Labelled</th> }
+                @if (query().tab === 'handed_to_courier') { <th>Handed over</th> }
+                @if (query().tab === 'delivered') { <th>Delivered</th> }
+                <th><span class="sr-only">Action</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (parcels.loading()) {
+                @for (i of skeleton; track i) {
+                  <tr>@for (c of [1, 2, 3, 4, 5, 6, 7]; track c) { <td><span class="skeleton"></span></td> }</tr>
+                }
+              } @else {
+                @for (p of parcels.items(); track p.id) {
+                  <tr [class.clickable]="query().tab === 'needs_label'" [class.selected]="labelParcel()?.id === p.id" [attr.tabindex]="query().tab === 'needs_label' ? 0 : null"
+                    [attr.aria-label]="query().tab === 'needs_label' ? 'Create label for ' + (p.order?.reference || 'parcel') : null"
+                    (click)="query().tab === 'needs_label' && openLabel(p)" (keydown.enter)="query().tab === 'needs_label' && openLabel(p)">
+                    <td><span class="cell-main nowrap-id">{{ p.order?.reference || '—' }}</span><span class="cell-sub">{{ p.order?.customer_name }} · {{ p.order?.customer_code }}</span></td>
+                    <td>{{ p.order?.destination_city || '—' }}<span class="cell-sub">{{ p.order?.destination_country }}</span></td>
+                    <td>{{ (p.service || p.order?.shipping_service) | humanize }}@if (p.shipped_from === 'partner') { <span class="cell-sub">from partner</span> }</td>
+                    <td class="num">{{ (p.weight_kg ?? p.order?.weight_kg) ? (p.weight_kg ?? p.order?.weight_kg) + ' kg' : '—' }}</td>
+                    @if (query().tab === 'needs_label') {
+                      <td class="nowrap">{{ p.order?.paid_at ?? null | day }}</td>
+                    } @else {
+                      <td><span class="cell-main">{{ p.courier || '—' }}</span><span class="cell-sub mono">{{ p.tracking_number }}</span></td>
+                    }
+                    @if (query().tab === 'labelled') { <td class="nowrap">{{ p.label_printed_at | day: true }}</td> }
+                    @if (query().tab === 'handed_to_courier') { <td class="nowrap">{{ p.handed_at | day: true }}</td> }
+                    @if (query().tab === 'delivered') { <td class="nowrap">{{ p.delivered_at | day: true }}</td> }
+                    <td class="actions-cell">
+                      @switch (p.status) {
+                        @case ('needs_label') {
+                          <button type="button" class="btn btn-sm btn-gold" tabindex="-1" (click)="$event.stopPropagation(); openLabel(p)">Create label</button>
+                        }
+                        @case ('labelled') {
+                          <button type="button" class="btn btn-sm btn-ghost" [disabled]="busyId() === p.id" (click)="openLabel(p)">Edit label</button>
+                          <button type="button" class="btn btn-sm btn-green" [disabled]="busyId() === p.id" (click)="handed(p)">
+                            @if (busyId() === p.id) { <ion-spinner name="crescent" /> } Handed to courier
+                          </button>
+                        }
+                        @case ('handed_to_courier') {
+                          <button type="button" class="btn btn-sm" [disabled]="busyId() === p.id" (click)="delivered(p)">
+                            @if (busyId() === p.id) { <ion-spinner name="crescent" /> } Mark delivered
+                          </button>
+                        }
+                        @default { <app-status-badge status="delivered" label="Delivered" /> }
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7">
+                    <app-empty-state icon="✓" [title]="query().search ? 'No matching parcels' : 'No parcels here'"
+                      [message]="query().search ? 'Try another reference, customer or tracking number.' : 'Parcels move through these tabs as they are labelled and shipped.'" />
+                  </td></tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pagination [meta]="parcels.meta()" (pageChange)="goTo($event)" />
+      }
+    </div>
+  }
+</div>
+
+<!-- Label panel -->
+@if (labelParcel(); as p) {
+  <div class="drawer-backdrop" (click)="closeLabel()"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="Shipping label">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">{{ p.status === 'labelled' ? 'Edit shipping label' : 'Create shipping label' }}</span>
+        <h3>{{ p.order?.reference }} · {{ p.order?.customer_name }}</h3>
+      </div>
+      <button type="button" class="close-btn" (click)="closeLabel()" aria-label="Close label panel">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="section-title">1 · Parcel</div>
+      <dl class="kv parcel-kv">
+        <dt>Customer</dt><dd>{{ p.order?.customer_name }} · {{ p.order?.customer_code }}</dd>
+        <dt>Ships to</dt>
+        <dd>
+          @if (p.order?.destination_address; as addr) { {{ addr }}<br /> }
+          {{ p.order?.destination_city }}@if (p.order?.destination_country; as country) {, {{ country }}}
+        </dd>
+        <dt>Service</dt><dd>{{ (p.service || p.order?.shipping_service) | humanize }}</dd>
+        <dt>Packed weight</dt><dd>{{ (p.weight_kg ?? p.order?.weight_kg) ? (p.weight_kg ?? p.order?.weight_kg) + ' kg' : 'Not recorded' }}</dd>
+      </dl>
+
+      <div class="label-section">
+        <div class="section-title">2 · Courier</div>
+        @if (optionsLoading()) {
+          @for (i of [1, 2, 3]; track i) { <span class="skeleton" style="height: 52px; margin-bottom: 8px"></span> }
+        } @else if (optionsError()) {
+          <app-empty-state kind="error" [message]="optionsError()" (retry)="loadOptions(p)" />
+        } @else {
+          @for (o of options(); track o.id) {
+            <button type="button" class="courier-opt" role="radio" [attr.aria-checked]="rateId() === o.id" [class.checked]="rateId() === o.id" [class.recommended]="o.recommended" (click)="pickOption(o)">
+              <span class="radio" aria-hidden="true"><span></span></span>
+              <span class="c-info">
+                <strong>{{ o.courier }} · {{ o.zone }} @if (o.recommended) { <span class="badge green">Recommended</span> }</strong>
+                <span class="cell-sub">{{ o.service | humanize }}@if (o.transit_time) { · {{ o.transit_time }} }@if (o.ddp_available) { · DDP available }</span>
+              </span>
+              <strong class="c-price">{{ o.price_pkr | pkr }}</strong>
+            </button>
+          } @empty {
+            <p class="muted small">No active shipping rates serve this destination. Choose a courier from the list below.</p>
+          }
+        }
+        <div class="field">
+          <span class="label">{{ options().length ? 'Or choose another courier' : 'Courier' }} <span class="req">{{ rateId() ? '' : '(required)' }}</span></span>
+          <app-courier-select [selected]="courierRef()" (selectedChange)="setCourier($event)" label="Courier" />
+        </div>
+      </div>
+
+      <div class="section-title">3 · Tracking &amp; package</div>
+      <div class="form-grid">
+        <div class="field span-2">
+          <label for="tracking">Tracking number <span class="req">(required)</span></label>
+          <input id="tracking" class="input mono" required aria-required="true" placeholder="Paste from the courier label" [value]="tracking()" (input)="tracking.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="weight">Weight (kg)</label>
+          <input id="weight" class="input" type="number" min="0" step="0.1" [value]="weight()" (input)="weight.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="dims">Dimensions</label>
+          <input id="dims" class="input" placeholder="e.g. 40 × 30 × 10 cm" [value]="dimensions()" (input)="dimensions.set($any($event.target).value)" />
+        </div>
+      </div>
+      <p class="muted small">The commercial invoice and customs form are prepared with the courier label.</p>
+    </div>
+    <div class="drawer-foot">
+      @if (!canSaveLabel() && !savingLabel()) { <span class="foot-hint">Choose a rate or a courier, and add the tracking number to save.</span> }
+      <span class="foot-spacer"></span>
+      <button type="button" class="btn btn-ghost" (click)="closeLabel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="!canSaveLabel()" (click)="saveLabel()">
+        @if (savingLabel()) { <ion-spinner name="crescent" /> } Save label
+      </button>
+    </div>
+  </aside>
+}

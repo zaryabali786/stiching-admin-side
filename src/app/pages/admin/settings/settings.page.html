@@ -1,0 +1,142 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Setup</span>
+      <h1>Settings</h1>
+      <p class="subtitle">Manage admin and customer accounts and update your own account. Partner users are managed under Partners.</p>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Settings sections">
+    <button type="button" role="tab" [class.active]="query().tab === 'team'" [attr.aria-selected]="query().tab === 'team'" (click)="setTab('team')">Team &amp; roles</button>
+    <button type="button" role="tab" [class.active]="query().tab === 'account'" [attr.aria-selected]="query().tab === 'account'" (click)="setTab('account')">Account</button>
+  </div>
+
+  @if (query().tab === 'account') {
+    <!-- ═══ Account ═══ -->
+    @if (auth.user(); as u) {
+      <div class="account-grid">
+        <section class="card">
+          <h3 class="card-title">Your profile</h3>
+          <dl class="kv who">
+            <dt>Email</dt><dd>{{ u.email }}</dd>
+            <dt>Role</dt><dd><span class="badge">{{ auth.roleLabel() }}</span></dd>
+            <dt>Member since</dt><dd>{{ u.created_at | day }}</dd>
+          </dl>
+          <form (submit)="$event.preventDefault(); saveProfile()">
+            <div class="field">
+              <label for="accName">Full name</label>
+              <input id="accName" class="input" autocomplete="name" [value]="fullName()" (input)="fullName.set($any($event.target).value)" />
+            </div>
+            <div class="field">
+              <label for="accPhone">Phone</label>
+              <input id="accPhone" class="input" autocomplete="tel" [value]="phone()" (input)="phone.set($any($event.target).value)" />
+            </div>
+            <div class="row-end">
+              <button type="submit" class="btn btn-primary" [disabled]="!profileDirty() || savingProfile()">
+                @if (savingProfile()) { <ion-spinner name="crescent" /> } Save profile
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h3 class="card-title">Change password</h3>
+          <form (submit)="$event.preventDefault(); changePassword()">
+            <div class="field">
+              <label for="pwCur">Current password</label>
+              <input id="pwCur" class="input" type="password" autocomplete="current-password" [value]="currentPw()" (input)="currentPw.set($any($event.target).value)" />
+            </div>
+            <div class="field">
+              <label for="pwNew">New password</label>
+              <input id="pwNew" class="input" type="password" autocomplete="new-password" [value]="newPw()" (input)="newPw.set($any($event.target).value)" />
+              <span class="hint">At least 8 characters.</span>
+            </div>
+            <div class="field">
+              <label for="pwConfirm">Confirm new password</label>
+              <input id="pwConfirm" class="input" type="password" autocomplete="new-password" [value]="confirmPw()" (input)="confirmPw.set($any($event.target).value)" />
+              @if (pwError(); as e) { <span class="error">{{ e }}</span> }
+            </div>
+            <div class="row-end">
+              <button type="submit" class="btn btn-primary" [disabled]="!pwValid() || savingPw()">
+                @if (savingPw()) { <ion-spinner name="crescent" /> } Change password
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    }
+  } @else {
+    <!-- ═══ Team & roles ═══ -->
+    <div class="toolbar">
+      <div class="chips" role="group" aria-label="Filter by role">
+        @for (r of roleFilters; track r.key) {
+          <button type="button" class="chip" [class.active]="query().role === r.key" [attr.aria-pressed]="query().role === r.key" (click)="setRole(r.key)">{{ r.label }}</button>
+        }
+      </div>
+      <div class="toolbar-end">
+        <app-search-input placeholder="Search name, email, phone…" [value]="query().search" (search)="onSearch($event)" />
+      </div>
+    </div>
+
+    <div class="table-card" [class.refreshing]="list.refreshing()">
+      @if (list.error()) {
+        <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+      } @else {
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Person</th><th>Phone</th><th>Role</th><th>Joined</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr>
+            </thead>
+            <tbody>
+              @if (list.loading()) {
+                @for (i of skeleton; track i) {
+                  <tr>@for (c of [1, 2, 3, 4, 5, 6]; track c) { <td><span class="skeleton"></span></td> }</tr>
+                }
+              } @else {
+                @for (u of list.items(); track u.id) {
+                  <tr [class.inactive]="!u.is_active">
+                    <td>
+                      <span class="cell-main">{{ u.full_name || '—' }} @if (u.id === me()) { <span class="badge blue">You</span> }</span>
+                      <span class="cell-sub">{{ u.email }}@if (u.customer_code) { · {{ u.customer_code }} }</span>
+                    </td>
+                    <td class="nowrap">{{ u.phone || '—' }}</td>
+                    <td>
+                      @if (u.role === 'partner_staff') {
+                        <span class="badge">{{ u.partner_role === 'owner' ? 'Partner owner' : (u.job_title || 'Partner user') }}</span>
+                        <span class="cell-sub">
+                          @if (u.partner) { {{ u.partner.name }} · }
+                          Managed under <a class="link" routerLink="/admin/partners">Partners</a>
+                        </span>
+                      } @else {
+                        <select #roleSel class="select sm" [disabled]="u.id === me() || busyId() === u.id" [attr.aria-label]="'Role for ' + (u.full_name || u.email)"
+                          [title]="u.id === me() ? 'You cannot change your own role' : ''" (change)="changeRole(u, roleSel)">
+                          @for (r of roles; track r.value) { <option [value]="r.value" [selected]="r.value === u.role">{{ r.label }}</option> }
+                        </select>
+                      }
+                    </td>
+                    <td class="nowrap">{{ u.created_at | day }}</td>
+                    <td>@if (u.is_active) { <span class="badge green">Active</span> } @else { <span class="badge">Inactive</span> }</td>
+                    <td class="actions-cell">
+                      @if (u.role !== 'partner_staff') {
+                        <button type="button" class="btn btn-sm" [class.btn-ghost]="u.is_active" [class.danger]="u.is_active"
+                          [attr.aria-label]="(u.is_active ? 'Deactivate ' : 'Activate ') + (u.full_name || u.email)" [disabled]="u.id === me() || busyId() === u.id" (click)="toggleActive(u)">
+                          @if (busyId() === u.id) { <ion-spinner name="crescent" /> } {{ u.is_active ? 'Deactivate' : 'Activate' }}
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6">
+                    <app-empty-state [title]="query().search ? 'No matching people' : 'Nobody here yet'" message="Try another filter or search." />
+                  </td></tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+      }
+    </div>
+  }
+</div>

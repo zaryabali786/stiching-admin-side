@@ -1,0 +1,143 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Setup</span>
+      <h1>Shipping rates</h1>
+      <p class="subtitle">Courier rates offered in the invoice builder and on the warehouse label screen, matched by destination country. Prices in PKR.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" (click)="openNew()">+ Add rate</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <app-search-input placeholder="Search courier, zone, country…" [value]="query().search" (search)="onSearch($event)" />
+    @if (list.meta(); as m) { <span class="result-count">{{ m.total }} {{ m.total === 1 ? 'rate' : 'rates' }}</span> }
+  </div>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Courier · zone</th><th>Countries</th><th>Service</th>
+              <th class="num">Base rate</th><th class="num">Per extra kg</th><th><abbr title="Delivered duty paid — duties prepaid, no charges at the door">DDP</abbr></th><th>Offered</th><th><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>@for (c of [1, 2, 3, 4, 5, 6, 7, 8]; track c) { <td><span class="skeleton"></span></td> }</tr>
+              }
+            } @else {
+              @for (r of list.items(); track r.id) {
+                <tr [class.inactive]="!r.is_active">
+                  <td class="nowrap"><span class="cell-main">{{ r.courier }}</span><span class="cell-sub">{{ r.zone }}</span></td>
+                  <td>
+                    <div class="country-chips">
+                      @for (c of r.countries; track c) { <span class="badge">{{ c }}</span> } @empty { <span class="muted">All countries</span> }
+                    </div>
+                  </td>
+                  <td class="nowrap">{{ r.service | humanize }}<span class="cell-sub">{{ r.transit_time || 'Transit time not set' }}</span></td>
+                  <td class="num nowrap"><b>{{ r.base_rate | pkr }}</b><span class="cell-sub">first {{ r.max_weight_kg }} kg</span></td>
+                  <td class="num nowrap">{{ r.per_extra_kg | pkr }}</td>
+                  <td class="nowrap">@if (r.ddp_available) { Yes<span class="cell-sub">+ {{ r.ddp_fee | pkr }}</span> } @else { <span class="muted">No</span> }</td>
+                  <td class="nowrap">
+                    <button type="button" class="switch" role="switch" [attr.aria-checked]="r.is_active" [class.on]="r.is_active" [disabled]="busyId() === r.id"
+                      [attr.aria-label]="'Offer ' + r.courier + ' ' + r.zone" (click)="toggleActive(r)"><span></span></button>
+                    <span class="switch-label" aria-hidden="true">{{ r.is_active ? 'Active' : 'Hidden' }}</span>
+                  </td>
+                  <td class="actions-cell">
+                    <button type="button" class="btn btn-sm" [attr.aria-label]="'Edit ' + r.courier + ' ' + r.zone" (click)="openEdit(r)">Edit</button>
+                    <button type="button" class="btn btn-sm btn-ghost danger" [disabled]="busyId() === r.id" [attr.aria-label]="'Delete ' + r.courier + ' ' + r.zone" (click)="remove(r)">
+                      @if (busyId() === r.id) { <ion-spinner name="crescent" /> } Delete
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="8">
+                  <app-empty-state [title]="query().search ? 'No matching rates' : 'No shipping rates yet'"
+                    [message]="query().search ? 'Try another courier or zone.' : 'Add courier rates so invoices and labels can price shipping.'">
+                    @if (!query().search) { <button type="button" class="btn btn-sm btn-primary" (click)="openNew()">+ Add rate</button> }
+                  </app-empty-state>
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="!saving() && form.set(null)">
+    <form class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="srTitle" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Shipping</span>
+          <h3 id="srTitle">{{ f.id ? 'Edit rate' : 'Add rate' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="form.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="srCourier">Courier</label>
+            <input id="srCourier" class="input" placeholder="e.g. DHL" [value]="f.courier" (input)="patchForm({ courier: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="srZone">Zone</label>
+            <input id="srZone" class="input" placeholder="e.g. UK & Europe" [value]="f.zone" (input)="patchForm({ zone: $any($event.target).value })" />
+          </div>
+          <div class="field span-2">
+            <label for="srCountries">Countries</label>
+            <input id="srCountries" class="input" placeholder="UK, Ireland, Germany" [value]="f.countries" (input)="patchForm({ countries: $any($event.target).value })" />
+            <span class="hint">Comma-separated, matched against the order's destination country. Leave empty to serve every country.</span>
+          </div>
+          <div class="field">
+            <label for="srService">Service</label>
+            <select id="srService" class="select" (change)="patchForm({ service: $any($event.target).value })">
+              <option value="express" [selected]="f.service === 'express'">Express</option>
+              <option value="standard" [selected]="f.service === 'standard'">Standard</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="srTransit">Transit time</label>
+            <input id="srTransit" class="input" placeholder="e.g. 3–5 working days" [value]="f.transit_time" (input)="patchForm({ transit_time: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="srMax">Max weight in base rate (kg)</label>
+            <input id="srMax" class="input" type="number" min="0" step="0.1" [value]="f.max_weight_kg" (input)="patchForm({ max_weight_kg: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="srBase">Base rate (PKR)</label>
+            <input id="srBase" class="input" type="number" min="0" step="1" [value]="f.base_rate" (input)="patchForm({ base_rate: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="srExtra">Per extra kg (PKR)</label>
+            <input id="srExtra" class="input" type="number" min="0" step="1" [value]="f.per_extra_kg" (input)="patchForm({ per_extra_kg: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="srDdp">DDP fee (PKR)</label>
+            <input id="srDdp" class="input" type="number" min="0" step="1" [disabled]="!f.ddp_available" [value]="f.ddp_fee" (input)="patchForm({ ddp_fee: $any($event.target).value })" />
+          </div>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" [checked]="f.ddp_available" (change)="patchForm({ ddp_available: $any($event.target).checked })" /> Duties paid (DDP) available</label>
+          <label class="check"><input type="checkbox" [checked]="f.is_active" (change)="patchForm({ is_active: $any($event.target).checked })" /> Active</label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="form.set(null)">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="!formValid() || saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add rate' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}

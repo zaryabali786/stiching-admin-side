@@ -1,0 +1,155 @@
+@use '../admin-page';
+
+.pill-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+
+  button {
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    min-height: 32px;
+    padding: 6px 14px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--c-muted);
+    cursor: pointer;
+
+    &:hover:not(.active) { color: var(--c-ink); }
+    &:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+    &.active { background: var(--c-dark-2); color: var(--c-surface); }
+  }
+}
+
+.dim { opacity: .55; pointer-events: none; transition: opacity .2s; }
+
+/* KPI money: small currency prefix so large amounts never wrap */
+.stat .stat-value.money { font-size: 24px; white-space: nowrap; }
+.stat .stat-value .cur { font-size: 13px; font-weight: 600; color: var(--c-muted); margin-right: 5px; letter-spacing: 0; }
+.stat .stat-value .unit { font-size: 14px; font-weight: 500; color: var(--c-muted); margin-left: 5px; letter-spacing: 0; }
+.stat .stat-value.pos { color: var(--c-green); }
+.stat .stat-value.neg { color: var(--c-red); }
+
+.card-head { flex-wrap: wrap; align-items: flex-start; }
+.card-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--c-muted); }
+
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--c-ink-2);
+
+  span { display: inline-flex; align-items: center; gap: 6px; }
+}
+
+.dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.mar { background: var(--c-green); }
+.pay { background: var(--c-gold); }
+
+/* ---- Stacked column chart with a y-axis ---- */
+.chart-scroll { overflow-x: auto; margin-top: 8px; }
+
+.chart {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  min-width: 420px;
+  height: 260px;
+}
+
+.y-axis {
+  position: relative;
+  margin-bottom: 26px;   /* aligns with the month labels row */
+  margin-top: 22px;
+
+  span {
+    position: absolute;
+    right: 8px;
+    transform: translateY(50%);
+    font-size: 11px;
+    color: var(--c-muted);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.plot {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding-top: 22px;
+}
+
+.grid-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed var(--c-line);
+  pointer-events: none;
+}
+
+.col-group { flex: 1; min-width: 52px; display: flex; flex-direction: column; gap: 8px; position: relative; z-index: 1; }
+.bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--c-line); }
+
+.stack {
+  position: relative;
+  width: min(40px, 60%);
+  min-height: 2px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 6px 6px 0 0;
+  overflow: visible;
+  transition: height .5s ease;
+}
+
+.seg { flex-basis: 0; min-height: 0; }
+.seg.mar { border-radius: 6px 6px 0 0; }
+
+.col-val {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-ink-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-label { height: 18px; text-align: center; font-size: 12px; color: var(--c-muted); white-space: nowrap; }
+
+.monthly { margin-top: 20px; }
+tfoot td { font-weight: 700; border-top: 1px solid var(--c-line); padding: 12px 16px; background: var(--c-bg-soft); }
+td.neg { color: var(--c-red); }
+td.pos { color: var(--c-green); font-weight: 600; }
+
+/* ---- Bottom row ---- */
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+  align-items: start;
+}
+
+.side-stack { display: flex; flex-direction: column; gap: 18px; }
+
+@media (max-width: 1100px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+
+.pad-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 18px 18px 12px; .card-title { margin: 0; } .card-sub { margin: 0; } }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-fill.gold { background: var(--c-gold); }
+
+@media (max-width: 640px) {
+  .page-header .actions { width: 100%; justify-content: space-between; }
+  .stat-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .stat .stat-value.money { font-size: 19px; }
+  .stat .stat-value .cur { font-size: 11px; margin-right: 3px; }
+}

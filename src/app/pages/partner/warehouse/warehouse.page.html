@@ -1,0 +1,261 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Packed parcels</span>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Warehouse', 'گودام') }}</h1>
+      <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Packed parcels wait here until admin issues the invoice and the customer pays. Then choose how each parcel leaves.', 'پیک شدہ پارسل یہاں انوائس اور ادائیگی تک رہتے ہیں۔ پھر روانگی کا راستہ چنیں۔') }}</p>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="chips" role="tablist" aria-label="Warehouse">
+      @for (t of tabs; track t.value) {
+        <button type="button" class="chip" role="tab" [class.active]="tab() === t.value" [attr.aria-selected]="tab() === t.value" (click)="setTab(t.value)">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t(t.en, t.ur) }}</span>
+          @if (meta()) { <span class="count" [class.attn]="t.value === 'paid' && count(t.value) > 0">{{ count(t.value) }}</span> }
+        </button>
+      }
+    </div>
+    <app-search-input placeholder="Order ref, customer, code, destination…" [value]="search()" (search)="onSearch($event)" />
+  </div>
+
+  <div class="layout" [class.with-aside]="tab() === 'paid' && !!selected()">
+    <section class="table-card">
+      @if (loading()) {
+        <div class="sk-wrap">
+          @for (i of [1, 2, 3, 4, 5]; track i) { <span class="skeleton" style="height: 40px"></span> }
+        </div>
+      } @else if (error()) {
+        <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
+      } @else if (!orders().length) {
+        @if (search()) {
+          <app-empty-state title="No parcels match your search" [message]="'Nothing found for “' + search() + '”.'" />
+        } @else {
+          @switch (tab()) {
+            @case ('to_invoice') { <app-empty-state title="No parcels waiting for an invoice" message="Packed orders appear here until admin issues the invoice." /> }
+            @case ('awaiting_payment') { <app-empty-state title="No parcels awaiting payment" message="Invoiced orders wait here until the customer pays." /> }
+            @case ('paid') { <app-empty-state title="No paid parcels to route" message="Once a customer pays, choose how the parcel leaves the warehouse." /> }
+            @default { <app-empty-state title="Nothing dispatched yet" /> }
+          }
+        }
+      } @else {
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Parcel</th>
+                <th>Customer</th>
+                <th>Ships to</th>
+                <th>Weight</th>
+                <th>Invoice</th>
+                <th class="num">Amount</th>
+                <th>Status</th>
+                @if (tab() === 'paid') { <th class="num"><span class="sr-only">Route</span></th> }
+                @if (tab() === 'dispatched') { <th class="num"><span class="sr-only">Action</span></th> }
+              </tr>
+            </thead>
+            <tbody>
+              @for (o of orders(); track o.id) {
+                <tr [class.clickable]="tab() === 'paid' && canEdit()" [class.selected]="o.id === selectedId()" (click)="onRowClick(o)"
+                  [attr.tabindex]="tab() === 'paid' && canEdit() ? 0 : null" (keydown.enter)="onRowClick(o)" [attr.aria-selected]="tab() === 'paid' && canEdit() ? o.id === selectedId() : null">
+                  <td>
+                    <span class="cell-main">{{ o.reference }}</span>
+                    <span class="cell-sub">{{ o.units_count }} unit{{ o.units_count === 1 ? '' : 's' }}@if (o.brand) { · {{ o.brand }} }</span>
+                  </td>
+                  <td>
+                    <span class="cell-main">{{ o.customer_name || '—' }}</span>
+                    <span class="cell-sub">{{ o.customer_code }}</span>
+                  </td>
+                  <td>
+                    {{ destination(o) }}
+                    @if (o.shipping_service) { <span class="cell-sub">{{ o.shipping_service | humanize }}</span> }
+                  </td>
+                  <td class="weight-cell" (click)="$event.stopPropagation()">
+                    @if (weightEdit()?.id === o.id) {
+                      <div class="weight-edit">
+                        <input class="input" type="number" min="0.05" max="50" step="0.05" aria-label="Weight in kg"
+                          [ngModel]="weightEdit()!.value" (ngModelChange)="setWeightValue($event)"
+                          (keydown.enter)="saveWeight(o)" (keydown.escape)="cancelWeight()" />
+                        <button type="button" class="btn btn-green btn-xs" [disabled]="isBusy('w:' + o.id)" (click)="saveWeight(o)" aria-label="Save weight">
+                          @if (isBusy('w:' + o.id)) { <ion-spinner name="crescent" /> } @else { ✓ }
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-xs" (click)="cancelWeight()" aria-label="Cancel">×</button>
+                      </div>
+                    } @else if (canEditWeight(o)) {
+                      <button type="button" class="weight-btn" (click)="editWeight(o)" title="Edit weight" [attr.aria-label]="(o.weight_kg ? 'Weight ' + o.weight_kg + ' kg' : 'Add weight') + ' for ' + o.reference + '. Edit'">
+                        {{ o.weight_kg ? o.weight_kg + ' kg' : 'Add weight' }} <span aria-hidden="true">✎</span>
+                      </button>
+                    } @else {
+                      {{ o.weight_kg ? o.weight_kg + ' kg' : '—' }}
+                    }
+                  </td>
+                  <td>
+                    @if (o.invoice; as inv) {
+                      <span class="cell-main">{{ inv.number }}</span>
+                      <span class="cell-sub">{{ inv.issued_at | day }}</span>
+                    } @else {
+                      <span class="badge amber">Not issued</span>
+                    }
+                  </td>
+                  <td class="num">
+                    @if (o.invoice; as inv) { <span class="cell-main">{{ inv.total_pkr | pkr }}</span> } @else { <span class="muted">—</span> }
+                  </td>
+                  <td>
+                    <app-status-badge [status]="o.status" [label]="o.status_label" />
+                    @if (o.transfer; as tr) { <span class="cell-sub">{{ tr.code }} · {{ tr.status | humanize }}</span> }
+                    @if (o.shipment; as sh) {
+                      @if (sh.tracking_number) { <span class="cell-sub">{{ sh.courier }} · {{ sh.tracking_number }}</span> }
+                    }
+                  </td>
+                  @if (tab() === 'paid') {
+                    <td class="num route-cell">
+                      @if (!canEdit()) {
+                        <span class="muted">—</span>
+                      } @else if (o.id === selectedId()) {
+                        <span class="route-state on">Choosing route <span aria-hidden="true">→</span></span>
+                      } @else {
+                        <span class="route-state">Choose route <span aria-hidden="true">›</span></span>
+                      }
+                    </td>
+                  }
+                  @if (tab() === 'dispatched') {
+                    <td class="num" (click)="$event.stopPropagation()">
+                      @if (o.status === 'partner_dispatch' && canEdit()) {
+                        <button type="button" class="btn btn-primary btn-floor" (click)="openShip(o)" [attr.aria-label]="'Mark ' + o.reference + ' shipped'">
+                          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Mark shipped', 'روانہ کریں') }}</span>
+                        </button>
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pagination [meta]="meta()" (pageChange)="goToPage($event)" />
+      }
+    </section>
+
+    @if (tab() === 'paid' && canEdit() && !loading() && selected(); as o) {
+      <aside class="card route-card" aria-label="Choose route">
+        @if (o.paid_at || o.invoice) {
+          <span class="route-meta">Paid {{ o.paid_at | day }}@if (o.invoice) { · {{ o.invoice.number }} }</span>
+        }
+        <h2>{{ o.reference }} · {{ o.customer_name }} <span class="code">{{ o.customer_code }}</span></h2>
+        <p class="muted small">
+          {{ o.units_count }} unit{{ o.units_count === 1 ? '' : 's' }} · {{ o.weight_kg ? o.weight_kg + ' kg' : 'no weight' }} · {{ destination(o) }}@if (o.shipping_service) { · {{ o.shipping_service }} }
+        </p>
+
+        <div class="route-options" role="radiogroup" aria-label="Route">
+        <button type="button" class="route-option" role="radio" [attr.aria-checked]="routeChoice() === 'admin_warehouse'" [class.checked]="routeChoice() === 'admin_warehouse'" (click)="routeChoice.set('admin_warehouse')">
+          <span class="radio"></span>
+          <span class="route-text">
+            <strong [class.urdu]="lang.isUrdu()">{{ lang.t('Send to admin warehouse', 'ایڈمن گودام بھیجیں') }}</strong>
+            <span class="muted small">
+              Admin labels and ships it.
+              @if (openTransfer(); as tr) { Adds to transfer {{ tr.code }} ({{ tr.orders.length }} parcel{{ tr.orders.length === 1 ? '' : 's' }}). } @else { Starts a new transfer. }
+            </span>
+            <span class="badge rec">Recommended for international</span>
+          </span>
+        </button>
+
+        <button type="button" class="route-option" role="radio" [attr.aria-checked]="routeChoice() === 'direct_dispatch'" [class.checked]="routeChoice() === 'direct_dispatch'" (click)="routeChoice.set('direct_dispatch')">
+          <span class="radio"></span>
+          <span class="route-text">
+            <strong [class.urdu]="lang.isUrdu()">{{ lang.t('Dispatch directly to customer', 'براہ راست گاہک کو بھیجیں') }}</strong>
+            <span class="muted small">Book the courier here and hand it over. Enter the tracking number afterwards in “Dispatched”.</span>
+          </span>
+        </button>
+        </div>
+
+        <button type="button" class="btn btn-primary btn-block btn-floor" [disabled]="isBusy('r:' + o.id)" (click)="confirmRoute()">
+          @if (isBusy('r:' + o.id)) { <ion-spinner name="crescent" /> }
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Confirm route', 'راستہ کی تصدیق کریں') }}</span>
+        </button>
+        <p class="muted tiny center">The customer and admin see the update immediately.</p>
+      </aside>
+    }
+  </div>
+
+  <!-- Transfers to the admin warehouse -->
+  <section class="card transfers">
+    <div class="card-head">
+      <h3 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Transfers to admin warehouse', 'ایڈمن گودام کو منتقلی') }}</h3>
+      @if (transfers().length) { <span class="muted small">{{ transfers().length }} open or in transit</span> }
+    </div>
+    @if (transfersLoading()) {
+      <span class="skeleton" style="height: 60px"></span>
+    } @else if (transfersError()) {
+      <app-empty-state kind="error" [message]="transfersError()" (retry)="retryTransfers()" />
+    } @else if (!transfers().length) {
+      <p class="muted small none">No open transfers. Choosing “Send to admin warehouse” for a paid parcel starts one.</p>
+    } @else {
+      <div class="transfer-list">
+        @for (t of transfers(); track t.id) {
+          <div class="transfer">
+            <div class="transfer-head">
+              <div>
+                <strong class="code">{{ t.code }}</strong>
+                <span class="muted small">{{ t.orders.length }} parcel{{ t.orders.length === 1 ? '' : 's' }} · {{ transferWeight(t) }} kg
+                  · @if (t.dispatched_at) { dispatched {{ t.dispatched_at | day }} } @else { started {{ t.created_at | day }} }</span>
+              </div>
+              <app-status-badge [status]="t.status" />
+              @if (t.status === 'open' && canEdit()) {
+                <button type="button" class="btn btn-primary btn-floor" [disabled]="isBusy('t:' + t.id) || !t.orders.length" (click)="dispatchTransfer(t)">
+                  @if (isBusy('t:' + t.id)) { <ion-spinner name="crescent" /> }
+                  <span [class.urdu]="lang.isUrdu()">{{ lang.t('Dispatch transfer', 'منتقلی روانہ کریں') }}</span>
+                </button>
+              }
+            </div>
+            @if (t.orders.length) {
+              <ul class="parcels">
+                @for (p of t.orders; track p.id) {
+                  <li>
+                    <b>{{ p.reference }}</b>
+                    <span>{{ p.customer_name }} · {{ p.customer_code }}</span>
+                    <span class="muted">{{ p.destination_country || '—' }}</span>
+                    <span class="muted">{{ p.weight_kg ? p.weight_kg + ' kg' : '—' }}</span>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      </div>
+    }
+  </section>
+</div>
+
+@if (shipForm(); as f) {
+  <div class="modal-backdrop" (click)="closeShip()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ship-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.order.reference }} · {{ f.order.customer_code }}</span>
+          <h3 id="ship-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Mark shipped', 'روانہ کریں') }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeShip()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">Ships to {{ destination(f.order) }}. The customer gets the tracking number by notification.</p>
+        <div class="form-grid">
+          <div class="field">
+            <span class="label" id="ship-courier-label">Courier *</span>
+            <app-courier-select [selected]="f.courier" (selectedChange)="patchShip({ courier: $event })" label="Courier" />
+          </div>
+          <div class="field">
+            <label for="ship-track">Tracking number *</label>
+            <input id="ship-track" class="input" [ngModel]="f.tracking" (ngModelChange)="patchShip({ tracking: $event })" (keydown.enter)="submitShip()" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="closeShip()" [disabled]="shipSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="submitShip()" [disabled]="shipSaving() || !f.courier || !f.tracking.trim()">
+          @if (shipSaving()) { <ion-spinner name="crescent" /> }
+          Mark shipped
+        </button>
+      </div>
+    </div>
+  </div>
+}

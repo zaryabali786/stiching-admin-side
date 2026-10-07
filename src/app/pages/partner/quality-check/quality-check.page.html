@@ -1,0 +1,271 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Before packing</span>
+      <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Quality check', 'کوالٹی چیک') }}</h1>
+      <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Check measurements, finishing and the customer’s notes. Pass it, or send it back to the tailor with a note.', 'ناپ، فنشنگ اور گاہک کے نوٹس چیک کریں۔ پاس کریں یا نوٹ کے ساتھ درزی کو واپس بھیجیں۔') }}</p>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="chips" role="tablist" aria-label="Quality check">
+      @for (t of tabs; track t.value) {
+        <button type="button" class="chip" role="tab" [class.active]="tab() === t.value" [attr.aria-selected]="tab() === t.value" (click)="setTab(t.value)">
+          <span [class.urdu]="lang.isUrdu()">{{ lang.t(t.en, t.ur) }}</span>
+          @if (meta()) { <span class="count" [class.attn]="t.value === 'pending' && count(t.value) > 0">{{ count(t.value) }}</span> }
+        </button>
+      }
+    </div>
+    <app-search-input placeholder="Order ref, customer code, article…" [value]="search()" (search)="onSearch($event)" />
+  </div>
+
+  @if (loading()) {
+    <div class="qc-grid">
+      @for (i of [1, 2, 3, 4]; track i) {
+        <div class="card"><span class="skeleton" style="width: 35%"></span><span class="skeleton" style="width: 65%; height: 20px; margin: 10px 0"></span><span class="skeleton" style="height: 70px"></span></div>
+      }
+    </div>
+  } @else if (error()) {
+    <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
+  } @else if (!cards().length) {
+    <div class="card">
+      @if (search()) {
+        <app-empty-state title="Nothing matches your search" [message]="'No articles found for “' + search() + '”.'" />
+      } @else if (tab() === 'pending') {
+        <app-empty-state title="Nothing waiting for QC" message="Articles appear here when a tailor finishes stitching." />
+      } @else {
+        <app-empty-state title="No passed articles waiting to be packed" message="Passed articles stay here until their order is packed." />
+      }
+    </div>
+  } @else {
+    @if (tab() === 'pending') {
+      <div class="qc-grid">
+        @for (c of cards(); track c.id) {
+          <article class="card qc-card" [class.rush]="c.status === 'rush'" [class.delayed]="c.status === 'delayed'">
+            <div class="qc-head">
+              <div class="qc-title">
+                <span class="ref">{{ c.order_reference }} · {{ c.customer_code }}</span>
+                <h3>{{ c.unit_title }}</h3>
+                <span class="muted small">@if (c.unit?.stitching_type) {{{ c.unit?.stitching_type }}}@if (c.unit?.stitching_type && c.order?.customer_name) { · }@if (c.order?.customer_name) {{{ c.order.customer_name }}}</span>
+              </div>
+              <div class="qc-badges">
+                @if (c.status === 'delayed') { <span class="badge red">{{ c.days_late }} {{ c.days_late === 1 ? 'day' : 'days' }} late</span> }
+                @else if (c.status === 'rush') { <span class="badge red tag-rush">Rush</span> }
+                @if (c.due_date) { <span class="due" [class.late]="c.status === 'delayed'">Due {{ c.due_date | day }}</span> }
+              </div>
+            </div>
+
+            <div class="team-line"><span class="label">Team</span> {{ team(c) }}</div>
+
+            @if (c.unit?.size_chart; as chart) {
+              <div class="block">
+                <span class="label">Measurements · {{ chartTitle(chart) || 'Size chart' }}
+                  @if (chart.nearest_size) { <span class="badge gold">Nearest size {{ chart.nearest_size }}</span> }
+                </span>
+                @if (chart.notes || chart.notes_audio) {
+                  <div class="size-note" role="note">
+                    @if (chart.notes) { <div><b>Customer's size note:</b> {{ chart.notes }}</div> }
+                    <app-voice-note-play [note]="chart.notes_audio" label="Size note, voice" />
+                  </div>
+                }
+                @for (g of measureGroups(c); track g.key) {
+                  <span class="group-name">{{ g.label }}</span>
+                  <div class="pills">
+                    @for (m of g.rows; track m.label) { <span class="pill">{{ m.label }} <b>{{ m.value }}</b></span> }
+                  </div>
+                } @empty {
+                  <span class="muted small">The size chart has no measurements yet.</span>
+                }
+              </div>
+            } @else {
+              <div class="block"><span class="label">Measurements</span> <span class="muted small">No size chart — stitch to the brand's standard size.</span></div>
+            }
+
+            @if (design(c); as ds) {
+              <div class="block">
+                <span class="label">Design</span>
+                @if (ds.length) {
+                  <div class="pills">
+                    @for (d of ds; track d.label) { <span class="pill">{{ d.label }} <b>{{ d.value }}</b></span> }
+                  </div>
+                } @else {
+                  <span class="muted small">No customisation selected</span>
+                }
+              </div>
+            }
+
+            @if (c.unit?.notes || c.unit?.notes_audio || c.order?.customer_notes) {
+              <div class="note">
+                @if (c.unit?.notes) { <div><b>Article notes:</b> {{ c.unit.notes }}</div> }
+                <app-voice-note-play [note]="c.unit?.notes_audio" label="Article note, voice" />
+                @if (c.order?.customer_notes) { <div><b>Customer notes:</b> {{ c.order.customer_notes }}</div> }
+              </div>
+            }
+            @if (c.qc_notes || c.qc_notes_audio) {
+              <div class="note red">
+                <div><b>Last QC note:</b> {{ c.qc_notes }}</div>
+                <app-voice-note-play [note]="c.qc_notes_audio" label="QC note, voice" />
+              </div>
+            }
+
+            <div class="qc-foot">
+              <a class="link small" [routerLink]="['/partner/production/jobs', c.id]" [attr.aria-label]="'Open job card for ' + c.unit_title">Open job card</a>
+              <a *can="'messages.view'" class="link small" [routerLink]="['/partner/messages', c.order_id]" [queryParams]="{ unit: c.unit_id }" [attr.aria-label]="'Message the customer about ' + c.unit_title">Message customer</a>
+              <span class="spacer"></span>
+              <div *can="'quality.update'" class="qc-actions">
+                <button type="button" class="btn btn-floor btn-back" [disabled]="isBusy('card:' + c.id)" (click)="sendBack(c)" [attr.aria-label]="'Send ' + c.unit_title + ' back to the tailor'">
+                  <span [class.urdu]="lang.isUrdu()">{{ lang.t('Send back', 'واپس بھیجیں') }}</span>
+                </button>
+                <button type="button" class="btn btn-green btn-floor btn-pass" [disabled]="isBusy('card:' + c.id)" (click)="pass(c)" [attr.aria-label]="'Pass ' + c.unit_title">
+                  @if (isBusy('card:' + c.id)) { <ion-spinner name="crescent" /> } @else { <span aria-hidden="true">✓</span> }
+                  <span [class.urdu]="lang.isUrdu()">{{ lang.t('Pass', 'پاس') }}</span>
+                </button>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <div class="groups">
+        @for (g of groups(); track g.orderId) {
+          <section class="card group">
+            <div class="group-head">
+              <div>
+                <span class="ref">{{ g.order.reference }}@if (g.order.brand) { · {{ g.order.brand }} }</span>
+                <h3>{{ g.order.customer_name || 'Customer' }} <span class="muted">· {{ g.order.customer_code }}</span></h3>
+                <span class="muted small">{{ g.cards.length }} article{{ g.cards.length === 1 ? '' : 's' }} passed on this page · ships to {{ g.order.destination_city || g.order.destination_country || '—' }}</span>
+              </div>
+              <div class="group-actions">
+                @if (g.order.priority === 'rush') { <span class="badge red tag-rush">Rush</span> }
+                <app-status-badge [status]="g.order.status" />
+              </div>
+            </div>
+
+            <div class="group-cards">
+              @for (c of g.cards; track c.id) {
+                <div class="ticket" [attr.data-approval]="c.approval_status || 'none'">
+                  <div class="ticket-head">
+                    <div class="mini-main">
+                      <strong>{{ c.unit_title }}</strong>
+                      <span class="muted small">{{ team(c) }}@if (c.qc_notes) { · “{{ c.qc_notes }}” }</span>
+                    </div>
+                    <app-approval-chip [status]="c.approval_status" />
+                  </div>
+
+                  @if (c.approval_status === 'changes_requested' && (c.change_request || c.change_request_audio)) {
+                    <div class="note red">
+                      @if (c.change_request) { <div><b>The customer asked for changes:</b> {{ c.change_request }}</div> }
+                      <app-voice-note-play [note]="c.change_request_audio" label="Change request, voice" />
+                    </div>
+                  }
+
+                  @if (approvalPhotos(c).length) {
+                    <div class="thumbs" [attr.aria-label]="'Photos sent for ' + c.unit_title">
+                      @for (p of approvalPhotos(c); track p.url) {
+                        <a [href]="p.url" target="_blank" rel="noopener" class="thumb" [attr.aria-label]="'Open photo ' + ($index + 1) + ' of ' + c.unit_title"><img [src]="p.url" alt="" loading="lazy" /></a>
+                      }
+                    </div>
+                  }
+
+                  <div class="ticket-foot">
+                    <a class="link small" [routerLink]="['/partner/production/jobs', c.id]" [attr.aria-label]="'Open job card for ' + c.unit_title">Open job card</a>
+                    <a *can="'messages.view'" class="link small" [routerLink]="['/partner/messages', c.order_id]" [queryParams]="{ unit: c.unit_id }" [attr.aria-label]="'Message the customer about ' + c.unit_title">Message customer</a>
+                    <span class="spacer"></span>
+                    @if (c.approval_status !== 'approved') {
+                      <button *can="'quality.update'" type="button" class="btn btn-floor" (click)="openApproval(c)" [attr.aria-label]="(c.approval_status === 'pending' ? 'Resend photos for ' : 'Send photos to the customer for ') + c.unit_title">
+                        <span [class.urdu]="lang.isUrdu()">{{ c.approval_status === 'pending' ? lang.t('Resend photos', 'تصاویر دوبارہ بھیجیں') : lang.t('Send photos to the customer', 'گاہک کو تصاویر بھیجیں') }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+
+            <div class="group-foot">
+              @if (waiting(g).length) {
+                <p class="pack-reason" role="status">Waiting for the customer to approve: {{ waitingTitles(g) }}</p>
+              }
+              <button *can="'quality.update'" type="button" class="btn btn-primary btn-floor" (click)="openPack(g)" [disabled]="waiting(g).length > 0"
+                [attr.title]="waiting(g).length ? 'Waiting for the customer to approve: ' + waitingTitles(g) : null">
+                <span [class.urdu]="lang.isUrdu()">{{ lang.t('Pack order', 'آرڈر پیک کریں') }}</span>
+              </button>
+            </div>
+          </section>
+        }
+      </div>
+    }
+    <div class="card pager-card"><app-pagination [meta]="meta()" (pageChange)="goToPage($event)" /></div>
+  }
+</div>
+
+
+<!-- Pack order -->
+@if (packing(); as p) {
+  <div class="modal-backdrop" (click)="closePack()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pack-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ p.group.order.reference }} · {{ p.group.order.customer_code }}</span>
+          <h3 id="pack-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Pack order', 'آرڈر پیک کریں') }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closePack()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">All articles of this order must have passed QC. Weigh the packed parcel — admin uses it for the shipping quote.</p>
+        <div class="field">
+          <label for="pack-weight">Parcel weight (kg) *</label>
+          <input id="pack-weight" class="input" type="number" min="0.05" max="50" step="0.05" placeholder="e.g. 1.2"
+            [ngModel]="p.weight" (ngModelChange)="setPackWeight($event)" (keydown.enter)="submitPack()" />
+        </div>
+        @if (packError()) { <p class="form-error" role="alert">{{ packError() }}</p> }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="closePack()" [disabled]="packSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="submitPack()" [disabled]="packSaving()">
+          @if (packSaving()) { <ion-spinner name="crescent" /> }
+          Pack order
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Approval photos -->
+@if (approval(); as a) {
+  <div class="modal-backdrop" (click)="closeApproval()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appr-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ a.card.order_reference }} · {{ a.card.order?.customer_name }}</span>
+          <h3 id="appr-title" [class.urdu]="lang.isUrdu()">{{ a.card.approval_status === 'pending' ? 'Resend photos' : 'Send photos' }}: {{ a.card.unit_title }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeApproval()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted small">These photos are for <b>{{ a.card.unit_title }}</b> only. The customer approves it, or asks for changes, on its own.@if (a.card.approval_status === 'pending') { Sending again replaces the photos they are looking at. }</p>
+        <div class="media-grid">
+          @for (ph of a.photos; track $index) {
+            <div class="media-item">
+              <img [src]="ph.dataUrl" [alt]="ph.name" />
+              <button type="button" class="remove" (click)="removePhoto($index)" [attr.aria-label]="'Remove photo ' + ($index + 1)">×</button>
+            </div>
+          }
+          @if (a.photos.length < maxPhotos) {
+            <label class="media-add" [class.disabled]="photosReading()">
+              @if (photosReading()) { <ion-spinner name="crescent" /> } @else { <span>+ Add photo</span> }
+              <input type="file" accept="image/*" multiple hidden [disabled]="photosReading()" (change)="onPhotosPicked($any($event.target))" />
+            </label>
+          }
+        </div>
+        <span class="hint muted tiny">Up to {{ maxPhotos }} photos. They are resized before upload.</span>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="closeApproval()" [disabled]="approvalSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="submitApproval()" [disabled]="approvalSaving() || photosReading() || !a.photos.length">
+          @if (approvalSaving()) { <ion-spinner name="crescent" /> }
+          Send to customer
+        </button>
+      </div>
+    </div>
+  </div>
+}

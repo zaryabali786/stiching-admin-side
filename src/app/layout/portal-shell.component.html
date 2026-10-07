@@ -1,0 +1,150 @@
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<div class="shell" [class.nav-open]="navOpen()" [class.collapsed]="collapsed()" [attr.data-portal]="portal">
+  <!-- ═════════ Sidebar (persistent) ═════════ -->
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">V</div>
+      <div class="brand-text">
+        <span class="brand-name">V360</span>
+        <span class="brand-portal">
+          @if (portal === 'admin') { Admin portal } @else { {{ partnerName() }} }
+        </span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      @for (group of navGroups(); track group.label) {
+        <div class="nav-group">
+          @if (group.label) {
+            <span class="nav-group-label" [class.urdu]="portal === 'partner' && lang.isUrdu()">{{ label(group) }}</span>
+          }
+          @for (item of group.items; track item.path) {
+            <a class="nav-link" [routerLink]="item.path" routerLinkActive="active" #rla="routerLinkActive"
+              [attr.aria-current]="rla.isActive ? 'page' : null" [attr.title]="collapsed() ? label(item) : null">
+              <ion-icon [name]="item.icon" aria-hidden="true"></ion-icon>
+              <span class="nav-text" [class.urdu]="portal === 'partner' && lang.isUrdu()">{{ label(item) }}</span>
+              @if (item.badge) {
+                <span class="nav-badge" [class.red]="item.tone === 'red'" [attr.aria-label]="item.badge + ' need attention'">{{ item.badge > 99 ? '99+' : item.badge }}</span>
+              }
+            </a>
+          }
+        </div>
+      }
+    </nav>
+
+    <div class="sidebar-foot">
+      @if (portal === 'partner') {
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button type="button" [class.active]="!lang.isUrdu()" [attr.aria-pressed]="!lang.isUrdu()" (click)="lang.set('en')">EN</button>
+          <button type="button" class="urdu" [class.active]="lang.isUrdu()" [attr.aria-pressed]="lang.isUrdu()" (click)="lang.set('ur')">اردو</button>
+        </div>
+      }
+
+      @if (auth.isAdmin()) {
+        <a class="nav-link switch" [routerLink]="portal === 'admin' ? '/partner/overview' : '/admin/overview'"
+          [attr.title]="collapsed() ? (portal === 'admin' ? 'Open partner portal' : 'Open admin portal') : null">
+          <ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon>
+          <span class="nav-text">{{ portal === 'admin' ? 'Partner portal' : 'Admin portal' }}</span>
+        </a>
+      }
+
+      <button type="button" class="nav-link collapse-btn" (click)="toggleCollapsed()" [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+        [attr.title]="collapsed() ? 'Expand sidebar' : null">
+        <ion-icon [name]="collapsed() ? 'chevron-forward-outline' : 'chevron-back-outline'" aria-hidden="true"></ion-icon>
+        <span class="nav-text">Collapse</span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="scrim" (click)="navOpen.set(false)" aria-hidden="true"></div>
+
+  <!-- ═════════ Main column ═════════ -->
+  <div class="main">
+    <header class="topbar">
+      <button type="button" class="icon-btn hamburger" (click)="navOpen.set(!navOpen())" aria-label="Open menu" [attr.aria-expanded]="navOpen()">
+        <ion-icon name="menu-outline" aria-hidden="true"></ion-icon>
+      </button>
+
+      <div class="title-block">
+        <span class="crumb">{{ portal === 'admin' ? 'Admin' : lang.t('Partner', 'پارٹنر') }}</span>
+        @if (pageTitle()) {
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="page-name">{{ pageTitle() }}</span>
+        }
+      </div>
+
+      <form class="quick-search" role="search" (submit)="$event.preventDefault(); runQuickSearch()">
+        <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+        <input #searchBox type="search" [placeholder]="searchPlaceholder()" [value]="quickSearch()"
+          (input)="quickSearch.set($any($event.target).value)" aria-label="Find an order" />
+        <kbd aria-hidden="true">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
+      </form>
+
+      @if (auth.isAdmin() && activePartner.partners().length) {
+        <label class="partner-switch">
+          <span class="sr-only">Partner</span>
+          <select [value]="activePartner.partnerId() ?? ''" (change)="onPartnerPick($event)" aria-label="Active partner">
+            <option value="">All partners</option>
+            @for (p of activePartner.partners(); track p.id) {
+              <option [value]="p.id" [selected]="p.id === activePartner.partnerId()">{{ p.name }}{{ p.status === 'inactive' ? ' (off)' : '' }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <div class="top-actions">
+        <app-notification-bell />
+
+        <div class="user-menu">
+          <button type="button" class="user-btn" (click)="userMenuOpen.set(!userMenuOpen())" [attr.aria-expanded]="userMenuOpen()" aria-haspopup="menu">
+            <span class="avatar">{{ auth.initials() }}</span>
+            <span class="user-meta">
+              <span class="user-name">{{ auth.displayName() }}</span>
+              <span class="user-role">@if (auth.partner(); as pt) { {{ pt.name }} · }{{ auth.roleLabel() }}</span>
+            </span>
+          </button>
+          @if (userMenuOpen()) {
+            <div class="menu" role="menu">
+              <div class="menu-head">
+                <span class="avatar lg">{{ auth.initials() }}</span>
+                <div>
+                  <strong>{{ auth.displayName() }}</strong>
+                  <span>{{ auth.user()?.email }}</span>
+                  <span>@if (auth.partner(); as pt) { {{ pt.name }} · }{{ auth.roleLabel() }}</span>
+                </div>
+              </div>
+              @if (auth.isAdmin()) {
+                <a class="menu-item" routerLink="/admin/settings" [queryParams]="{ tab: 'account' }" role="menuitem">
+                  <ion-icon name="person-circle-outline" aria-hidden="true"></ion-icon> Account settings
+                </a>
+                <a class="menu-item" [routerLink]="portal === 'admin' ? '/partner/overview' : '/admin/overview'" role="menuitem">
+                  <ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon>
+                  Switch to {{ portal === 'admin' ? 'partner' : 'admin' }} portal
+                </a>
+              }
+              <button type="button" class="menu-item danger" (click)="logout()" role="menuitem">
+                <ion-icon name="log-out-outline" aria-hidden="true"></ion-icon> Log out
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </header>
+
+    <main class="portal-content" id="main-content" #scroller tabindex="-1">
+      <router-outlet />
+    </main>
+  </div>
+
+  @if (showMessagesFab()) {
+    <a class="messages-fab" [routerLink]="messagesPath"
+      [attr.aria-label]="unreadMessages() ? 'Messages, ' + unreadMessages() + ' unread' : 'Messages'">
+      <ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon>
+      <span class="fab-text" [class.urdu]="portal === 'partner' && lang.isUrdu()">{{ portal === 'partner' ? lang.t('Messages', 'پیغامات') : 'Messages' }}</span>
+      @if (unreadMessages() > 0) { <span class="fab-badge" aria-hidden="true">{{ unreadMessages() > 99 ? '99+' : unreadMessages() }}</span> }
+    </a>
+  }
+
+  <app-ui-host />
+</div>

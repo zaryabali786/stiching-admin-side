@@ -1,0 +1,7 @@
+{
+  "name": "stitching-app",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}

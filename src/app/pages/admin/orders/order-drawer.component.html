@@ -1,0 +1,402 @@
+<div class="drawer-backdrop" (click)="close()"></div>
+<aside class="drawer order-drawer" role="dialog" aria-modal="true" [attr.aria-label]="'Order ' + reference()">
+  <div class="drawer-head">
+    <div class="head-text">
+      <span class="eyebrow">Order@if (order(); as o) { · created {{ o.created_at | day }} }</span>
+      <h3>{{ reference() }}</h3>
+      @if (order(); as o) {
+        <div class="head-badges">
+          <app-status-badge [status]="o.status" [label]="o.status_label" />
+          @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
+          @if (o.has_issue) { <span class="badge red">Issue</span> }
+          @if (o.partner) { <span class="badge" title="Partner making this order">Partner: {{ o.partner.name }}</span> }
+        </div>
+        <p class="head-facts">
+          <span>{{ o.units.length }} {{ o.units.length === 1 ? 'article' : 'articles' }}</span>
+          <span>{{ o.customer?.full_name || o.customer_name || '—' }}</span>
+          @if (o.due_date) {
+            <span [class.overdue]="overdue()">Due {{ o.due_date | day }}@if (overdue()) { · overdue }</span>
+          }
+        </p>
+      }
+    </div>
+    <button type="button" class="close-btn" (click)="close()" aria-label="Close order">×</button>
+  </div>
+
+  <div class="drawer-body">
+    @if (loading() && !order()) {
+      @for (i of [1, 2, 3, 4]; track i) {
+        <div class="section"><span class="skeleton" style="width: 40%"></span><span class="skeleton" style="height: 60px; margin-top: 10px"></span></div>
+      }
+    } @else if (error()) {
+      <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
+    } @else if (order(); as o) {
+      @if (alerts().length) {
+        <div class="alerts" role="status">
+          @for (a of alerts(); track a.text) {
+            <div class="alert" [class.bad]="a.tone === 'bad'"><span class="alert-tag">{{ a.tag }}</span>{{ a.text }}</div>
+          }
+        </div>
+      }
+
+      <!-- Customer & destination -->
+      <section class="section two-col">
+        <div>
+          <h4>Customer</h4>
+          <div class="kv-lines">
+            <strong>{{ o.customer?.full_name || o.customer_name || '—' }}</strong>
+            <span class="muted">{{ o.customer?.customer_code || o.customer_code }}</span>
+            @if (o.customer?.email; as email) { <span>{{ email }}</span> }
+            @if (o.customer?.phone; as phone) { <span>{{ phone }}</span> }
+          </div>
+        </div>
+        <div>
+          <h4>Ships to</h4>
+          <div class="kv-lines">
+            <strong>{{ o.destination_city || '—' }}{{ o.destination_country ? ', ' + o.destination_country : '' }}</strong>
+            @if (o.destination_address) { <span>{{ o.destination_address }}</span> }
+            <span class="muted">{{ o.shipping_service | humanize }} shipping</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h4>Order details</h4>
+        <dl class="kv">
+          <dt>Brand</dt><dd>{{ o.brand || '—' }}</dd>
+          <dt>Brand order no.</dt><dd>{{ o.brand_order_number || '—' }}</dd>
+          @if (o.brand_order_total) { <dt>Paid to brand</dt><dd>{{ o.brand_order_currency || 'PKR' }} {{ o.brand_order_total | number: '1.0-2' }}</dd> }
+          @if (o.import_source && o.import_source !== 'manual') {
+            <dt>Added from</dt>
+            <dd>{{ o.import_source === 'invoice' ? 'Uploaded brand invoice' : o.import_source === 'link' ? 'Product links' : 'Forwarded brand email' }}</dd>
+          }
+          @if (o.brand_invoice?.url) {
+            <dt>Brand invoice</dt><dd><a [href]="o.brand_invoice!.url" target="_blank" rel="noopener">{{ o.brand_invoice!.name || 'Open' }} ↗</a></dd>
+          }
+          <dt>Courier</dt><dd>{{ o.courier?.name || '—' }}</dd>
+          <dt>Inbound tracking</dt><dd>{{ o.tracking_number || (o.courier && !o.courier.requires_tracking ? 'Not required' : '—') }}</dd>
+          @if (o.international_shipping !== null && o.international_shipping !== undefined) {
+            <dt>International shipping</dt>
+            <dd>{{ o.international_shipping ? 'Yes' : 'No' }}@if (o.shipping_service) { <span class="muted"> · {{ o.shipping_service | humanize }} shipping</span> }</dd>
+          }
+          <dt>Created</dt><dd>{{ o.created_at | day: true }}</dd>
+          @if (o.received_at) { <dt>Parcel received</dt><dd>{{ o.received_at | day: true }}</dd> }
+          @if (o.weight_kg) { <dt>Packed weight</dt><dd>{{ o.weight_kg }} kg</dd> }
+          @if (o.transfer) { <dt>Transfer</dt><dd>{{ o.transfer.code }} · {{ o.transfer.status | humanize }}</dd> }
+        </dl>
+        @if (o.customer_notes) {
+          <div class="note-box"><span class="label">Customer notes</span>{{ o.customer_notes }}</div>
+        }
+        @if (o.change_request || o.change_request_audio) {
+          <div class="note-box warn"><span class="label">Change request</span>{{ o.change_request }}
+            <app-voice-note-play [note]="o.change_request_audio" label="Change request, voice" />
+          </div>
+        }
+      </section>
+
+      <!-- Units -->
+      <section class="section">
+        <div class="section-head">
+          <h4>Articles ({{ o.units.length }})</h4>
+          @if (issueUnits()) { <span class="badge red">{{ issueUnits() }} with issue</span> }
+        </div>
+        @for (u of o.units; track u.id) {
+          <div class="unit" [class.has-issue]="u.status === 'issue'">
+            <div class="unit-head">
+              <div>
+                <strong>{{ u.line_no }}. {{ u.unit_title }}</strong>
+                <span class="cell-sub">@if (u.stitching_type) {{{ u.stitching_type }} · }qty {{ u.quantity }}@if (u.unit_price !== null && u.unit_price !== undefined) { · {{ u.currency || 'PKR' }} {{ u.unit_price | number: '1.0-2' }} each}</span>
+              </div>
+              <app-status-badge [status]="u.status" />
+            </div>
+            <div class="unit-meta">
+              <span>Size: <b>{{ u.size_chart ? (chartTitle(u.size_chart) || 'Size chart') : 'No size chart' }}</b>@if (u.size_chart?.nearest_size) { <span class="badge gold size-chip">Nearest {{ u.size_chart!.nearest_size }}</span> }</span>
+              @if (!u.selected_articles?.length) {
+                @for (d of designEntries(u); track d.key) { <span>{{ d.key | humanize }}: <b>{{ d.value }}</b></span> }
+              }
+              @if (u.product_link) { <a [href]="u.product_link" target="_blank" rel="noopener">Product link ↗</a> }
+            </div>
+            <a class="chat-link" [routerLink]="['/admin/messages', o.id]" [queryParams]="{ unit: u.id }" [attr.aria-label]="'Open the chat about ' + u.unit_title">Open chat</a>
+            @if (approvalOf(u); as ap) {
+              @if (ap.status !== 'none' || ap.photos?.length) {
+                <div class="approval" [attr.data-approval]="ap.status">
+                  <span class="ap-label">Customer approval</span>
+                  <app-approval-chip [status]="ap.status" />
+                  @if (ap.change_request || ap.change_request_audio) {
+                    <div class="ap-change">
+                      @if (ap.change_request) { <span>{{ ap.change_request }}</span> }
+                      <app-voice-note-play [note]="ap.change_request_audio" label="Change request, voice" />
+                    </div>
+                  }
+                  @if (ap.photos?.length) {
+                    <div class="thumbs">
+                      @for (m of ap.photos; track m.url) { <a [href]="m.url" target="_blank" rel="noopener"><img [src]="m.url" alt="Photo sent for approval" loading="lazy" /></a> }
+                    </div>
+                  }
+                </div>
+              }
+            }
+            @if (u.size_chart; as chart) {
+              @if (measureGroups(u).length || chart.notes || chart.notes_audio) {
+                <details class="measures">
+                  <summary>Measurements @if (chart.notes || chart.notes_audio) { <span class="badge amber">Has size note</span> }</summary>
+                  @if (chart.notes || chart.notes_audio) {
+                    <div class="size-note">
+                      @if (chart.notes) { <div><b>Customer's size note:</b> {{ chart.notes }}</div> }
+                      <app-voice-note-play [note]="chart.notes_audio" label="Size note, voice" />
+                    </div>
+                  }
+                  @for (g of measureGroups(u); track g.key) {
+                    <span class="grp">{{ g.label }}</span>
+                    <dl class="meas-list">
+                      @for (m of g.rows; track m.key) {
+                        <div [class.blank]="m.value === null"><dt>{{ m.label }}</dt><dd>{{ m.value === null ? '—' : m.value + '"' }}</dd></div>
+                      }
+                    </dl>
+                  }
+                </details>
+              }
+            }
+            @if (u.selected_articles?.length) {
+              <ul class="picked" aria-label="Selected articles">
+                @for (a of u.selected_articles; track a.article_id) {
+                  <li>
+                    @if (a.image_url) { <img [src]="a.image_url" alt="" loading="lazy" /> } @else { <span class="ph" aria-hidden="true"></span> }
+                    <span class="picked-text"><span class="picked-type">{{ a.type_name }}</span><b>{{ a.name }}</b></span>
+                    @if (hasPrice(a)) {
+                      <span class="picked-price" title="Internal prices, never shown to customers">
+                        {{ a.customer_price === null || a.customer_price === undefined ? '—' : (a.customer_price | pkr) }}
+                        @if (a.partner_cost !== null && a.partner_cost !== undefined) {
+                          <span class="picked-cost">cost {{ a.partner_cost | pkr }}</span>
+                        }
+                      </span>
+                    }
+                  </li>
+                }
+              </ul>
+              @if (hasInternalPrice(u)) { <p class="picked-note">Customer price and partner cost are internal: customers never see them.</p> }
+            }
+            @if (u.notes) { <p class="unit-notes">{{ u.notes }}</p> }
+            <app-voice-note-play [note]="u.notes_audio" label="Article note, voice" />
+            @if (u.reference_images?.length) {
+              <div class="thumbs">
+                @for (m of u.reference_images; track m.url) {
+                  <a [href]="m.url" target="_blank" rel="noopener">@if (isImage(m)) { <img [src]="m.url" alt="Reference" loading="lazy" /> } @else { <span class="file">File</span> }</a>
+                }
+              </div>
+            }
+            @if (u.status === 'issue') {
+              <div class="issue-box">
+                <div><b>{{ u.issue_type | humanize }}</b>@if (u.issue_note) { — {{ u.issue_note }} }</div>
+                <app-voice-note-play [note]="u.issue_audio" label="Issue, voice" />
+                @if (u.issue_media?.length) {
+                  <div class="thumbs">
+                    @for (m of u.issue_media; track m.url) {
+                      <a [href]="m.url" target="_blank" rel="noopener">@if (isImage(m)) { <img [src]="m.url" alt="Issue photo" loading="lazy" /> } @else { <span class="file">File</span> }</a>
+                    }
+                  </div>
+                }
+                <button type="button" class="btn btn-sm btn-green" [disabled]="resolvingUnit() === u.id" (click)="resolveIssue(u)">
+                  @if (resolvingUnit() === u.id) { <ion-spinner name="crescent" /> } Resolve issue
+                </button>
+              </div>
+            }
+          </div>
+        } @empty {
+          <p class="muted">No articles on this order.</p>
+        }
+      </section>
+
+      <!-- Production -->
+      @if (o.cards.length) {
+        <section class="section">
+          <h4>Production</h4>
+          <div class="cards">
+            @for (c of o.cards; track c.id) {
+              <div class="prod-card">
+                <div class="prod-top">
+                  <span class="ellipsis">{{ c.unit_title || 'Article' }}</span>
+                  <span [class]="'badge ' + cardTone(c)">{{ c.display_label ?? (c.stage | humanize) }}</span>
+                </div>
+                <span class="cell-sub">{{ c.master?.name || 'No master' }} › {{ c.tailor?.name || 'No tailor' }}</span>
+                @if (c.due_date) { <span class="cell-sub">Due {{ c.due_date | day }}</span> }
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- Invoice -->
+      <section class="section">
+        <div class="section-head">
+          <h4>Invoice</h4>
+          <a class="btn btn-xs" routerLink="/admin/invoices" [queryParams]="{ order: o.id }">{{ o.invoice ? 'Open invoice →' : 'Open in invoices →' }}</a>
+        </div>
+        @if (o.invoice; as inv) {
+          <div class="inv-head">
+            <span><b>{{ inv.number || 'Draft' }}</b> <app-status-badge [status]="inv.status" /></span>
+            <span class="muted">{{ inv.currency }} @if (inv.currency !== 'PKR') { · {{ inv.fx_rate }} PKR/{{ inv.currency }} }</span>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table compact">
+              <thead><tr><th>Charge</th><th class="num">Customer</th><th class="num">Partner</th></tr></thead>
+              <tbody>
+                @for (l of invoiceLines(); track $index) {
+                  <tr>
+                    <td><span class="cell-main">{{ l.label }}</span><span class="cell-sub">{{ l.kind | humanize }}@if (l.quantity > 1) { · × {{ l.quantity }} }</span></td>
+                    <td class="num" [class.neg]="l.kind === 'discount'">{{ l.kind === 'discount' ? '−' : '' }}{{ l.customer_amount | pkr }}</td>
+                    <td class="num">{{ l.partner_amount | pkr }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="inv-totals">
+            <div><span>Customer total</span><b>{{ inv.total_pkr | pkr }}</b>@if (inv.currency !== 'PKR') { <small>≈ {{ inv.total_foreign | pkr: inv.currency }}</small> }</div>
+            <div><span>Partner payout</span><b>{{ inv.partner_total_pkr | pkr }}</b></div>
+            <div><span>Margin</span><b [class.neg]="inv.total_pkr - inv.partner_total_pkr < 0">{{ inv.total_pkr - inv.partner_total_pkr | pkr }}</b></div>
+          </div>
+          @if (o.payments.length) {
+            @for (p of o.payments; track p.id) {
+              <p class="muted small">Paid {{ p.amount_pkr | pkr }} by {{ p.method | humanize }} on {{ p.created_at | day }}@if (p.provider_ref) { · ref {{ p.provider_ref }} }</p>
+            }
+          }
+        } @else {
+          <p class="muted">No invoice yet.@if (o.status === 'packed') { It is packed and ready to be invoiced. }</p>
+        }
+      </section>
+
+      <!-- Shipment -->
+      @if (o.shipment; as s) {
+        <section class="section">
+          <h4>Shipment</h4>
+          <dl class="kv">
+            <dt>Status</dt><dd><app-status-badge [status]="s.status" /></dd>
+            <dt>Ships from</dt><dd>{{ s.shipped_from === 'partner' ? 'Partner (direct)' : 'Admin warehouse' }}</dd>
+            <dt>Courier</dt><dd>{{ s.courier || '—' }}@if (s.service) { · {{ s.service | humanize }} }</dd>
+            <dt>Tracking</dt><dd>{{ s.tracking_number || '—' }}</dd>
+            @if (s.weight_kg) { <dt>Weight</dt><dd>{{ s.weight_kg }} kg@if (s.dimensions) { · {{ s.dimensions }} }</dd> }
+            @if (s.handed_at) { <dt>Handed over</dt><dd>{{ s.handed_at | day: true }}</dd> }
+            @if (s.delivered_at) { <dt>Delivered</dt><dd>{{ s.delivered_at | day: true }}</dd> }
+          </dl>
+        </section>
+      }
+
+      <!-- Timeline -->
+      <section class="section">
+        <h4>Timeline</h4>
+        <ol class="timeline">
+          @for (e of o.events; track e.id) {
+            <li>
+              <span class="tl-dot" aria-hidden="true"></span>
+              <div>
+                <strong>{{ statusText(e.status) }}</strong>
+                @if (e.note) { <p>{{ e.note }}</p> }
+                <span class="cell-sub">{{ e.created_at | day: true }}</span>
+              </div>
+            </li>
+          } @empty {
+            <li class="muted">No events yet.</li>
+          }
+        </ol>
+      </section>
+
+      <!-- Admin controls -->
+      <section class="section admin-box" #adminBox id="order-admin" tabindex="-1">
+        <h4>Admin controls</h4>
+
+        <div class="field">
+          <label for="adminNotes">Internal notes</label>
+          <textarea id="adminNotes" class="textarea" placeholder="Only admins see these notes" [value]="notesDraft()" (input)="notesDraft.set($any($event.target).value)"></textarea>
+          <div class="row-end">
+            <button type="button" class="btn btn-sm" [disabled]="!notesDirty() || !!busy()" (click)="saveNotes()">
+              @if (busy() === 'notes') { <ion-spinner name="crescent" /> } Save notes
+            </button>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="dueDate">Due date</label>
+            <input id="dueDate" type="date" class="input" [value]="dueDraft()" (input)="dueDraft.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label for="priority">Priority</label>
+            <select id="priority" class="select" (change)="priorityDraft.set($any($event.target).value)">
+              <option value="normal" [selected]="priorityDraft() === 'normal'">Normal</option>
+              <option value="rush" [selected]="priorityDraft() === 'rush'">Rush</option>
+            </select>
+          </div>
+        </div>
+        <div class="row-end">
+          <button type="button" class="btn btn-sm" [disabled]="!scheduleDirty() || !!busy()" (click)="saveSchedule()">
+            @if (busy() === 'schedule') { <ion-spinner name="crescent" /> } Save schedule
+          </button>
+        </div>
+
+        <div class="divider"></div>
+
+        @if (canAssignPartner()) {
+          <div class="field">
+            <label for="assignPartner">Assign to partner</label>
+            <div class="row-between">
+              <select id="assignPartner" class="select" [value]="partnerDraft()" (change)="partnerDraft.set($any($event.target).value)">
+                <option value="">{{ o.partner ? 'Currently ' + o.partner.name + ' — move to…' : 'Choose a partner…' }}</option>
+                @for (p of partnerChoices(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+              </select>
+              <button type="button" class="btn btn-sm" [disabled]="!partnerDraft() || assigningPartner() || !!busy()" (click)="assignPartner()">
+                @if (assigningPartner()) { <ion-spinner name="crescent" /> } Assign
+              </button>
+            </div>
+            <span class="hint">Only possible while production has not started.</span>
+          </div>
+          <div class="divider"></div>
+        }
+
+        <div class="field">
+          <label for="status">Change status</label>
+          <select id="status" class="select" (change)="statusDraft.set($any($event.target).value)">
+            @for (s of statusOptions; track s.value) {
+              <option [value]="s.value" [selected]="statusDraft() === s.value" [disabled]="statusDisabled(s.value)">{{ s.label }}{{ s.value === o.status ? ' (current)' : '' }}</option>
+            }
+          </select>
+          @if (o.status === 'paid' || o.status === 'at_admin_warehouse' || o.status === 'partner_dispatch' || o.status === 'shipped' || o.status === 'delivered') {
+            <span class="hint">From “Paid” onwards an order can only move forward.</span>
+          }
+        </div>
+        <div class="field">
+          <label for="statusNote">Note for the timeline</label>
+          <input id="statusNote" class="input" placeholder="Optional — shown to the customer if notified" [value]="statusNote()" (input)="statusNote.set($any($event.target).value)" />
+        </div>
+        <div class="row-between">
+          <label class="check"><input type="checkbox" [checked]="notifyCustomer()" (change)="notifyCustomer.set($any($event.target).checked)" /> Notify customer</label>
+          <button type="button" class="btn btn-sm btn-primary" [disabled]="!statusDraft() || statusDraft() === o.status || !!busy()" (click)="changeStatus()">
+            @if (busy() === 'status') { <ion-spinner name="crescent" /> } Update status
+          </button>
+        </div>
+
+        <div class="divider"></div>
+        <div class="row-between">
+          <span class="muted small">{{ o.has_issue ? 'This order is flagged with an issue.' : 'Flag the order if something needs follow-up.' }}</span>
+          <button type="button" class="btn btn-sm btn-ghost" [disabled]="!!busy()" (click)="toggleIssueFlag()">
+            @if (busy() === 'issue') { <ion-spinner name="crescent" /> } {{ o.has_issue ? 'Clear issue flag' : 'Flag issue' }}
+          </button>
+        </div>
+      </section>
+    }
+  </div>
+
+  @if (order(); as o) {
+    <div class="drawer-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
+      <span class="foot-spacer"></span>
+      <a class="btn" [routerLink]="['/admin/messages', o.id]">Open conversation</a>
+      <button type="button" class="btn" (click)="focusAdmin()">Update order</button>
+      @if (canInvoice()) {
+        <a class="btn btn-gold" routerLink="/admin/invoices" [queryParams]="{ order: o.id }">{{ o.invoice ? 'Continue invoice' : 'Build invoice' }}</a>
+      } @else if (o.invoice) {
+        <a class="btn btn-primary" routerLink="/admin/invoices" [queryParams]="{ order: o.id }">View invoice</a>
+      }
+    </div>
+  }
+</aside>

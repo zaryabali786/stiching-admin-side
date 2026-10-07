@@ -1,0 +1,137 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Setup</span>
+      <h1>Price list</h1>
+      <p class="subtitle">Extra charges that are not articles, with what the customer pays and what the partner earns. Only active items appear in the invoice builder.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" (click)="openNew()">+ Add item</button>
+    </div>
+  </header>
+
+  <div class="note">
+    <span class="note-tag">Tip</span>
+    <p><strong>Stitching and accessory items are not managed here.</strong>
+    Set their customer price, partner cost and margin under <a routerLink="/partner/articles">Partner &gt; Catalogue &gt; Articles</a>; the invoice builder suggests those lines from each order's articles. Use this list for other extra charges.</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Category">
+      <button type="button" class="chip" [class.active]="query().category === 'all'" [attr.aria-pressed]="query().category === 'all'" (click)="setCategory('all')">All</button>
+      @for (c of categories; track c.value) {
+        <button type="button" class="chip" [class.active]="query().category === c.value" [attr.aria-pressed]="query().category === c.value" (click)="setCategory(c.value)">{{ c.label }}</button>
+      }
+    </div>
+    <div class="toolbar-end">
+      <app-search-input placeholder="Search items…" [value]="query().search" (search)="onSearch($event)" />
+    </div>
+  </div>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Item</th><th>Category</th><th class="num">Customer price</th><th class="num">Partner cost</th><th class="num">Margin</th><th>In builder</th><th><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>@for (c of [1, 2, 3, 4, 5, 6, 7]; track c) { <td><span class="skeleton"></span></td> }</tr>
+              }
+            } @else {
+              @for (p of list.items(); track p.id) {
+                <tr [class.inactive]="!p.is_active">
+                  <td><span class="cell-main">{{ p.name }}</span><span class="cell-sub">{{ p.unit }}</span></td>
+                  <td class="nowrap"><span class="badge">{{ categoryLabel(p.category) }}</span></td>
+                  <td class="num nowrap"><b>{{ p.customer_price | pkr }}</b></td>
+                  <td class="num nowrap">{{ p.partner_cost | pkr }}</td>
+                  <td class="num nowrap margin" [class.neg]="(p.margin ?? p.customer_price - p.partner_cost) < 0">{{ p.margin ?? p.customer_price - p.partner_cost | pkr }}<span class="cell-sub">{{ marginPct(p) }}%</span></td>
+                  <td class="nowrap">
+                    <button type="button" class="switch" role="switch" [attr.aria-checked]="p.is_active" [class.on]="p.is_active" [disabled]="busyId() === p.id"
+                      [attr.aria-label]="'Show ' + p.name + ' in the invoice builder'" (click)="toggleActive(p)"><span></span></button>
+                    <span class="switch-label" aria-hidden="true">{{ p.is_active ? 'Active' : 'Hidden' }}</span>
+                  </td>
+                  <td class="actions-cell">
+                    <button type="button" class="btn btn-sm" [attr.aria-label]="'Edit ' + p.name" (click)="openEdit(p)">Edit</button>
+                    <button type="button" class="btn btn-sm btn-ghost danger" [disabled]="busyId() === p.id" [attr.aria-label]="'Delete ' + p.name" (click)="remove(p)">
+                      @if (busyId() === p.id) { <ion-spinner name="crescent" /> } Delete
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="7">
+                  <app-empty-state [title]="query().search ? 'No matching items' : query().category === 'all' ? 'No extra charges yet' : 'No items in this category'"
+                    [message]="query().search ? 'Try another name.' : query().category === 'all'
+                      ? 'This list is for extra charges that are not articles. Stitching and accessory items are managed under Partner > Catalogue > Articles, with customer price, partner cost and margin.'
+                      : 'Nothing in this category. Add an extra charge, or choose All.'">
+                    @if (!query().search) {
+                      <button type="button" class="btn btn-sm btn-primary" (click)="openNew()">+ Add item</button>
+                      @if (query().category === 'all') { <a class="btn btn-sm btn-ghost" routerLink="/partner/articles">Go to Articles</a> }
+                    }
+                  </app-empty-state>
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="!saving() && form.set(null)">
+    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="piTitle" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Price list</span>
+          <h3 id="piTitle">{{ f.id ? 'Edit item' : 'Add item' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="form.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="piName">Item name</label>
+          <input id="piName" class="input" required placeholder="e.g. Express handling" [value]="f.name" (input)="patchForm({ name: $any($event.target).value })" />
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="piCat">Category</label>
+            <select id="piCat" class="select" (change)="patchForm({ category: $any($event.target).value })">
+              @for (c of categories; track c.value) { <option [value]="c.value" [selected]="c.value === f.category">{{ c.label }}</option> }
+            </select>
+          </div>
+          <div class="field">
+            <label for="piUnit">Unit</label>
+            <input id="piUnit" class="input" placeholder="per article" [value]="f.unit" (input)="patchForm({ unit: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="piPartner">Partner cost (PKR)</label>
+            <input id="piPartner" class="input" type="number" min="0" step="1" [value]="f.partner_cost" (input)="patchForm({ partner_cost: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="piCustomer">Customer price (PKR)</label>
+            <input id="piCustomer" class="input" type="number" min="0" step="1" [value]="f.customer_price" (input)="patchForm({ customer_price: $any($event.target).value })" />
+          </div>
+        </div>
+        @if (formMargin(); as m) {
+          <p class="margin-line" [class.neg]="m.amount < 0">Margin: <b>{{ m.amount | pkr }}</b> ({{ m.pct }}%)</p>
+        }
+        <label class="check"><input type="checkbox" [checked]="f.is_active" (change)="patchForm({ is_active: $any($event.target).checked })" /> Active — available in the invoice builder</label>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="form.set(null)">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="!formValid() || saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add item' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}
