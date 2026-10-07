@@ -104,7 +104,9 @@
           }
         </header>
       }
-      @if (activeScope() === 'general') {
+      @if (activeScope() === 'general' && !canGeneral()) {
+        <div class="scope-title"><span>General chats are handled by the admin. Open one of the article chats.</span></div>
+      } @else if (activeScope() === 'general') {
         <div class="scope-title"><span>Chat: <strong>General</strong> · about the order as a whole</span></div>
       } @else if (activeArticle(); as a) {
         <div class="scope-title">
@@ -112,7 +114,9 @@
           <span>Chat about <strong>article {{ a.line_no ?? '' }} · {{ a.title }}</strong></span>
         </div>
       }
-      @if (panelReady()) {
+      @if (activeScope() === 'general' && !canGeneral()) {
+        <div class="panel panel-wait"></div>
+      } @else if (panelReady()) {
         <app-chat-panel class="panel" [orderId]="id" [unitId]="activeScope()" (activity)="refresh$.next()" />
       } @else {
         <div class="panel panel-wait"><span class="skeleton" style="height: 44px; width: 60%; margin: 16px"></span></div>

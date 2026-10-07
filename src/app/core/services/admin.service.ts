@@ -178,6 +178,8 @@ export interface Invoice {
   total_pkr: number;
   total_foreign: number;
   partner_total_pkr: number;
+  /** The shipping item picked from the shipping price list (its price is copied onto the shipping line). */
+  shipping_rate_id?: string | null;
   notes: string | null;
   issued_at: string | null;
   paid_at: string | null;
@@ -479,6 +481,8 @@ export interface InvoiceDraft {
   currency: string;
   fx_rate: number;
   notes: string | null;
+  /** Shipping item from the price list; the server prices it. null clears a previous choice, undefined leaves it. */
+  shipping_rate_id?: string | null;
   lines: InvoiceLine[];
 }
 

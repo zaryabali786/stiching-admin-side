@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, HostListener, inject, input, model, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, inject, input, model, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
@@ -17,7 +17,8 @@ let nextId = 0;
 /**
  * Searchable dropdown of the managed couriers (Catalogue > Couriers). Search and paging run on the server.
  *   <app-courier-select [(selected)]="courier" />
- * The list opens inline (no floating layer), so it works inside modals and drawers without being clipped.
+ * The list floats above the page, anchored under the button (it is moved to <body> while open), so it never changes the
+ * height of a modal or drawer and is never clipped by their scroll areas.
  */
 @Component({
   selector: 'app-courier-select',
@@ -25,7 +26,7 @@ let nextId = 0;
   imports: [RouterLink, IonSpinner],
   template: `
     <div class="cs">
-      <div class="cs-row">
+      <div class="cs-row" #anchor>
         <button type="button" class="cs-btn" [class.placeholder]="!selected()" [attr.aria-expanded]="open()" [attr.aria-controls]="uid + '-list'" aria-haspopup="listbox"
           [disabled]="disabled()" (click)="toggle()" [attr.aria-label]="label() + ': ' + (selected()?.name || 'none chosen')">
           <span class="cs-text">{{ selected()?.name || placeholder() }}</span>
@@ -92,9 +93,9 @@ let nextId = 0;
     .chev { flex-shrink: 0; transition: transform .15s; } .chev.up { transform: rotate(180deg); }
     .cs-clear { flex-shrink: 0; width: 40px; height: 40px; border: none; border-radius: 50%; background: transparent; color: var(--c-muted); font-size: 20px; cursor: pointer; }
     .cs-clear:hover { background: var(--c-line-soft); } .cs-clear:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-    .cs-panel { margin-top: 6px; border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .cs-panel { border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); box-shadow: var(--shadow-lg); overflow: hidden; }
     .cs-search { padding: 8px; border-bottom: 1px solid var(--c-line-soft); }
-    .cs-list { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; }
+    .cs-list { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
     .cs-opt { width: 100%; min-height: 40px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 6px 10px; border: none; border-radius: 8px; background: transparent; font: inherit; font-size: 14px; color: var(--c-ink); text-align: left; cursor: pointer; }
     .cs-opt:hover { background: var(--c-bg-soft); } .cs-opt:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--c-green); }
     .cs-opt.on { background: var(--c-green-soft); font-weight: 600; }
@@ -105,7 +106,7 @@ let nextId = 0;
     .cs-more { display: flex; justify-content: center; padding: 6px 8px 10px; }
   `],
 })
-export class CourierSelectComponent {
+export class CourierSelectComponent implements OnDestroy {
   /** The chosen courier (two-way). */
   readonly selected = model<CourierRef | null>(null);
   readonly label = input('Courier');
@@ -134,20 +135,68 @@ export class CourierSelectComponent {
     });
   }
 
+  private panelEl: HTMLElement | null = null;
+  private readonly reposition = () => this.place();
+
   toggle(): void {
     if (this.open()) return this.close();
     this.open.set(true);
     if (!this.items().length) this.load(true);
-    setTimeout(() => (this.host.nativeElement as HTMLElement).querySelector<HTMLInputElement>('input[type=search]')?.focus(), 30);
+    // once the panel is rendered: lift it out of the modal (so it cannot stretch or be clipped by it) and anchor it
+    setTimeout(() => {
+      this.panelEl = (this.host.nativeElement as HTMLElement).querySelector<HTMLElement>('.cs-panel');
+      if (this.panelEl) {
+        document.body.appendChild(this.panelEl);
+        this.place();
+        window.addEventListener('resize', this.reposition);
+        window.addEventListener('scroll', this.reposition, true);
+      }
+      this.panelEl?.querySelector<HTMLInputElement>('input[type=search]')?.focus();
+    }, 0);
   }
 
   close(): void {
     this.open.set(false);
+    this.release();
+  }
+
+  ngOnDestroy(): void {
+    this.release();
+  }
+
+  private release(): void {
+    window.removeEventListener('resize', this.reposition);
+    window.removeEventListener('scroll', this.reposition, true);
+    this.panelEl?.remove();
+    this.panelEl = null;
+  }
+
+  /** Under the button, or above it when there is not enough room below. */
+  private place(): void {
+    const panel = this.panelEl;
+    const anchor = (this.host.nativeElement as HTMLElement).querySelector<HTMLElement>('.cs-row');
+    if (!panel || !anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    const above = r.top;
+    const flip = below < 320 && above > below;
+    Object.assign(panel.style, {
+      position: 'fixed',
+      zIndex: '2000',
+      left: `${r.left}px`,
+      width: `${r.width}px`,
+      top: flip ? 'auto' : `${r.bottom + 6}px`,
+      bottom: flip ? `${window.innerHeight - r.top + 6}px` : 'auto',
+      maxHeight: `${Math.max(180, (flip ? above : below) - 16)}px`,
+      display: 'flex',
+      flexDirection: 'column',
+    });
   }
 
   @HostListener('document:click', ['$event'])
   onDocClick(e: MouseEvent): void {
-    if (this.open() && !(this.host.nativeElement as HTMLElement).contains(e.target as Node)) this.close();
+    const t = e.target as Node;
+    if (this.open() && !(this.host.nativeElement as HTMLElement).contains(t) && !this.panelEl?.contains(t)) this.close();
   }
 
   onSearch(v: string): void {

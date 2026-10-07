@@ -94,6 +94,8 @@ export class PartnerProductionPage implements OnInit {
   /** Cards with a request in flight (drag disabled, buttons spinning). */
   readonly busy = signal<ReadonlySet<string>>(new Set());
   readonly dragging = signal(false);
+  /** Dragging cards between columns is switched off for now (set to false to bring it back). */
+  readonly dragDisabled = true;
 
   readonly totalArticles = computed(() => this.columns().reduce((sum, c) => sum + (c.total || 0), 0));
   readonly hasFilters = computed(() => {

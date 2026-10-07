@@ -313,6 +313,8 @@ export interface WarehouseOrder {
     total_pkr: number | null;
     currency: string | null;
     total_foreign: number | null;
+    /** Only kind + label: the shipping line is named "<courier> · <zone>" (the item chosen when the invoice was built). */
+    lines?: { kind: string; label: string }[];
   } | null;
   transfer: { id: string; code: string; status: TransferStatus } | null;
   shipment: { id: string; status: string; courier: string | null; tracking_number: string | null; shipped_from: string } | null;

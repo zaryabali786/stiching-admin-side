@@ -53,7 +53,7 @@ export class ChatSocketService {
 
     // Live counters: unread badge and bell refresh without waiting for their polls
     this.on('inbox:update').subscribe(() => this.badges.refresh());
-    this.on('notification:new').subscribe(() => this.notifications.refresh());
+    this.on('notification:new').subscribe((p) => this.notifications.pushLive(p?.notification));
   }
 
   /** Typed stream of one server event. */

@@ -79,6 +79,8 @@ export class InvoiceBuilderComponent {
   readonly dirty = signal(false);
   readonly busy = signal<'save' | 'issue' | 'reopen' | 'paid' | null>(null);
   readonly picker = signal<'price' | 'shipping' | null>(null);
+  /** The shipping item chosen from the shipping price list ('' = none / custom line). */
+  readonly shippingRateId = signal<string>('');
   readonly pickerSearch = signal('');
   readonly pickerQty = signal(1);
   readonly showPayment = signal(false);
@@ -105,11 +107,15 @@ export class InvoiceBuilderComponent {
     const subtotal = round2(lines.filter((l) => l.kind !== 'discount').reduce((a, l) => a + num(l.customer_amount), 0));
     const discount = round2(lines.filter((l) => l.kind === 'discount').reduce((a, l) => a + num(l.customer_amount), 0));
     const total = round2(Math.max(0, subtotal - discount));
+    // shipping charges = the shipping line plus duties (DDP); items = everything else that is charged
+    const shipping = round2(lines.filter((l) => l.kind === 'shipping' || l.kind === 'duties').reduce((a, l) => a + num(l.customer_amount), 0));
     const payout = round2(lines.filter((l) => l.kind !== 'discount').reduce((a, l) => a + num(l.partner_amount), 0));
     const margin = round2(total - payout);
     const fx = this.currency() === 'PKR' ? 1 : num(this.fxRate());
     return {
       subtotal,
+      shipping,
+      items: round2(subtotal - shipping),
       discount,
       total,
       payout,
@@ -176,6 +182,9 @@ export class InvoiceBuilderComponent {
   // ── Line editing ──
 
   updateLine(key: number, patch: Partial<EditLine>): void {
+    // typing over the shipping line's price or name makes it a custom charge: it no longer follows the price list
+    const line = this.lines().find((l) => l.key === key);
+    if (line?.kind === 'shipping' && ('customer_amount' in patch || 'label' in patch || 'kind' in patch)) this.shippingRateId.set('');
     this.lines.update((list) => list.map((l) => (l.key === key ? { ...l, ...patch } : l)));
     this.dirty.set(true);
   }
@@ -199,6 +208,7 @@ export class InvoiceBuilderComponent {
   }
 
   removeLine(line: EditLine): void {
+    if (line.kind === 'shipping') this.shippingRateId.set('');
     this.lines.update((list) => list.filter((l) => l.key !== line.key));
     this.dirty.set(true);
   }
@@ -250,9 +260,25 @@ export class InvoiceBuilderComponent {
     if (opt.ddp_available && num(opt.ddp_fee) > 0) {
       this.push({ kind: 'duties', label: 'Duties paid (DDP)', description: 'No charges at the door', quantity: 1, customer_amount: num(opt.ddp_fee), partner_amount: 0 });
     }
+    this.shippingRateId.set(opt.id);
     this.picker.set(null);
     this.ui.success(hadShipping ? `Shipping replaced with ${opt.courier}.` : `Added ${opt.courier} shipping.`);
   }
+
+  /** The "Shipping" field: pick an item from the shipping price list (its price is added), or none. */
+  chooseShipping(id: string): void {
+    if (!id) {
+      this.lines.update((list) => list.filter((l) => l.kind !== 'shipping' && l.kind !== 'duties'));
+      this.shippingRateId.set('');
+      this.dirty.set(true);
+      return;
+    }
+    const opt = this.data()?.shippingOptions.find((s) => s.id === id);
+    if (opt) this.addShipping(opt);
+  }
+
+  /** What the "Shipping" field currently shows when the saved rate is no longer offered (e.g. switched off). */
+  readonly shippingLine = computed(() => this.lines().find((l) => l.kind === 'shipping') ?? null);
 
   setCurrency(cur: string): void {
     this.currency.set(cur);
@@ -386,6 +412,7 @@ export class InvoiceBuilderComponent {
           currency: this.currency(),
           fx_rate: this.currency() === 'PKR' ? 1 : num(this.fxRate()),
           notes: this.notes().trim() || null,
+          shipping_rate_id: this.shippingRateId() || (this.invoice()?.shipping_rate_id ? null : undefined),
           lines: this.lines().map((l) => ({
             kind: l.kind,
             label: l.label.trim(),
@@ -454,6 +481,8 @@ export class InvoiceBuilderComponent {
     this.currency.set(cur);
     this.fxRate.set(cur === 'PKR' ? '1' : d.invoice?.fx_rate ? String(d.invoice.fx_rate) : d.suggestedFxRate ? String(d.suggestedFxRate) : '');
     this.notes.set(d.invoice?.notes || '');
+    // saved choice, or (new invoice) the recommended rate the suggested lines were built from
+    this.shippingRateId.set(d.invoice ? d.invoice.shipping_rate_id ?? '' : d.shippingOptions.find((s) => s.recommended)?.id ?? '');
     this.dirty.set(false);
     this.picker.set(null);
     this.showPayment.set(false);

@@ -144,6 +144,9 @@
                           @if (u.partner) { {{ u.partner.name }} · }
                           Managed under <a class="link" routerLink="/admin/partners">Partners</a>
                         </span>
+                        <button type="button" class="btn btn-sm" [disabled]="u.id === me() || busyId() === u.id" (click)="makeAdmin(u)">
+                          @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Make admin
+                        </button>
                       } @else {
                         <select #roleSel class="select sm" [disabled]="u.id === me() || busyId() === u.id" [attr.aria-label]="'Role for ' + (u.full_name || u.email)"
                           [title]="u.id === me() ? 'You cannot change your own role' : ''" (change)="changeRole(u, roleSel)">

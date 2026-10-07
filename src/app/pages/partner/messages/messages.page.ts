@@ -5,6 +5,7 @@ import { IonSpinner } from '@ionic/angular';
 import { Subject, debounceTime, distinctUntilChanged, map } from 'rxjs';
 import { Conversation, ConversationChat, ConversationHeader, ConversationScope, GENERAL_SCOPE, OrderConversation } from '../../../core/models/chat.models';
 import { ApiService, apiErrorMessage } from '../../../core/services/api.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { ChatSocketService } from '../../../core/services/chat-socket.service';
 import { LanguageService } from '../../../core/services/language.service';
 import { TimeAgoPipe } from '../../../shared/pipes';
@@ -52,6 +53,9 @@ export class MessagesPage implements OnInit {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private socket = inject(ChatSocketService);
+  private auth = inject(AuthService);
+  /** General chats (about the order itself) are for the admin unless the admin enabled them for this partner and user. */
+  readonly canGeneral = computed(() => this.auth.isAdmin() || this.auth.can('general_messages.view'));
   readonly lang = inject(LanguageService);
 
   readonly isAdminPortal = this.router.url.startsWith('/admin');
@@ -109,6 +113,22 @@ export class MessagesPage implements OnInit {
   });
 
   constructor() {
+    // No General permission: an order opened without an article goes straight to its first article chat
+    effect(() => {
+      const id = this.activeId();
+      const scope = this.activeScope();
+      untracked(() => {
+        if (!id || scope !== GENERAL_SCOPE || this.canGeneral()) return;
+        this.api.get<{ scopes: ConversationScope[] }>(`/partner/orders/${id}/conversation`).subscribe({
+          next: (r) => {
+            const first = r.scopes.find((s) => s.unit_id);
+            if (first && this.activeId() === id) void this.router.navigate([], { relativeTo: this.route, queryParams: { unit: first.unit_id }, replaceUrl: true });
+          },
+          error: () => undefined,
+        });
+      });
+    });
+
     // An article chat opened by link that the inbox row does not list yet: fetch the article titles once.
     effect(() => {
       const id = this.activeId();

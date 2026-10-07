@@ -10,6 +10,7 @@ import { PageMeta } from '../../../core/models/api.models';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { BadgeService } from '../../../core/services/badge.service';
 import { LanguageService } from '../../../core/services/language.service';
+import { CatalogueService } from '../../../core/services/catalogue.service';
 import { DispatchRoute, PartnerService, Transfer, WarehouseMeta, WarehouseOrder, WarehouseTab } from '../../../core/services/partner.service';
 import { UiService } from '../../../core/services/ui.service';
 import { DayPipe, HumanizePipe, PkrPipe } from '../../../shared/pipes';
@@ -41,6 +42,7 @@ export class PartnerWarehousePage implements OnInit {
   readonly canEdit = computed(() => this.auth.can('warehouse.update'));
   private partner = inject(PartnerService);
   private ui = inject(UiService);
+  private catalogueApi = inject(CatalogueService);
   private badges = inject(BadgeService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -290,6 +292,23 @@ export class PartnerWarehousePage implements OnInit {
 
   openShip(o: WarehouseOrder): void {
     this.shipForm.set({ order: o, courier: null, tracking: o.shipment?.tracking_number || '' });
+    this.preselectCourier(o);
+  }
+
+  /** First time the form opens: pick the courier that was chosen in the invoice's shipping line (the partner can still change it). */
+  private preselectCourier(o: WarehouseOrder): void {
+    const line = o.invoice?.lines?.find((l) => l.kind === 'shipping');
+    const name = line?.label.split(' · ')[0].trim();
+    if (!name) return;
+    this.catalogueApi.listLookup('couriers', { status: 'active', search: name, page: 1, limit: 10 }).subscribe({
+      next: ({ items }) => {
+        const match = items.find((c) => c.name.trim().toLowerCase() === name.toLowerCase());
+        const f = this.shipForm();
+        // only if the same order is still open and nobody has chosen a courier meanwhile
+        if (match && f && f.order.id === o.id && !f.courier) this.patchShip({ courier: { id: match.id, name: match.name } });
+      },
+      error: () => undefined,
+    });
   }
 
   patchShip(patch: { courier?: CourierRef | null; tracking?: string }): void {

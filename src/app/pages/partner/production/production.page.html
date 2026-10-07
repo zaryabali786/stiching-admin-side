@@ -5,7 +5,7 @@
       <p class="subtitle">
         {{ todayLabel }} · <b>{{ totalArticles() }}</b> {{ totalArticles() === 1 ? 'article' : 'articles' }}
         @if (hasFilters()) { <span class="filtered">(filtered)</span> }
-        <span *can="'production.update'" class="sub-hint"> · drag a card to the next column, or scan its job card</span>
+        <span *can="'production.update'" class="sub-hint"> · open a card to move it, or scan its job card</span>
       </p>
     </div>
     <div class="actions">
@@ -116,7 +116,7 @@
               class="col-body"
               #scroller
               cdkDropList
-              [cdkDropListDisabled]="!canEdit()"
+              [cdkDropListDisabled]="dragDisabled"
               [id]="'col-' + col.stage"
               [cdkDropListData]="col.stage"
               (cdkDropListDropped)="drop($event)">
@@ -129,7 +129,7 @@
                   [class.read-only]="!canEdit()"
                   cdkDrag
                   [cdkDragData]="card"
-                  [cdkDragDisabled]="isBusy(card.id) || !canEdit()"
+                  [cdkDragDisabled]="dragDisabled || isBusy(card.id) || !canEdit()"
                   [cdkDragStartDelay]="dragDelay"
                   (cdkDragStarted)="onDragStart()"
                   (cdkDragEnded)="onDragEnd()"
@@ -212,7 +212,7 @@
               @if (!col.items.length && !col.loadingMore) {
                 <div class="drop-hint">
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M11 4h2v9.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V4ZM5 19h14v2H5v-2Z"/></svg>
-                  {{ canEdit() ? lang.t('Drop cards here', 'کارڈ یہاں چھوڑیں') : lang.t('No cards', 'کوئی کارڈ نہیں') }}
+                  {{ canEdit() && !dragDisabled ? lang.t('Drop cards here', 'کارڈ یہاں چھوڑیں') : lang.t('No cards', 'کوئی کارڈ نہیں') }}
                 </div>
               }
 

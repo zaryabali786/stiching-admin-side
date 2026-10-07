@@ -161,7 +161,8 @@ export interface ServerEvents {
   'message:read': ReadPayload;
   typing: TypingPayload;
   'inbox:update': InboxPayload;
-  'notification:new': Record<string, never>;
+  /** The saved notification (null when the server could not attach it: then the bell just refreshes). */
+  'notification:new': { notification?: import('./api.models').AppNotification | null };
 }
 
 export type SendAck = { ok: true; message: ChatMessage; duplicate?: boolean } | { ok: false; error: string; status?: number };

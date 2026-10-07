@@ -186,6 +186,29 @@ export class AdminSettingsPage implements OnInit {
     });
   }
 
+  /** Promote a partner user (for example someone who signed up with Google) to admin. They leave their partner. */
+  async makeAdmin(user: AdminUser): Promise<void> {
+    const ok = await this.ui.confirm({
+      title: `Make ${user.full_name || user.email} an admin?`,
+      message: 'They will be able to see all orders, money and settings, and change other people’s roles. They leave their partner and lose its partner permissions.',
+      confirmText: 'Make admin',
+      danger: true,
+    });
+    if (!ok) return;
+    this.busyId.set(user.id);
+    this.admin.setUserRole(user.id, 'admin').subscribe({
+      next: (res) => {
+        this.busyId.set(null);
+        this.ui.success(res.message || 'Role updated.');
+        this.list.reload();
+      },
+      error: (err) => {
+        this.busyId.set(null);
+        this.ui.error(err);
+      },
+    });
+  }
+
   async toggleActive(user: AdminUser): Promise<void> {
     const activate = !user.is_active;
     const ok = await this.ui.confirm({

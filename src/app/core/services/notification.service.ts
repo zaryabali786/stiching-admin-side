@@ -4,6 +4,7 @@ import { Subscription, interval, startWith, switchMap, catchError, of } from 'rx
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import { AppNotification } from '../models/api.models';
+import { UiService } from './ui.service';
 
 const POLL_MS = 30_000;
 const PAGE_SIZE = 12;
@@ -16,6 +17,7 @@ export class NotificationService {
   private api = inject(ApiService);
   private auth = inject(AuthService);
   private router = inject(Router);
+  private ui = inject(UiService);
 
   readonly items = signal<AppNotification[]>([]);
   readonly unreadCount = signal(0);
@@ -96,6 +98,18 @@ export class NotificationService {
     const [path, query] = n.link.split('?');
     const queryParams = Object.fromEntries(new URLSearchParams(query || ''));
     this.router.navigate([path], { queryParams });
+  }
+
+  /**
+   * A notification arrived over the websocket: put it at the top of the list right away (when it is not there yet),
+   * show a short toast, and let the server confirm the unread count.
+   */
+  pushLive(n: AppNotification | null | undefined): void {
+    if (n?.id) {
+      this.items.update((list) => (list.some((x) => x.id === n.id) ? list : [n, ...list]));
+      this.ui.info(n.title);
+    }
+    this.refresh();
   }
 
   /** The socket says something new arrived: refresh the bell now instead of waiting for the poll. */

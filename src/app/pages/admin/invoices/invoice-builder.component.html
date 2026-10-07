@@ -93,6 +93,16 @@
             </div>
 
             @if (canEdit()) {
+              <div class="field shipping-field">
+                <label for="invShipping">Shipping</label>
+                <select id="invShipping" class="select" [value]="shippingRateId()" (change)="chooseShipping($any($event.target).value)">
+                  <option value="" [selected]="!shippingRateId()">{{ shippingLine() ? 'Custom shipping line' : 'No shipping' }}</option>
+                  @for (s of d.shippingOptions; track s.id) {
+                    <option [value]="s.id" [selected]="s.id === shippingRateId()">{{ s.courier }} · {{ s.zone }} ({{ s.service | humanize }}) — {{ s.price_pkr | pkr }}</option>
+                  }
+                </select>
+                <span class="hint">From the shipping price list for {{ d.order.destination_country || 'this destination' }}. The price is added to the invoice and saved with it; later price-list changes do not change this invoice.</span>
+              </div>
               <div class="add-row" role="group" aria-label="Add a charge">
                 <button type="button" class="btn btn-sm" [class.btn-primary]="picker() === 'price'" [attr.aria-expanded]="picker() === 'price'" (click)="openPicker('price')">+ From price list</button>
                 <button type="button" class="btn btn-sm" [class.btn-primary]="picker() === 'shipping'" [attr.aria-expanded]="picker() === 'shipping'" (click)="openPicker('shipping')">+ Shipping</button>
@@ -163,6 +173,8 @@
               }
             </div>
             <div class="t-rows">
+              <div class="t-row"><span>Items</span><b>{{ totals().items | pkr }}</b></div>
+              <div class="t-row"><span>Shipping charges</span><b>{{ totals().shipping | pkr }}</b></div>
               <div class="t-row"><span>Subtotal</span><b>{{ totals().subtotal | pkr }}</b></div>
               @if (totals().discount) { <div class="t-row neg"><span>Discount</span><b>− {{ totals().discount | pkr }}</b></div> }
             </div>
@@ -291,6 +303,8 @@
           }
         </tbody>
         <tfoot>
+          <tr><td colspan="2" class="r">Items</td><td class="r">{{ totals().items | pkr }}</td></tr>
+          <tr><td colspan="2" class="r">Shipping charges</td><td class="r">{{ totals().shipping | pkr }}</td></tr>
           <tr><td colspan="2" class="r">Subtotal</td><td class="r">{{ inv.subtotal_pkr | pkr }}</td></tr>
           @if (inv.discount_pkr) { <tr><td colspan="2" class="r">Discount</td><td class="r">− {{ inv.discount_pkr | pkr }}</td></tr> }
           <tr class="grand"><td colspan="2" class="r">Total</td><td class="r">{{ inv.total_pkr | pkr }}</td></tr>
