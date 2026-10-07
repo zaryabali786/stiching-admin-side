@@ -23,6 +23,7 @@
           Partner
           <select class="select" aria-label="Filter by partner" (change)="setPartner($any($event.target).value)">
             <option value="" [selected]="!query().partner">All partners</option>
+            <option value="none" [selected]="query().partner === 'none'">Unassigned (no partner yet)</option>
             @for (p of partners(); track p.id) { <option [value]="p.id" [selected]="p.id === query().partner">{{ p.name }}</option> }
           </select>
         </label>
@@ -83,7 +84,7 @@
                   </td>
                   <td>{{ o.destination_city || '—' }}@if (o.destination_country) {<span class="cell-sub">{{ o.destination_country }}</span>}</td>
                   <td>{{ o.brand || '—' }}</td>
-                  <td>@if (o.partner) { <span class="badge">{{ o.partner.name }}</span> } @else { — }</td>
+                  <td>@if (o.partner) { <span class="badge">{{ o.partner.name }}</span> } @else { <span class="badge amber">Unassigned</span> }</td>
                   <td class="num">{{ o.units_count }}</td>
                   <td class="nowrap">{{ o.created_at | day }}</td>
                   <td class="nowrap">

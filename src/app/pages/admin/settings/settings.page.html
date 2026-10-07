@@ -9,6 +9,7 @@
 
   <div class="tabs" role="tablist" aria-label="Settings sections">
     <button type="button" role="tab" [class.active]="query().tab === 'team'" [attr.aria-selected]="query().tab === 'team'" (click)="setTab('team')">Team &amp; roles</button>
+    <button type="button" role="tab" [class.active]="query().tab === 'orders'" [attr.aria-selected]="query().tab === 'orders'" (click)="setTab('orders')">New orders</button>
     <button type="button" role="tab" [class.active]="query().tab === 'account'" [attr.aria-selected]="query().tab === 'account'" (click)="setTab('account')">Account</button>
   </div>
 
@@ -66,6 +67,41 @@
         </section>
       </div>
     }
+  } @else if (query().tab === 'orders') {
+    <!-- ═══ New orders: which partner receives them ═══ -->
+    <section class="card">
+      <h3 class="card-title">Who receives a new order?</h3>
+      <p class="muted">Choose what happens when a customer places an order. You can always move an order to another partner before work on it starts (Orders, open the order, Assign to partner).</p>
+      @if (assignmentError()) {
+        <p class="form-error" role="alert">{{ assignmentError() }} <button type="button" class="btn btn-sm" (click)="loadAssignment()">Retry</button></p>
+      } @else if (assignment(); as a) {
+        <div class="mode-options" role="radiogroup" aria-label="Order assignment">
+          <label class="mode-option" [class.active]="a.mode === 'auto'">
+            <input type="radio" name="assignMode" [checked]="a.mode === 'auto'" [disabled]="assignmentSaving()" (change)="setAssignmentMode('auto')" />
+            <span>
+              <strong>Automatic</strong>
+              <span class="muted">The partner with the lowest load gets it: open orders compared with the daily capacity of their team. Ties go to the partner with fewer open orders.</span>
+            </span>
+          </label>
+          <label class="mode-option" [class.active]="a.mode === 'manual'">
+            <input type="radio" name="assignMode" [checked]="a.mode === 'manual'" [disabled]="assignmentSaving()" (change)="setAssignmentMode('manual')" />
+            <span>
+              <strong>Manual</strong>
+              <span class="muted">The order stays <b>Unassigned</b> and no partner can see it. You get a notification and choose the partner yourself.</span>
+            </span>
+          </label>
+        </div>
+        @if (a.unassigned_orders) {
+          <p class="notice">
+            {{ a.unassigned_orders }} open order{{ a.unassigned_orders === 1 ? ' is' : 's are' }} waiting for a partner.
+            <a routerLink="/admin/orders" [queryParams]="{ partner_id: 'none' }">Show them</a>
+          </p>
+        }
+        <p class="muted small">The setting applies to orders placed from now on; existing orders stay where they are. Partners that are switched off, or that do not have the Receiving module, are never chosen automatically.</p>
+      } @else {
+        <span class="skeleton" style="height: 90px; display: block"></span>
+      }
+    </section>
   } @else {
     <!-- ═══ Team & roles ═══ -->
     <div class="toolbar">

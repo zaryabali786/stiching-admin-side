@@ -72,6 +72,14 @@ export interface AdminOrderRow {
   units_count: number;
 }
 
+export type OrderAssignmentMode = 'auto' | 'manual';
+
+export interface OrderAssignment {
+  mode: OrderAssignmentMode;
+  /** Open orders that no partner has been given yet. */
+  unassigned_orders: number;
+}
+
 export interface PartnerOption {
   id: string;
   name: string;
@@ -631,6 +639,15 @@ export class AdminService {
   /** Move an order that has not started production to another partner. */
   assignOrderPartner(id: string, partnerId: string): Observable<ApiResult<unknown>> {
     return this.send<unknown>('POST', `/admin/orders/${id}/partner`, { partner_id: partnerId });
+  }
+
+  /** How new orders get their partner: 'auto' (least busy partner) or 'manual' (unassigned until the admin chooses). */
+  getOrderAssignment(): Observable<OrderAssignment> {
+    return this.api.get<OrderAssignment>('/admin/settings/order-assignment');
+  }
+
+  setOrderAssignment(mode: OrderAssignmentMode): Observable<ApiResult<OrderAssignment>> {
+    return this.send<OrderAssignment>('PUT', '/admin/settings/order-assignment', { mode });
   }
 
   /** Partners for the order filter and the "assign to partner" picker. */

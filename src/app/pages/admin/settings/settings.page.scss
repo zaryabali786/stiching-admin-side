@@ -44,3 +44,14 @@ tr.inactive .cell-main { color: var(--c-muted); }
 
 .who { margin-bottom: 18px; }
 .row-end { display: flex; justify-content: flex-end; }
+
+.mode-options { display: grid; gap: 10px; margin: 14px 0; }
+.mode-option {
+  display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px;
+  border: 1px solid var(--c-border, #e5e7eb); border-radius: 12px; cursor: pointer; background: var(--c-surface);
+  strong { display: block; margin-bottom: 2px; }
+  .muted { display: block; }
+  input { margin-top: 4px; }
+  &.active { border-color: var(--c-green); box-shadow: var(--focus-ring); }
+}
+.notice { padding: 10px 14px; border-radius: 10px; background: #fff7e0; border: 1px solid #f0d58a; }

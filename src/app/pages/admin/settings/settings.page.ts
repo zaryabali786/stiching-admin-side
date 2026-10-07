@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { distinctUntilChanged, filter, map } from 'rxjs';
-import { AdminService, AdminUser, UserRoleFilter } from '../../../core/services/admin.service';
+import { AdminService, AdminUser, OrderAssignment, OrderAssignmentMode, UserRoleFilter } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { UiService } from '../../../core/services/ui.service';
 import { Role } from '../../../core/models/api.models';
@@ -13,9 +13,9 @@ import { PaginationComponent } from '../../../shared/components/pagination.compo
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 
-type SettingsTab = 'team' | 'account';
+type SettingsTab = 'team' | 'orders' | 'account';
 type TeamRole = UserRoleFilter;
-const TABS: readonly SettingsTab[] = ['team', 'account'];
+const TABS: readonly SettingsTab[] = ['team', 'orders', 'account'];
 const TEAM_ROLES: readonly TeamRole[] = ['staff', 'admin', 'partner_staff', 'customer'];
 
 interface SettingsQuery {
@@ -58,6 +58,11 @@ export class AdminSettingsPage implements OnInit {
   readonly query = signal<SettingsQuery>({ tab: 'team', role: 'staff', search: '', page: 1 });
   readonly list = new PagedList<AdminUser>();
   readonly busyId = signal<string | null>(null);
+
+  // ── Orders: who receives a new order ──
+  readonly assignment = signal<OrderAssignment | null>(null);
+  readonly assignmentError = signal<string | null>(null);
+  readonly assignmentSaving = signal(false);
   readonly me = computed(() => this.auth.user()?.id ?? null);
 
   // Account
@@ -81,6 +86,7 @@ export class AdminSettingsPage implements OnInit {
   readonly pwValid = computed(() => !!this.currentPw() && this.newPw().length >= 8 && this.newPw() === this.confirmPw());
 
   ngOnInit(): void {
+    this.loadAssignment();
     const q$ = this.route.queryParamMap.pipe(
       map((p): SettingsQuery => ({
         tab: oneOf(p.get('tab'), TABS, 'team'),
@@ -101,6 +107,30 @@ export class AdminSettingsPage implements OnInit {
     const u = this.auth.user();
     this.fullName.set(u?.full_name || '');
     this.phone.set(u?.phone || '');
+  }
+
+  loadAssignment(): void {
+    this.assignmentError.set(null);
+    this.admin.getOrderAssignment().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (a) => this.assignment.set(a),
+      error: () => this.assignmentError.set('Could not load this setting.'),
+    });
+  }
+
+  setAssignmentMode(mode: OrderAssignmentMode): void {
+    if (this.assignmentSaving() || this.assignment()?.mode === mode) return;
+    this.assignmentSaving.set(true);
+    this.admin.setOrderAssignment(mode).subscribe({
+      next: (r) => {
+        this.assignmentSaving.set(false);
+        this.assignment.set(r.data);
+        this.ui.success(r.message);
+      },
+      error: (e) => {
+        this.assignmentSaving.set(false);
+        this.ui.error(e);
+      },
+    });
   }
 
   setTab(tab: SettingsTab): void {
