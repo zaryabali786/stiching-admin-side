@@ -44,6 +44,27 @@ export interface AdminOverview {
   needsAction: NeedsActionItem[];
 }
 
+// ── Customizable dashboard ──
+export interface DashPoint { label: string; value: number }
+export interface DashboardData {
+  days: number;
+  kpis: Record<string, number | null> & { ordersChangePct: number | null; revenueChangePct: number | null };
+  ordersTrend: DashPoint[];
+  revenueTrend: DashPoint[];
+  ordersPerMonth: { month: string; international: number; pakistan: number }[];
+  signupsPerMonth: DashPoint[];
+  ordersByStatus: { key: string; label: string; value: number }[];
+  partnerLoad: { name: string; value: number }[];
+  topBrands: DashPoint[];
+  topCountries: DashPoint[];
+  chargeTypes: DashPoint[];
+  statusMix: DashPoint[];
+  recentOrders: { id: string; reference: string; brand: string | null; customer_name: string | null; status: string; created_at: string; destination_country: string | null }[];
+  needsAction: { id: string; tag: string; tone: string; code: string; title: string; subtext: string; link: string; queryParams: Record<string, string> }[];
+}
+export type DashSize = 's' | 'm' | 'l' | 'xl';
+export interface DashWidget { id: string; type: string; size: DashSize }
+
 // ── Orders ──
 export type OrderGroup = 'all' | 'awaiting_parcel' | 'production' | 'invoice' | 'payment' | 'warehouse' | 'shipped' | 'issues' | 'cancelled';
 export type OrderCounts = Partial<Record<OrderGroup, number>>;
@@ -440,6 +461,81 @@ export interface ShippingOption extends ShippingRate {
 
 export type ShippingRateInput = Partial<Omit<ShippingRate, 'id' | 'created_at' | 'countries'>> & { countries?: string[] | string };
 
+// ── Customer app home layout (sections) ──
+export type HomeSectionType = 'announcement' | 'marquee' | 'banners' | 'hero' | 'image_text' | 'articles' | 'collection' | 'custom';
+
+export interface HomeLayoutSection {
+  id: string;
+  type: HomeSectionType;
+  settings: Record<string, any>;
+  hidden: boolean;
+}
+
+export interface HomeLayoutArticle {
+  id: string;
+  name: string;
+  image_url: string | null;
+  type_id: string;
+  type_name: string;
+}
+
+export interface HomeLayoutData {
+  layout: { sections: HomeLayoutSection[] };
+  articles: HomeLayoutArticle[];
+  types: { id: string; name: string }[];
+}
+
+// ── Customer app appearance ──
+export interface ClientTheme {
+  primary: string;
+  primary_2: string;
+  primary_text: string;
+  accent?: string;
+  badge_bg: string;
+  badge_bg_2: string;
+  badge_text: string;
+  notification_bg: string;
+  notification_bg_2: string;
+  notification_text: string;
+  body_font: string;
+  heading_font: string;
+  font_size: number;
+  heading_size?: number;
+  button_style?: 'solid' | 'outline' | 'fade';
+}
+
+export interface ClientThemePreset {
+  id: string;
+  name: string;
+  theme: ClientTheme;
+}
+
+export interface ClientThemeData {
+  theme: ClientTheme;
+  defaults: ClientTheme;
+  fonts: { sans: string[]; serif: string[] };
+  presets: ClientThemePreset[];
+}
+
+// ── Home-page banners ──
+export interface Banner {
+  id: string;
+  title: string | null;
+  image_url: string;
+  link_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface BannerInput {
+  sort_order?: number;
+  title?: string;
+  link_url?: string;
+  is_active?: boolean;
+  image_upload?: { name: string; dataUrl: string };
+}
+
 // ── Invoices ──
 export type InvoiceTab = 'to_invoice' | 'issued' | 'paid';
 
@@ -619,6 +715,22 @@ export class AdminService {
     return this.api.get<AdminOverview>('/admin/overview', { period });
   }
 
+  getDashboard(days: number): Observable<DashboardData> {
+    return this.api.get<DashboardData>('/admin/dashboard', { days });
+  }
+
+  getDashboardLayout(): Observable<{ widgets: DashWidget[] | null }> {
+    return this.api.get<{ widgets: DashWidget[] | null }>('/admin/dashboard/layout');
+  }
+
+  saveDashboardLayout(widgets: DashWidget[]): Observable<{ widgets: DashWidget[] }> {
+    return this.api.put<{ widgets: DashWidget[] }>('/admin/dashboard/layout', { widgets });
+  }
+
+  resetDashboardLayout(): Observable<{ widgets: null }> {
+    return this.api.delete<{ widgets: null }>('/admin/dashboard/layout');
+  }
+
   getConfig(): Observable<PlatformConfig> {
     return this.api.get<PlatformConfig>('/config');
   }
@@ -727,6 +839,58 @@ export class AdminService {
 
   deleteShippingRate(id: string): Observable<ApiResult<null>> {
     return this.send<null>('DELETE', `/admin/shipping-rates/${id}`);
+  }
+
+  // ── Home layout ──
+  getHomeLayout(): Observable<HomeLayoutData> {
+    return this.api.get<HomeLayoutData>('/admin/home-layout');
+  }
+
+  /** The article picker: the catalogue one page at a time, searched in the database. */
+  listHomeArticles(params: { page?: number; limit?: number; search?: string; type_id?: string }): Observable<Paged<HomeLayoutArticle>> {
+    return this.api.list<HomeLayoutArticle>('/admin/home-layout/articles', params as ListParams);
+  }
+
+  saveHomeLayout(sections: HomeLayoutSection[]): Observable<ApiResult<{ layout: { sections: HomeLayoutSection[] } }>> {
+    return this.send<{ layout: { sections: HomeLayoutSection[] } }>('PUT', '/admin/home-layout', { sections });
+  }
+
+  uploadHomeImage(image_upload: { name: string; dataUrl: string }): Observable<ApiResult<{ url: string }>> {
+    return this.send<{ url: string }>('POST', '/admin/home-layout/image', { image_upload });
+  }
+
+  // ── Customer app appearance ──
+  getClientTheme(): Observable<ClientThemeData> {
+    return this.api.get<ClientThemeData>('/admin/settings/client-theme');
+  }
+
+  createClientThemePreset(name: string, theme: ClientTheme): Observable<ApiResult<ClientThemeData>> {
+    return this.send<ClientThemeData>('POST', '/admin/settings/client-theme/presets', { name, theme });
+  }
+
+  deleteClientThemePreset(id: string): Observable<ApiResult<ClientThemeData>> {
+    return this.send<ClientThemeData>('DELETE', `/admin/settings/client-theme/presets/${id}`);
+  }
+
+  saveClientTheme(theme: ClientTheme): Observable<ApiResult<ClientThemeData>> {
+    return this.send<ClientThemeData>('PUT', '/admin/settings/client-theme', theme);
+  }
+
+  // ── Banners ──
+  listBanners(): Observable<Banner[]> {
+    return this.api.get<Banner[]>('/admin/banners');
+  }
+
+  createBanner(body: BannerInput): Observable<ApiResult<Banner>> {
+    return this.send<Banner>('POST', '/admin/banners', body);
+  }
+
+  updateBanner(id: string, body: BannerInput): Observable<ApiResult<Banner>> {
+    return this.send<Banner>('PATCH', `/admin/banners/${id}`, body);
+  }
+
+  deleteBanner(id: string): Observable<ApiResult<null>> {
+    return this.send<null>('DELETE', `/admin/banners/${id}`);
   }
 
   // ── Invoices ──

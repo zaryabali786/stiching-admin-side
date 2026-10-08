@@ -91,7 +91,7 @@ html, body {
 body {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--portal-body-size, 14px);
   line-height: 1.45;
   background: var(--c-bg);
   color: var(--c-ink);
@@ -103,6 +103,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 a { color: inherit; }
+
+/* Headings follow the admin's chosen heading font everywhere once a portal theme is saved */
+html[data-portal-fonts] :is(h1, h2, h3) { font-family: var(--font-serif) !important; }
 
 /* Keyboard focus is always visible */
 :focus-visible {
@@ -158,7 +161,7 @@ a { color: inherit; }
 
   h1 {
     font-family: var(--font-serif);
-    font-size: 30px;
+    font-size: var(--portal-h1-size, 30px);
     font-weight: 600;
     letter-spacing: -0.01em;
     line-height: 1.2;
@@ -167,7 +170,7 @@ a { color: inherit; }
   p.subtitle {
     margin: 6px 0 0;
     color: var(--c-muted);
-    font-size: 14px;
+    font-size: var(--portal-body-size, 14px);
     max-width: 680px;
   }
 
@@ -181,7 +184,7 @@ a { color: inherit; }
 
 @media (max-width: 900px) {
   .page { padding: 20px 16px 40px; }
-  .page-header h1 { font-size: 26px; }
+  .page-header h1 { font-size: min(var(--portal-h1-size, 30px), 26px); }
 }
 
 /* ==========================================================================
@@ -291,7 +294,7 @@ button.stat {
   &:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  &.btn-primary { background: var(--c-dark-2); border-color: var(--c-dark-2); color: #fff; }
+  &.btn-primary { background: var(--c-dark-2); border-color: var(--c-dark-2); color: var(--portal-on-primary, #fff); }
   &.btn-primary:hover:not(:disabled) { background: var(--c-dark-2-hover); border-color: var(--c-dark-2-hover); }
   &.btn-green { background: var(--c-green); border-color: var(--c-green); color: #fff; }
   &.btn-green:hover:not(:disabled) { background: var(--c-green-hover); border-color: var(--c-green-hover); }
@@ -712,4 +715,10 @@ table.data-table {
   .btn.btn-sm, .btn.btn-xs { min-height: 40px; padding-inline: 14px; font-size: 13px; }
   .chip { min-height: 40px; }
   .close-btn { width: 40px; height: 40px; }
+}
+
+/* Phones: page title block and its buttons stack neatly */
+@media (max-width: 560px) {
+  .page-header { flex-direction: column; align-items: stretch; gap: 14px; }
+  .page-header .actions { justify-content: flex-start; }
 }

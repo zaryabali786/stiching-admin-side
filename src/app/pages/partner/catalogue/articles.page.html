@@ -40,14 +40,14 @@
             @for (t of types.items(); track t.id) {
               <li class="type-row" [class.selected]="t.id === aq().type" [class.inactive]="t.status !== 'active'">
                 <button type="button" class="type-pick" (click)="selectType(t)" [attr.aria-pressed]="t.id === aq().type" [attr.aria-label]="'Show articles of ' + t.name">
-                  <span class="type-name">{{ t.name }}</span>
+                  <span class="type-name">{{ t.name }}@if (isShared(t)) { <span class="badge shared" title="Shared by every partner">Shared</span> }</span>
                   <span class="type-meta">
                     {{ t.articles_count }} {{ t.articles_count === 1 ? 'article' : 'articles' }} · order {{ t.sort_order }}
                     @if (t.status !== 'active') { <span class="badge">Inactive</span> }
                   </span>
                 </button>
-                <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost btn-icon" [attr.aria-label]="'Edit type ' + t.name" (click)="openEditType(t)"><ion-icon name="create-outline" aria-hidden="true"></ion-icon></button>
-                <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost btn-icon danger" [disabled]="typeBusy() === t.id" [attr.aria-label]="'Delete type ' + t.name" (click)="removeType(t)">
+                <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost btn-icon" [class.locked]="isLocked(t)" [attr.aria-label]="'Edit type ' + t.name" (click)="openEditType(t)"><ion-icon name="create-outline" aria-hidden="true"></ion-icon></button>
+                <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost btn-icon danger" [class.locked]="isLocked(t)" [disabled]="typeBusy() === t.id" [attr.aria-label]="'Delete type ' + t.name" (click)="removeType(t)">
                   @if (typeBusy() === t.id) { <ion-spinner name="crescent" /> } @else { <ion-icon name="trash-outline" aria-hidden="true"></ion-icon> }
                 </button>
               </li>
@@ -126,18 +126,18 @@
                             <span class="thumb none" role="img" aria-label="No picture"><ion-icon name="image-outline" aria-hidden="true"></ion-icon></span>
                           }
                         </td>
-                        <td class="c-name"><span class="cell-main">{{ a.name }}</span><span class="cell-sub">Order {{ a.sort_order }}</span></td>
+                        <td class="c-name"><span class="cell-main">{{ a.name }}@if (isShared(a)) { <span class="badge shared" title="Shared by every partner">Shared</span> }</span><span class="cell-sub">Order {{ a.sort_order }}</span></td>
                         <td class="num nowrap c-price"><span class="price-label">Customer price</span>{{ a.customer_price === null || a.customer_price === undefined ? '—' : (a.customer_price | pkr) }}</td>
                         <td class="num nowrap c-price"><span class="price-label">Partner cost</span>{{ a.partner_cost === null || a.partner_cost === undefined ? '—' : (a.partner_cost | pkr) }}</td>
                         <td class="num nowrap c-price c-margin" [class.neg]="(articleMargin(a) ?? 0) < 0"><span class="price-label">Margin</span>{{ articleMargin(a) === null ? '—' : (articleMargin(a)! | pkr) }}</td>
                         <td class="c-status nowrap">
-                          <button *can="'catalogue.update'" type="button" class="switch" role="switch" [attr.aria-checked]="a.status === 'active'" [class.on]="a.status === 'active'" [disabled]="articleBusy() === a.id"
+                          <button *can="'catalogue.update'" type="button" class="switch" role="switch" [attr.aria-checked]="a.status === 'active'" [class.on]="a.status === 'active'" [class.locked]="isLocked(a)" [disabled]="articleBusy() === a.id"
                             [attr.aria-label]="'Show ' + a.name + ' on the order form'" (click)="toggleArticle(a)"><span></span></button>
                           <app-status-badge [status]="a.status" [label]="a.status === 'active' ? 'Active' : 'Inactive'" />
                         </td>
                         <td class="actions-cell c-actions">
-                          <button *can="'catalogue.update'" type="button" class="btn btn-sm" [attr.aria-label]="'Edit ' + a.name" (click)="openEditArticle(a)">Edit</button>
-                          <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost danger" [disabled]="articleBusy() === a.id" [attr.aria-label]="'Delete ' + a.name" (click)="removeArticle(a)">
+                          <button *can="'catalogue.update'" type="button" class="btn btn-sm" [class.locked]="isLocked(a)" [attr.aria-label]="'Edit ' + a.name" (click)="openEditArticle(a)">Edit</button>
+                          <button *can="'catalogue.update'" type="button" class="btn btn-sm btn-ghost danger" [class.locked]="isLocked(a)" [disabled]="articleBusy() === a.id" [attr.aria-label]="'Delete ' + a.name" (click)="removeArticle(a)">
                             @if (articleBusy() === a.id) { <ion-spinner name="crescent" /> } Delete
                           </button>
                         </td>

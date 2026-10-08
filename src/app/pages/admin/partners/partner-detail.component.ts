@@ -11,7 +11,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state.comp
 import { PartnerUsersPanelComponent } from '../../../shared/components/partner-users-panel/partner-users-panel.component';
 import { PermissionMatrixComponent } from '../../../shared/components/permission-matrix/permission-matrix.component';
 
-type Tab = 'overview' | 'modules' | 'users';
+type Tab = 'overview' | 'profile' | 'modules' | 'users';
 
 const NAME_MIN = 2;
 const NAME_MAX = 100;
@@ -48,6 +48,7 @@ export class PartnerDetailComponent {
   readonly tab = signal<Tab>('overview');
   readonly tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
+    { id: 'profile', label: 'Customer profile' },
     { id: 'modules', label: 'Modules' },
     { id: 'users', label: 'Users' },
   ];
@@ -58,6 +59,27 @@ export class PartnerDetailComponent {
   readonly statusBusy = signal(false);
   readonly defaultBusy = signal(false);
 
+  // customer-facing profile + receiving address
+  readonly profileDraft = signal<Record<string, string | boolean>>({});
+  readonly profileBusy = signal(false);
+  readonly profileError = signal<string | null>(null);
+  readonly profileFields: { key: string; label: string; placeholder?: string; hint?: string; wide?: boolean; type?: string }[] = [
+    { key: 'short_code', label: 'Short code', placeholder: 'P3', hint: 'Written on the parcel label next to the customer code.' },
+    { key: 'city', label: 'City', placeholder: 'Lahore' },
+    { key: 'tagline', label: 'One line about this partner', placeholder: 'Bridal and formal stitching, 7-day turnaround', wide: true },
+    { key: 'turnaround_days', label: 'Usual turnaround (days)', placeholder: '10', type: 'number' },
+  ];
+  readonly addressFields: { key: string; label: string; placeholder?: string; wide?: boolean }[] = [
+    { key: 'receiving_name', label: 'Name on the parcel', placeholder: 'Ishaal Stitching' },
+    { key: 'receiving_phone', label: 'Phone', placeholder: '+92 300 0000000' },
+    { key: 'receiving_address', label: 'Street address', placeholder: 'Shop 4, Main Market…', wide: true },
+    { key: 'receiving_city', label: 'City', placeholder: 'Lahore' },
+  ];
+  readonly profileDirty = computed(() => {
+    const p = (this.partner() ?? {}) as unknown as Record<string, unknown>;
+    const d = this.profileDraft();
+    return Object.keys(d).some((k) => (d[k] ?? '') !== (p[k] ?? ''));
+  });
   readonly modulesDraft = signal<string[]>([]);
   readonly modulesBusy = signal(false);
   readonly modulesError = signal<string | null>(null);
@@ -137,6 +159,7 @@ export class PartnerDetailComponent {
   private applyData(d: PartnerDetail): void {
     this.data.set(d);
     this.modulesDraft.set([...d.partner.permissions]);
+    this.resetProfile();
   }
 
   setTab(t: Tab): void {
@@ -243,6 +266,40 @@ export class PartnerDetailComponent {
   resetModules(): void {
     this.modulesDraft.set([...(this.partner()?.permissions ?? [])]);
     this.modulesError.set(null);
+  }
+
+  setProfile(key: string, value: string | boolean): void {
+    this.profileDraft.update((d) => ({ ...d, [key]: value }));
+  }
+
+  resetProfile(): void {
+    const p = (this.partner() ?? {}) as unknown as Record<string, unknown>;
+    const draft: Record<string, string | boolean> = { is_listed: p['is_listed'] !== false };
+    for (const f of [...this.profileFields, ...this.addressFields]) draft[f.key] = (p[f.key] as string | number | null | undefined)?.toString() ?? '';
+    this.profileDraft.set(draft);
+    this.profileError.set(null);
+  }
+
+  saveProfile(): void {
+    const p = this.partner();
+    if (!p || this.profileBusy() || !this.profileDirty()) return;
+    const d = this.profileDraft();
+    const body: Record<string, unknown> = { ...d, turnaround_days: d['turnaround_days'] === '' ? null : Number(d['turnaround_days']) };
+    this.profileBusy.set(true);
+    this.profileError.set(null);
+    this.svc.updatePartner(p.id, body as never).subscribe({
+      next: (rec) => {
+        this.profileBusy.set(false);
+        this.patchPartner(rec);
+        this.resetProfile();
+        this.ui.success('Customer profile saved.');
+        this.changed.emit();
+      },
+      error: (err) => {
+        this.profileBusy.set(false);
+        this.profileError.set(apiErrorMessage(err));
+      },
+    });
   }
 
   async saveModules(): Promise<void> {

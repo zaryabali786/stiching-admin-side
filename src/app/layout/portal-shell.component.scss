@@ -21,14 +21,14 @@
 
 .shell {
   /* Sidebar palette (deep forest, gold accent for the partner portal identity) */
-  --sb-bg: #0F2219;
-  --sb-text: #B8C4BD;
-  --sb-text-strong: #FFFFFF;
-  --sb-muted: #7F8F86;
-  --sb-hover: rgba(255, 255, 255, 0.06);
-  --sb-active: rgba(255, 255, 255, 0.1);
-  --sb-accent: #7FD3A8;
-  --sb-line: rgba(255, 255, 255, 0.08);
+  --sb-bg: var(--portal-sb-bg, #0F2219);
+  --sb-text: var(--portal-sb-text, #B8C4BD);
+  --sb-text-strong: var(--portal-sb-text-strong, #FFFFFF);
+  --sb-muted: var(--portal-sb-muted, #7F8F86);
+  --sb-hover: var(--portal-sb-hover, rgba(255, 255, 255, 0.06));
+  --sb-active: var(--portal-sb-active, rgba(255, 255, 255, 0.1));
+  --sb-accent: var(--portal-sb-accent, #7FD3A8);
+  --sb-line: var(--portal-sb-line, rgba(255, 255, 255, 0.08));
 
   display: flex;
   height: 100vh;
@@ -37,10 +37,10 @@
   background: var(--c-bg);
 
   &[data-portal='partner'] {
-    --sb-bg: #1A1610;
-    --sb-text: #C9C0B0;
-    --sb-muted: #8E8574;
-    --sb-accent: #E2B866;
+    --sb-bg: var(--portal-sb-bg, #1A1610);
+    --sb-text: var(--portal-sb-text, #C9C0B0);
+    --sb-muted: var(--portal-sb-muted, #8E8574);
+    --sb-accent: var(--portal-sb-accent, #E2B866);
   }
 }
 
@@ -193,16 +193,8 @@
     color: var(--sb-text-strong);
     font-weight: 600;
 
-    &::before {
-      content: '';
-      position: absolute;
-      left: -12px;
-      top: 8px;
-      bottom: 8px;
-      width: 3px;
-      border-radius: 0 3px 3px 0;
-      background: var(--sb-accent);
-    }
+    /* accent bar inside the item (an outside marker was clipped by the scrolling menu) */
+    box-shadow: inset 3px 0 0 var(--sb-accent);
 
     ion-icon { color: var(--sb-accent); }
   }
@@ -624,4 +616,12 @@
 
     &:focus-visible { outline: none; border-color: var(--c-green); box-shadow: var(--focus-ring); }
   }
+}
+
+/* Phones: keep the whole top bar on one line (search shrinks, the partner picker and bell stay in reach) */
+@media (max-width: 700px) {
+  .topbar { gap: 8px; }
+  .quick-search { min-width: 0; input { min-width: 0; } }
+  .partner-switch select { max-width: 96px; padding: 0 22px 0 8px; font-size: 12px; text-overflow: ellipsis; }
+  .top-actions { gap: 6px; flex-shrink: 0; }
 }

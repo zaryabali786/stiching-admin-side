@@ -153,6 +153,40 @@
           </div>
         }
 
+        @case ('profile') {
+          <div role="tabpanel" id="pdPanel-profile" aria-labelledby="pdTab-profile" class="prof">
+            <p class="lead">What customers see when they choose a stitching partner, and the address they send their parcel to. Customers only see partners that are switched on, listed here and have the Receiving module.</p>
+            <div class="prof-switch">
+              <button type="button" class="switch" role="switch" [attr.aria-checked]="profileDraft()['is_listed'] !== false" [class.on]="profileDraft()['is_listed'] !== false" (click)="setProfile('is_listed', profileDraft()['is_listed'] === false)"><span></span></button>
+              <label>Show this partner to customers</label>
+            </div>
+            <h4 class="prof-h">About the partner</h4>
+            <div class="prof-grid">
+              @for (f of profileFields; track f.key) {
+                <label class="prof-f" [class.wide]="f.wide"><span>{{ f.label }}</span>
+                  <input class="input" [type]="f.type || 'text'" [placeholder]="f.placeholder || ''" [value]="profileDraft()[f.key] ?? ''" (input)="setProfile(f.key, $any($event.target).value)" />
+                  @if (f.hint) { <small>{{ f.hint }}</small> }
+                </label>
+              }
+            </div>
+            <h4 class="prof-h">Where customers send their parcel</h4>
+            <div class="prof-grid">
+              @for (f of addressFields; track f.key) {
+                <label class="prof-f" [class.wide]="f.wide"><span>{{ f.label }}</span>
+                  <input class="input" [placeholder]="f.placeholder || ''" [value]="profileDraft()[f.key] ?? ''" (input)="setProfile(f.key, $any($event.target).value)" />
+                </label>
+              }
+            </div>
+            @if (profileError()) { <p class="form-error" role="alert">{{ profileError() }}</p> }
+            <div class="module-actions">
+              <button type="button" class="btn btn-ghost" [disabled]="profileBusy() || !profileDirty()" (click)="resetProfile()">Discard changes</button>
+              <button type="button" class="btn btn-primary" [disabled]="profileBusy() || !profileDirty()" (click)="saveProfile()">
+                @if (profileBusy()) { <ion-spinner name="crescent" /> } Save profile
+              </button>
+            </div>
+          </div>
+        }
+
         @case ('modules') {
           <div role="tabpanel" id="pdPanel-modules" aria-labelledby="pdTab-modules">
             <p class="lead">Choose which modules {{ d.partner.name }} may use. Its owner gets all of them; the partner then decides which of these each of its users gets.</p>

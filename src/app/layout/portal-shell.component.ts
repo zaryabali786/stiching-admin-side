@@ -7,7 +7,7 @@ import {
   gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
   airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
   searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-  chatbubblesOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline,
+  chatbubblesOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, albumsOutline,
 } from 'ionicons/icons';
 import { filter } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
@@ -89,7 +89,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
       gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
       airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
       searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-      chatbubblesOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline,
+      chatbubblesOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline,
     });
   }
 
@@ -126,7 +126,14 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           items: [
             { path: '/admin/price-list', label: 'Price list', icon: 'pricetags-outline' },
             { path: '/admin/shipping', label: 'Shipping rates', icon: 'airplane-outline' },
+            { path: '/admin/portal-theme', label: 'Portal theme', icon: 'color-fill-outline' },
             { path: '/admin/settings', label: 'Settings', icon: 'settings-outline' },
+          ],
+        },
+        {
+          label: 'App builder',
+          items: [
+            { path: '/admin/home-layout', label: 'Build', icon: 'construct-outline' },
           ],
         },
       ];

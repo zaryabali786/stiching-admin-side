@@ -2,163 +2,155 @@
   <header class="page-header">
     <div>
       <span class="eyebrow">{{ todayLabel }}</span>
-      <h1>Overview</h1>
-      <p class="subtitle">Start with what needs your action, then see how orders and money are moving {{ periodLabel() }}.</p>
+      <h1>Dashboard</h1>
+      <p class="subtitle">
+        @if (editing()) { Drag cards to rearrange them, resize or remove them, and add new numbers, charts and lists. }
+        @else { Your business at a glance for the last {{ periodText() }}. Make it yours with Customize. }
+      </p>
     </div>
     <div class="actions">
-      <div class="pill-toggle" role="group" aria-label="Period">
-        @for (p of periods; track p.value) {
-          <button type="button" [class.active]="period() === p.value" [attr.aria-pressed]="period() === p.value" (click)="setPeriod(p.value)">{{ p.label }}</button>
-        }
-      </div>
+      @if (!editing()) {
+        <div class="pill-toggle" role="group" aria-label="Period">
+          @for (p of periods; track p.value) {
+            <button type="button" [class.active]="days() === p.value" [attr.aria-pressed]="days() === p.value" (click)="setDays(p.value)">{{ p.label }}</button>
+          }
+        </div>
+        <button type="button" class="btn" (click)="startEdit()"><ion-icon name="options-outline" aria-hidden="true"></ion-icon> Customize</button>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="resetLayout()" [disabled]="saving()">Reset</button>
+        <button type="button" class="btn" (click)="adding.set(true)"><ion-icon name="add-outline" aria-hidden="true"></ion-icon> Add widget</button>
+        <button type="button" class="btn btn-ghost" (click)="cancel()" [disabled]="saving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } Save dashboard
+        </button>
+      }
     </div>
   </header>
 
   @if (error() && !data()) {
-    <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
-  } @else if (loading() && !data()) {
-    <div class="stat-grid">
-      @for (i of [1, 2, 3, 4, 5, 6]; track i) {
-        <div class="stat"><span class="skeleton" style="width: 60%"></span><span class="skeleton" style="width: 40%; height: 30px; margin-top: 6px"></span></div>
-      }
+    <div class="card dash-error" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="btn btn-sm" (click)="loadData()">Try again</button>
     </div>
-    <div class="grid-2 wide-left">
-      <div class="card"><span class="skeleton" style="height: 220px"></span></div>
-      <div class="card"><span class="skeleton" style="height: 220px"></span></div>
-    </div>
-  } @else if (data(); as d) {
-    <div class="overview-body" [class.dim]="loading()" [attr.aria-busy]="loading()">
-      <!-- 1 · Action KPIs (each opens the filtered list) -->
-      <h2 class="group-label">Needs attention</h2>
-      <div class="stat-grid action-stats">
-        <a class="stat" [class.attn]="d.waitingForInvoice > 0" routerLink="/admin/invoices">
-          <span class="stat-label">Waiting for invoice</span>
-          <span class="stat-value">{{ d.waitingForInvoice }}</span>
-          <span class="stat-sub" [class.warn]="d.waitingForInvoice > 0">{{ d.waitingForInvoice > 0 ? 'Packed — build the invoice' : 'Nothing packed and waiting' }}</span>
-        </a>
-        <a class="stat" routerLink="/admin/invoices" [queryParams]="{ tab: 'issued' }">
-          <span class="stat-label">Awaiting payment</span>
-          <span class="stat-value">{{ d.awaitingPayment }}</span>
-          <span class="stat-sub">{{ d.awaitingPaymentPkr | pkr }} due from customers</span>
-        </a>
-        <div class="stat" [class.bad]="d.delayedOrders > 0">
-          <span class="stat-label">Delayed</span>
-          <span class="stat-value">{{ d.delayedOrders }}</span>
-          <span class="stat-sub" [class.bad]="d.delayedOrders > 0">{{ d.delayedOrders > 0 ? 'Past their due date — see list below' : 'Everything on schedule' }}</span>
-        </div>
-      </div>
-
-      <div class="grid-2 wide-left">
-        <section class="card action-card" aria-labelledby="needsActionTitle">
-          <div class="card-head">
-            <h3 class="card-title" id="needsActionTitle">
-              Needs your action
-              @if (d.needsAction.length) { <span class="badge amber">{{ d.needsAction.length }}</span> }
-            </h3>
-            <a routerLink="/admin/orders" class="btn btn-ghost btn-sm">All orders →</a>
-          </div>
-          @for (item of d.needsAction; track item.id) {
-            <div class="action-row">
-              <span [class]="'badge action-tag ' + actionTone(item)">{{ actionTag(item) }}</span>
-              <div class="action-text">
-                <strong>{{ item.code }} · {{ item.title }}</strong>
-                <span>{{ item.subtext }}</span>
+  } @else {
+    <div class="dash-grid" [class.editing]="editing()" [class.dim]="loading() && data()" cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="drop($event)" [attr.aria-busy]="loading()">
+      @for (w of widgets(); track w.id) {
+        @if (def(w.type); as d) {
+          <section class="widget" [class]="'widget w-' + w.size + ' k-' + d.kind" cdkDrag [cdkDragData]="w" [cdkDragDisabled]="!editing()" [attr.aria-label]="d.title">
+            @if (editing()) {
+              <div class="w-tools">
+                <span class="grip" cdkDragHandle title="Drag to move" aria-label="Drag to move"><ion-icon name="reorder-two-outline"></ion-icon></span>
+                <span class="w-name">{{ d.title }}</span>
+                <span class="size-pick" role="group" aria-label="Size">
+                  @for (s of sizes; track s) {
+                    <button type="button" [class.on]="w.size === s" (click)="setSize(w.id, s)" [attr.aria-pressed]="w.size === s">{{ sizeLabel[s] }}</button>
+                  }
+                </span>
+                <button type="button" class="w-remove" (click)="remove(w.id)" [attr.aria-label]="'Remove ' + d.title"><ion-icon name="close-outline"></ion-icon></button>
               </div>
-              <a class="btn btn-sm" [class.btn-gold]="item.actionType === 'INVOICE'" [class.btn-green]="item.actionType === 'RECEIVE'"
-                [routerLink]="item.link" [queryParams]="item.queryParams" [attr.aria-label]="actionLabel(item) + ' ' + item.code">{{ actionLabel(item) }}</a>
-            </div>
-          } @empty {
-            <app-empty-state icon="✓" title="All caught up" message="No invoices to issue, transfers to receive or issues to sort out." />
-          }
-        </section>
-
-        <section class="card" aria-labelledby="statusTitle">
-          <div class="card-head">
-            <h3 class="card-title" id="statusTitle">Orders by stage right now</h3>
-          </div>
-          @if (hasStatus()) {
-            @for (s of d.ordersByStatus; track s.key) {
-              <a class="bar-row status-row" routerLink="/admin/orders" [queryParams]="{ group: s.key }" [attr.aria-label]="s.status + ': ' + s.count + ' orders'">
-                <span class="ellipsis">{{ s.status }}</span>
-                <div class="bar-track" aria-hidden="true"><div class="bar-fill" [class.gold]="isActionGroup(s.key)" [style.width.%]="s.pct"></div></div>
-                <span class="bar-val">{{ s.count }}</span>
-              </a>
             }
-            <p class="chart-note"><i class="dot pk" aria-hidden="true"></i> Gold = waiting on us (invoice or payment)</p>
-          } @else {
-            <app-empty-state title="No open orders" message="Nothing is moving through the pipeline right now." />
-          }
-        </section>
-      </div>
 
-      <!-- 2 · Volume -->
-      <h2 class="group-label">Volume {{ periodLabel() }}</h2>
-      <div class="stat-grid">
-        <a class="stat" routerLink="/admin/orders">
-          <span class="stat-label">Orders</span>
-          <span class="stat-value">{{ d.ordersInPeriod }}</span>
-          <span class="stat-sub">excluding cancelled</span>
-        </a>
-        <div class="stat">
-          <span class="stat-label">International</span>
-          <span class="stat-value">{{ d.internationalOrders }}</span>
-          <span class="stat-sub">{{ d.ordersInPeriod - d.internationalOrders }} within Pakistan</span>
-        </div>
-        <a class="stat" routerLink="/admin/orders" [queryParams]="{ group: 'production' }">
-          <span class="stat-label">In production</span>
-          <span class="stat-value">{{ d.inProduction }}</span>
-          <span class="stat-sub">orders at the partner</span>
-        </a>
-      </div>
-
-      <div class="grid-2 wide-left">
-        <section class="card" aria-labelledby="monthlyTitle">
-          <div class="card-head">
-            <h3 class="card-title" id="monthlyTitle">Orders per month</h3>
-            <div class="legend" aria-hidden="true">
-              <span><i class="dot intl"></i>International</span>
-              <span><i class="dot pk"></i>Pakistan</span>
-            </div>
-          </div>
-          @if (hasMonthly()) {
-            <div class="chart-scroll">
-              <div class="column-chart" role="img" [attr.aria-label]="monthlySummary()">
-                @for (m of d.ordersPerMonth; track m.key) {
-                  <div class="col-group">
-                    <div class="bars">
-                      <div class="bar intl" [style.height.%]="barHeight(m.international)" [title]="m.international + ' international'">
-                        @if (m.international) { <span class="col-val">{{ m.international }}</span> }
-                      </div>
-                      <div class="bar pk" [style.height.%]="barHeight(m.pakistan)" [title]="m.pakistan + ' Pakistan'">
-                        @if (m.pakistan) { <span class="col-val">{{ m.pakistan }}</span> }
-                      </div>
-                    </div>
-                    <span class="col-label">{{ m.month }}</span>
+            @if (!data()) {
+              <div class="w-skel"><span class="skeleton" style="width: 50%; height: 12px"></span><span class="skeleton" style="width: 70%; height: 28px; margin-top: 10px"></span></div>
+            } @else {
+              @switch (d.kind) {
+                @case ('kpi') {
+                  @let kd = $any(d);
+                  <a class="kpi" [class.warn]="kd.tone?.(data()!) === 'warn'" [class.bad]="kd.tone?.(data()!) === 'bad'"
+                    [routerLink]="editing() || !kd.link ? null : kd.link.path" [queryParams]="kd.link?.query">
+                    <span class="kpi-ico" aria-hidden="true"><ion-icon [name]="d.icon"></ion-icon></span>
+                    <span class="kpi-label">{{ d.title }}</span>
+                    <span class="kpi-value">{{ kpiValue(kd, data()!) }}</span>
+                    <span class="kpi-sub">
+                      @if (kd.change?.(data()!); as ch) {
+                        <span class="chg" [class.up]="ch > 0" [class.down]="ch < 0"><ion-icon [name]="ch > 0 ? 'arrow-up-outline' : 'arrow-down-outline'"></ion-icon>{{ ch > 0 ? ch : -ch }}%</span>
+                      }
+                      {{ kd.sub(data()!) }}
+                    </span>
+                  </a>
+                }
+                @case ('chart') {
+                  @let cd = $any(d);
+                  <div class="w-card">
+                    <div class="w-head"><h3>{{ d.title }}</h3><span class="w-meta">{{ d.description }}</span></div>
+                    @if (hasChartData(cd, data()!)) {
+                      @let c = chart(cd, data()!);
+                      <app-chart [kind]="cd.chart" [labels]="c.labels" [series]="c.series" [format]="cd.format || 'num'" />
+                    } @else {
+                      <p class="w-empty">No data in this period yet.</p>
+                    }
                   </div>
                 }
-              </div>
-            </div>
-          } @else {
-            <app-empty-state title="No orders yet" message="New orders will appear here as they come in." />
-          }
-        </section>
-
-        <section class="card" aria-labelledby="shipTitle">
-          <div class="card-head">
-            <h3 class="card-title" id="shipTitle">Where orders ship</h3>
-            <span class="card-meta">orders</span>
-          </div>
-          @for (c of d.whereOrdersShip; track c.country) {
-            <div class="bar-row">
-              <span class="ellipsis" [title]="c.country">{{ c.country }}</span>
-              <div class="bar-track" aria-hidden="true"><div class="bar-fill" [style.width.%]="c.pct"></div></div>
-              <span class="bar-val">{{ c.count }}</span>
-            </div>
-          } @empty {
-            <app-empty-state title="No destinations yet" message="Destinations appear once orders are placed in this period." />
-          }
-        </section>
-      </div>
+                @case ('list') {
+                  <div class="w-card">
+                    <div class="w-head"><h3>{{ d.title }}</h3><span class="w-meta">{{ d.description }}</span></div>
+                    @if ($any(d).list === 'needs_action') {
+                      @for (item of data()!.needsAction; track item.id) {
+                        <a class="row" [routerLink]="editing() ? null : item.link" [queryParams]="item.queryParams">
+                          <span [class]="'tag ' + item.tone">{{ item.tag }}</span>
+                          <span class="row-text"><strong>{{ item.code }} · {{ item.title }}</strong><small>{{ item.subtext }}</small></span>
+                          <ion-icon name="arrow-forward-outline" aria-hidden="true"></ion-icon>
+                        </a>
+                      } @empty {
+                        <p class="w-empty">All caught up. Nothing needs you right now.</p>
+                      }
+                    } @else {
+                      @for (o of data()!.recentOrders; track o.id) {
+                        <a class="row" routerLink="/admin/orders" [queryParams]="editing() ? null : { ref: o.reference }">
+                          <span class="tag neutral">{{ statusLabel(o.status) }}</span>
+                          <span class="row-text"><strong>{{ o.reference }} · {{ o.customer_name || 'Customer' }}</strong><small>{{ o.brand || '—' }}@if (o.destination_country) { · {{ o.destination_country }} } · {{ o.created_at | timeAgo }}</small></span>
+                          <ion-icon name="arrow-forward-outline" aria-hidden="true"></ion-icon>
+                        </a>
+                      } @empty {
+                        <p class="w-empty">No orders yet.</p>
+                      }
+                    }
+                  </div>
+                }
+              }
+            }
+          </section>
+        }
+      } @empty {
+        <div class="dash-empty card">
+          <ion-icon name="grid-outline" aria-hidden="true"></ion-icon>
+          <h3>Your dashboard is empty</h3>
+          <p>Add numbers, charts and lists to build the view you want.</p>
+          <button type="button" class="btn btn-primary" (click)="startEdit(); adding.set(true)"><ion-icon name="add-outline"></ion-icon> Add widget</button>
+        </div>
+      }
     </div>
   }
 </div>
+
+@if (adding()) {
+  <div class="modal-backdrop" (click)="adding.set(false)">
+    <div class="modal modal-lg gallery" role="dialog" aria-modal="true" aria-labelledby="galTitle" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div><span class="eyebrow">Dashboard</span><h3 id="galTitle">Add a widget</h3></div>
+        <button type="button" class="close-btn" (click)="adding.set(false)" aria-label="Close">×</button>
+      </div>
+      <div class="gal-tabs" role="tablist">
+        @for (c of categories; track c) {
+          <button type="button" role="tab" [class.on]="addTab() === c" [attr.aria-selected]="addTab() === c" (click)="addTab.set(c)">{{ c }}</button>
+        }
+      </div>
+      <div class="modal-body gal-body">
+        @for (g of gallery(); track g.type) {
+          <article class="gal-card">
+            <span class="gal-ico" aria-hidden="true"><ion-icon [name]="g.icon"></ion-icon></span>
+            <div class="gal-text">
+              <strong>{{ g.title }}</strong>
+              <span>{{ g.description }}</span>
+              @if (count(g.type)) { <small>On your dashboard ×{{ count(g.type) }}</small> }
+            </div>
+            <button type="button" class="btn btn-sm" (click)="add(g)"><ion-icon name="add-outline"></ion-icon> Add</button>
+          </article>
+        }
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-primary" (click)="adding.set(false)">Done</button>
+      </div>
+    </div>
+  </div>
+}

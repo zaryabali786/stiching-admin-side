@@ -1,0 +1,712 @@
+<ng-template #emojiBar let-box>
+  <div class="emoji-bar">
+    <button type="button" class="btn btn-sm" (click)="emojiOpen.set(!emojiOpen())">😊 {{ emojiOpen() ? 'Hide emojis' : 'Add emoji' }}</button>
+    @if (emojiOpen()) {
+      <div class="emoji-grid">
+        @for (e of emojis; track e) { <button type="button" class="emoji" (click)="insertEmoji('text', e, box)" [attr.aria-label]="'Insert ' + e">{{ e }}</button> }
+      </div>
+    }
+  </div>
+</ng-template>
+
+<ng-template #articlePicker>
+  <div class="field">
+    <label>Articles to show ({{ selected()?.settings?.['article_ids']?.length ?? 0 }} selected)</label>
+    @if (selected()?.settings?.['article_ids']?.length) {
+      <ol class="picked">
+        @for (id of selected()?.settings?.['article_ids']; track id; let i = $index) {
+          @if (articleById(id); as a) {
+            <li>
+              @if (a.image_url) { <img [src]="a.image_url" alt="" /> } @else { <span class="ph">{{ initial(a.name) }}</span> }
+              <span class="nm">{{ a.name }}<small>{{ a.type_name }}</small></span>
+              <button type="button" class="icon-btn" aria-label="Move up" [disabled]="i === 0" (click)="moveArticle(i, -1)">↑</button>
+              <button type="button" class="icon-btn" aria-label="Move down" [disabled]="i === selected()!.settings['article_ids'].length - 1" (click)="moveArticle(i, 1)">↓</button>
+              <button type="button" class="icon-btn danger" aria-label="Remove" (click)="toggleArticle(a)"><ion-icon name="close-outline"></ion-icon></button>
+            </li>
+          } @else {
+            <li><span class="nm">Article no longer available</span><button type="button" class="icon-btn danger" aria-label="Remove" (click)="removeId(id)"><ion-icon name="close-outline"></ion-icon></button></li>
+          }
+        }
+      </ol>
+    }
+    <select class="select" (change)="setPickType($any($event.target).value)">
+      <option value="" [selected]="!pickType()">All article types</option>
+      @for (t of types(); track t.id) { <option [value]="t.id" [selected]="t.id === pickType()">{{ t.name }}</option> }
+    </select>
+    <input class="input" type="search" placeholder="Search articles by name…" [value]="pickSearch()" (input)="onPickSearch($any($event.target).value)" />
+    <div class="pick-list" [class.busy]="pickLoading()">
+      @for (a of pickItems(); track a.id) {
+        <label class="pick">
+          <input type="checkbox" [checked]="selected()?.settings?.['article_ids']?.includes(a.id)" (change)="toggleArticle(a)" />
+          @if (a.image_url) { <img [src]="a.image_url" alt="" /> } @else { <span class="ph">{{ initial(a.name) }}</span> }
+          <span class="nm">{{ a.name }}<small>{{ a.type_name }}</small></span>
+        </label>
+      } @empty {
+        <p class="hint pad">{{ pickLoading() ? 'Loading…' : pickError() || (pickSearch() || pickType() ? 'No article matches.' : 'No articles yet. Add them under Partner → Articles.') }}</p>
+      }
+    </div>
+    @if (pickMeta(); as m) {
+      @if (m.totalPages > 1) {
+        <div class="pick-pager">
+          <button type="button" class="btn btn-sm btn-ghost" [disabled]="m.page <= 1 || pickLoading()" (click)="loadPick(m.page - 1)">‹ Prev</button>
+          <span>Page {{ m.page }} of {{ m.totalPages }} · {{ m.total }} articles</span>
+          <button type="button" class="btn btn-sm btn-ghost" [disabled]="m.page >= m.totalPages || pickLoading()" (click)="loadPick(m.page + 1)">Next ›</button>
+        </div>
+      } @else if (m.total > 0) {
+        <span class="hint">{{ m.total }} article{{ m.total === 1 ? '' : 's' }}</span>
+      }
+    }
+  </div>
+</ng-template>
+
+<ng-template #colorField let-key let-label="label">
+  <label class="field color-field">{{ label }}
+    <span class="color-row">
+      <input type="color" [value]="str(key)" (input)="set(key, $any($event.target).value.toUpperCase())" />
+      <input class="input hex" [value]="str(key)" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && set(key, $any($event.target).value.toUpperCase())" />
+    </span>
+  </label>
+</ng-template>
+
+<ng-template #imageField let-label="label">
+  <div class="field">
+    <label>{{ label || 'Picture' }}</label>
+    @if (str('image_url')) {
+      <img class="thumb" [src]="str('image_url')" alt="Selected picture" />
+    }
+    <input #file type="file" class="sr-only" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-hidden="true" (change)="onImage(file)" />
+    <div class="btn-row">
+      <button type="button" class="btn btn-sm" [disabled]="uploading()" (click)="file.click()">
+        @if (uploading()) { <ion-spinner name="crescent" /> } {{ str('image_url') ? 'Change picture' : 'Choose picture' }}
+      </button>
+      @if (str('image_url')) { <button type="button" class="btn btn-sm btn-ghost" (click)="set('image_url', '')">Remove</button> }
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #buttonFields>
+  <div class="field">
+    <label>Button text</label>
+    <input class="input" maxlength="40" placeholder="e.g. Book stitching" [value]="str('button_label')" (input)="set('button_label', $any($event.target).value)" />
+  </div>
+  <div class="field">
+    <label>Button link</label>
+    <select class="select app-pick" aria-label="Pick a page inside the app" (change)="set('button_link', $any($event.target).value); $any($event.target).value = ''">
+                <option value="">Or pick a page inside the app…</option>
+                @for (pg of appPages; track pg.path) { <option [value]="pg.path">{{ pg.label }}</option> }
+              </select>
+    <input class="input" placeholder="https://… or /app/orders/new" [value]="str('button_link')" (input)="set('button_link', $any($event.target).value)" />
+    <span class="hint">A full web address, or a page inside the app such as /app/orders/new. Shown only when both text and link are filled.</span>
+  </div>
+</ng-template>
+
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Setup</span>
+      <h1>App builder</h1>
+      <p class="subtitle">Arrange the home page sections and set the colours, fonts and button style of the customer app. The preview shows the result.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" [disabled]="!anyDirty() || saving()" (click)="discard()">Discard changes</button>
+      <button type="button" class="btn btn-primary" [disabled]="!anyDirty() || saving()" (click)="save()">
+        @if (saving()) { <ion-spinner name="crescent" /> } Save
+      </button>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="App builder">
+    <button type="button" role="tab" class="tab-btn" [class.on]="tab() === 'layout'" [attr.aria-selected]="tab() === 'layout'" (click)="tab.set('layout')">Home layout @if (dirty()) { <i class="dot-unsaved" title="Unsaved changes"></i> }</button>
+    <button type="button" role="tab" class="tab-btn" [class.on]="tab() === 'appearance'" [attr.aria-selected]="tab() === 'appearance'" (click)="tab.set('appearance')">Theme customization @if (themeDirty()) { <i class="dot-unsaved" title="Unsaved changes"></i> }</button>
+  </div>
+
+  @if (error()) {
+    <app-empty-state kind="error" [message]="error()" (retry)="load()" />
+  } @else if (loading()) {
+    <div class="skeleton" style="height: 360px"></div>
+  } @else {
+    <div class="editor">
+      @if (tab() === 'layout') {
+      <!-- 1 · Sections -->
+      <section class="col col-list" aria-label="Sections">
+        <h2>Sections</h2>
+        <p class="hint">The greeting at the top is always shown. Drag <ion-icon name="reorder-two-outline" aria-hidden="true"></ion-icon> to reorder.</p>
+
+        <button type="button" class="add-bar" (click)="openAdd(0)"><ion-icon name="add-outline" aria-hidden="true"></ion-icon> Add section</button>
+
+        <div class="list" cdkDropList (cdkDropListDropped)="drop($event)">
+          @for (s of sections(); track s.id; let i = $index) {
+            <div class="item" cdkDrag cdkDragLockAxis="y">
+              <div class="card" [class.on]="s.id === selectedId()" [class.hidden]="s.hidden" (click)="select(s.id)" tabindex="0" (keydown.enter)="select(s.id)">
+                <span class="grip" cdkDragHandle aria-label="Drag to reorder" (click)="$event.stopPropagation()"><ion-icon name="reorder-two-outline"></ion-icon></span>
+                <span class="ico"><ion-icon [name]="meta(s.type).icon" aria-hidden="true"></ion-icon></span>
+                <span class="txt">
+                  <b>{{ meta(s.type).label }}</b>
+                  <small>{{ summary(s) }}</small>
+                </span>
+                <span class="acts">
+                  <button type="button" class="icon-btn" [attr.aria-label]="s.hidden ? 'Show section' : 'Hide section'" [title]="s.hidden ? 'Hidden from customers' : 'Visible'" (click)="toggleHidden(s, $event)">
+                    <ion-icon [name]="s.hidden ? 'eye-off-outline' : 'eye-outline'"></ion-icon>
+                  </button>
+                  <button type="button" class="icon-btn" aria-label="Duplicate section" title="Duplicate" (click)="duplicate(s, $event)"><ion-icon name="copy-outline"></ion-icon></button>
+                  <button type="button" class="icon-btn danger" aria-label="Remove section" title="Remove" (click)="remove(s, $event)"><ion-icon name="trash-outline"></ion-icon></button>
+                </span>
+              </div>
+              <button type="button" class="add-bar slim" [attr.aria-label]="'Add section after ' + meta(s.type).label" (click)="openAdd(i + 1)"><ion-icon name="add-outline" aria-hidden="true"></ion-icon></button>
+            </div>
+          } @empty {
+            <p class="empty">No sections yet. Add one to start building the home page.</p>
+          }
+        </div>
+      </section>
+
+      <!-- 2 · Settings of the selected section -->
+      <section class="col col-settings" aria-label="Section settings">
+        @if (selected(); as s) {
+          <h2>{{ meta(s.type).label }}</h2>
+          <p class="hint">{{ meta(s.type).help }}</p>
+
+          @switch (s.type) {
+            @case ('announcement') {
+              <div class="field"><label>Text</label><input #tx class="input" maxlength="200" [value]="str('text')" (input)="set('text', $any($event.target).value)" /></div>
+              <ng-container *ngTemplateOutlet="emojiBar; context: { $implicit: tx }" />
+              <ng-container *ngTemplateOutlet="imageField; context: { label: 'Small picture before the text (optional)' }" />
+              <div class="field"><label>Link (optional)</label><select class="select app-pick" aria-label="Pick a page inside the app" (change)="set('link', $any($event.target).value); $any($event.target).value = ''">
+                <option value="">Or pick a page inside the app…</option>
+                @for (pg of appPages; track pg.path) { <option [value]="pg.path">{{ pg.label }}</option> }
+              </select>
+<input class="input" placeholder="https://… or /app/orders/new" [value]="str('link')" (input)="set('link', $any($event.target).value)" /></div>
+              <div class="two">
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'bg', label: 'Background' }" />
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'color', label: 'Text colour' }" />
+              </div>
+              <div class="two">
+                <div class="field"><label>Text position</label>
+                  <select class="select" (change)="set('align', $any($event.target).value)">
+                    <option value="center" [selected]="str('align') === 'center'">Centre</option>
+                    <option value="left" [selected]="str('align') === 'left'">Left</option>
+                  </select></div>
+                <div class="field"><label>Height</label>
+                  <select class="select" (change)="set('size', $any($event.target).value)">
+                    <option value="small" [selected]="str('size') === 'small'">Compact</option>
+                    <option value="medium" [selected]="str('size') === 'medium'">Roomy</option>
+                  </select></div>
+              </div>
+              <label class="check"><input type="checkbox" [checked]="s.settings['dismissible']" (change)="set('dismissible', $any($event.target).checked)" /> Customers can close it</label>
+            }
+
+            @case ('marquee') {
+              <div class="field"><label>Running text</label><input #tx class="input" maxlength="300" [value]="str('text')" (input)="set('text', $any($event.target).value)" /></div>
+              <ng-container *ngTemplateOutlet="emojiBar; context: { $implicit: tx }" />
+              <ng-container *ngTemplateOutlet="imageField; context: { label: 'Picture shown with the text (optional)' }" />
+              @if (str('image_url')) {
+                <div class="field"><label>Picture size</label>
+                  <select class="select" (change)="set('image_size', $any($event.target).value)">
+                    <option value="small" [selected]="str('image_size') === 'small'">Small</option>
+                    <option value="medium" [selected]="str('image_size') === 'medium'">Medium</option>
+                    <option value="large" [selected]="str('image_size') === 'large'">Large</option>
+                  </select></div>
+              }
+              <div class="two">
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'bg', label: 'Background' }" />
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'color', label: 'Text colour' }" />
+              </div>
+              <div class="two">
+                <div class="field"><label>Speed</label>
+                  <select class="select" (change)="set('speed', $any($event.target).value)">
+                    <option value="slow" [selected]="str('speed') === 'slow'">Slow</option>
+                    <option value="normal" [selected]="str('speed') === 'normal'">Normal</option>
+                    <option value="fast" [selected]="str('speed') === 'fast'">Fast</option>
+                  </select></div>
+                <div class="field"><label>Moves</label>
+                  <select class="select" (change)="set('direction', $any($event.target).value)">
+                    <option value="left" [selected]="str('direction') === 'left'">Right to left</option>
+                    <option value="right" [selected]="str('direction') === 'right'">Left to right</option>
+                  </select></div>
+              </div>
+            }
+
+            @case ('banners') {
+              <label class="check"><input type="checkbox" [checked]="s.settings['autoplay'] !== false" (change)="set('autoplay', $any($event.target).checked)" /> Slide automatically</label>
+              <div class="bn-head"><b>Banners</b><button type="button" class="btn btn-sm btn-primary" (click)="openNewBanner()">+ New banner</button></div>
+              <ul class="bn-list">
+                @for (b of allBanners(); track b.id; let i = $index) {
+                  <li class="bn-item" [class.off]="!b.is_active">
+                    <img [src]="b.image_url" [alt]="b.title || 'Banner'" />
+                    <div class="bn-info">
+                      <span class="bn-title">{{ b.title || 'Untitled banner' }}</span>
+                      <span class="bn-sub">{{ b.link_url || 'No link' }}</span>
+                    </div>
+                    <div class="bn-actions">
+                      <button type="button" class="icon-btn" [disabled]="i === 0" aria-label="Move up" (click)="moveBanner(i, -1)">↑</button>
+                      <button type="button" class="icon-btn" [disabled]="i === allBanners().length - 1" aria-label="Move down" (click)="moveBanner(i, 1)">↓</button>
+                      <button type="button" class="icon-btn" [disabled]="bannerBusy() === b.id" [attr.aria-label]="b.is_active ? 'Hide banner' : 'Show banner'" (click)="toggleBanner(b)"><ion-icon [name]="b.is_active ? 'eye-outline' : 'eye-off-outline'"></ion-icon></button>
+                      <button type="button" class="icon-btn" aria-label="Edit banner" (click)="openEditBanner(b)"><ion-icon name="create-outline"></ion-icon></button>
+                      <button type="button" class="icon-btn danger" [disabled]="bannerBusy() === b.id" aria-label="Delete banner" (click)="removeBanner(b)"><ion-icon name="trash-outline"></ion-icon></button>
+                    </div>
+                  </li>
+                } @empty {
+                  <li class="bn-empty">No banners yet. Add your first one.</li>
+                }
+              </ul>
+            }
+
+            @case ('hero') {
+              <ng-container *ngTemplateOutlet="imageField" />
+              <div class="field"><label>Heading</label><input class="input" maxlength="120" [value]="str('heading')" (input)="set('heading', $any($event.target).value)" /></div>
+              <div class="field"><label>Sub-heading</label><input class="input" maxlength="240" [value]="str('subheading')" (input)="set('subheading', $any($event.target).value)" /></div>
+              <ng-container *ngTemplateOutlet="buttonFields" />
+              <div class="two">
+                <div class="field"><label>Text position</label>
+                  <select class="select" (change)="set('align', $any($event.target).value)">
+                    <option value="left" [selected]="str('align') === 'left'">Bottom left</option>
+                    <option value="center" [selected]="str('align') === 'center'">Centre</option>
+                  </select></div>
+                <div class="field"><label>Height</label>
+                  <select class="select" (change)="set('height', $any($event.target).value)">
+                    <option value="small" [selected]="str('height') === 'small'">Small</option>
+                    <option value="medium" [selected]="str('height') === 'medium'">Medium</option>
+                    <option value="large" [selected]="str('height') === 'large'">Large</option>
+                  </select></div>
+              </div>
+              <div class="field"><label>Picture darkening: <b>{{ s.settings['overlay'] }}%</b></label>
+                <input type="range" min="0" max="80" step="5" [value]="s.settings['overlay']" (input)="set('overlay', +$any($event.target).value)" /></div>
+            }
+
+            @case ('image_text') {
+              <ng-container *ngTemplateOutlet="imageField" />
+              <div class="field"><label>Heading</label><input class="input" maxlength="120" [value]="str('heading')" (input)="set('heading', $any($event.target).value)" /></div>
+              <div class="field"><label>Text</label><textarea class="input" rows="4" maxlength="600" [value]="str('body')" (input)="set('body', $any($event.target).value)"></textarea></div>
+              <ng-container *ngTemplateOutlet="buttonFields" />
+              <div class="field"><label>Layout</label>
+                <select class="select" (change)="set('layout', $any($event.target).value)">
+                  <option value="image-left" [selected]="str('layout') === 'image-left'">Image left · text right</option>
+                  <option value="image-right" [selected]="str('layout') === 'image-right'">Text left · image right</option>
+                </select></div>
+              <div class="two">
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'bg', label: 'Background' }" />
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'color', label: 'Text colour' }" />
+              </div>
+            }
+
+            @case ('articles') {
+              <div class="field"><label>Title (optional)</label><input class="input" maxlength="100" [value]="str('title')" (input)="set('title', $any($event.target).value)" /></div>
+              <div class="field"><label>Layout</label>
+                <select class="select" (change)="set('layout', $any($event.target).value)">
+                  <option value="grid" [selected]="str('layout') === 'grid'">Grid</option>
+                  <option value="list" [selected]="str('layout') === 'list'">List</option>
+                  <option value="slider" [selected]="str('layout') === 'slider'">Slider (swipe sideways)</option>
+                  <option value="image-left" [selected]="str('layout') === 'image-left'">Image left · content right</option>
+                  <option value="image-right" [selected]="str('layout') === 'image-right'">Content left · image right</option>
+                </select></div>
+              @if (str('layout') === 'grid' || str('layout') === 'slider') {
+                <div class="field"><label>{{ str('layout') === 'slider' ? 'Cards visible at once' : 'Columns' }}</label>
+                  <select class="select" (change)="set('columns', +$any($event.target).value)">
+                    @if (str('layout') === 'slider') { <option value="1" [selected]="s.settings['columns'] === 1">1</option> }
+                    <option value="2" [selected]="s.settings['columns'] === 2">2</option>
+                    <option value="3" [selected]="s.settings['columns'] === 3">3</option>
+                  </select></div>
+              }
+              @if (str('layout') === 'slider') {
+                <label class="check"><input type="checkbox" [checked]="s.settings['autoplay']" (change)="set('autoplay', $any($event.target).checked)" /> Slide automatically</label>
+              }
+
+              <ng-container *ngTemplateOutlet="articlePicker" />
+              
+            }
+
+            @case ('collection') {
+              <div class="field"><label>Title (optional)</label><input class="input" maxlength="100" [value]="str('title')" (input)="set('title', $any($event.target).value)" /></div>
+              <div class="field"><label>Layout</label>
+                <select class="select" (change)="set('layout', $any($event.target).value)">
+                  <option value="slider" [selected]="str('layout') === 'slider'">Slider (swipe sideways)</option>
+                  <option value="grid" [selected]="str('layout') === 'grid'">Grid</option>
+                  <option value="list" [selected]="str('layout') === 'list'">List</option>
+                </select></div>
+              @if (str('layout') === 'grid' || str('layout') === 'slider') {
+                <div class="field"><label>{{ str('layout') === 'slider' ? 'Cards visible at once' : 'Columns' }}</label>
+                  <select class="select" (change)="set('columns', +$any($event.target).value)">
+                    @if (str('layout') === 'slider') { <option value="1" [selected]="s.settings['columns'] === 1">1</option> }
+                    <option value="2" [selected]="s.settings['columns'] === 2">2</option>
+                    <option value="3" [selected]="s.settings['columns'] === 3">3</option>
+                  </select></div>
+              }
+              @if (str('layout') === 'slider') {
+                <label class="check"><input type="checkbox" [checked]="s.settings['autoplay']" (change)="set('autoplay', $any($event.target).checked)" /> Slide automatically</label>
+              }
+              <ng-container *ngTemplateOutlet="articlePicker" />
+              
+            }
+
+            @case ('custom') {
+              <div class="field"><label>Heading</label><input class="input" maxlength="120" [value]="str('heading')" (input)="set('heading', $any($event.target).value)" /></div>
+              <div class="field"><label>Text</label><textarea class="input" rows="5" maxlength="1500" [value]="str('body')" (input)="set('body', $any($event.target).value)"></textarea></div>
+              <ng-container *ngTemplateOutlet="buttonFields" />
+              <div class="field"><label>Alignment</label>
+                <select class="select" (change)="set('align', $any($event.target).value)">
+                  <option value="left" [selected]="str('align') === 'left'">Left</option>
+                  <option value="center" [selected]="str('align') === 'center'">Centre</option>
+                </select></div>
+              <div class="two">
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'bg', label: 'Background' }" />
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'color', label: 'Text colour' }" />
+              </div>
+            }
+          }
+        } @else {
+          <div class="placeholder">
+            <ion-icon name="albums-outline" aria-hidden="true"></ion-icon>
+            <p>Select a section to change its settings, or add a new one.</p>
+          </div>
+        }
+      </section>
+
+      } @else {
+      <section class="col col-appearance" aria-label="App appearance">
+        @if (theme(); as t) {
+          <div class="ap-top"><p class="hint">Colours and fonts for the whole customer app. Each colour can mix two shades into a gradient (use the same colour twice for a plain one).</p><button type="button" class="btn btn-sm btn-ghost" (click)="resetTheme()">Reset to default</button></div>
+        <section class="card-block tp-block">
+          <h2>Ready-made themes</h2>
+          <p class="hint">Pick a look for the whole customer app: colours, fonts and button style. Use <b>+ New theme</b> to keep your own.</p>
+          <div class="tp-strip">
+            <button type="button" class="tp new" [class.on]="namingTheme()" (click)="namingTheme.set(!namingTheme())" [attr.aria-expanded]="namingTheme()">
+              <span class="tp-mini tp-plus">+</span><b>New theme</b>
+            </button>
+            <div class="tp-scroll" role="list" aria-label="Themes">
+              @for (p of themePresets; track p.name) {
+                <button type="button" class="tp" [class.on]="isThemePreset(p.theme)" (click)="useThemePreset(p.theme)" [attr.aria-pressed]="isThemePreset(p.theme)">
+                  <span class="tp-mini" [style.background]="'color-mix(in srgb, ' + (p.theme.accent || p.theme.primary) + ' 14%, white)'">
+                    <i class="tp-bar" [style.background]="grad(p.theme.primary, p.theme.primary_2)"></i>
+                    <i class="tp-chip" [style.background]="p.theme.accent || p.theme.primary"></i>
+                    <i class="tp-dot" [style.background]="grad(p.theme.badge_bg, p.theme.badge_bg_2)"></i>
+                  </span>
+                  <b>{{ p.name }}</b>
+                </button>
+              }
+              @for (p of myThemes(); track p.id) {
+                <div class="tp-wrap">
+                  <button type="button" class="tp" [class.on]="isThemePreset(p.theme)" (click)="useThemePreset(p.theme)" [attr.aria-pressed]="isThemePreset(p.theme)">
+                    <span class="tp-mini" [style.background]="'color-mix(in srgb, ' + (p.theme.accent || p.theme.primary) + ' 14%, white)'">
+                    <i class="tp-bar" [style.background]="grad(p.theme.primary, p.theme.primary_2)"></i>
+                    <i class="tp-chip" [style.background]="p.theme.accent || p.theme.primary"></i>
+                    <i class="tp-dot" [style.background]="grad(p.theme.badge_bg, p.theme.badge_bg_2)"></i>
+                  </span>
+                    <b>{{ p.name }}</b>
+                  </button>
+                  <button type="button" class="tp-del" [attr.aria-label]="'Delete ' + p.name" (click)="deleteThemePreset(p)">×</button>
+                </div>
+              }
+            </div>
+          </div>
+          @if (namingTheme()) {
+            <form class="tp-save" (submit)="$event.preventDefault(); saveThemeAsPreset()">
+              <input class="input" maxlength="40" placeholder="Name your theme, e.g. Eid look" [value]="newThemeName()" (input)="newThemeName.set($any($event.target).value)" />
+              <button type="submit" class="btn btn-primary btn-sm" [disabled]="newThemeName().trim().length < 2 || savingTheme()">
+                @if (savingTheme()) { <ion-spinner name="crescent" /> } Add theme
+              </button>
+            </form>
+            <p class="hint">It keeps everything you have set now: main, accent and count-bubble colours, notification colours, fonts, text size and button style.</p>
+          }
+        </section>
+
+        <div class="ap2-grid">
+          <section class="ap2-card wide">
+            <header class="ap2-head"><span class="ap2-ico"><ion-icon name="color-palette-outline"></ion-icon></span><div><h2>Main colour</h2><p>Active tab, buttons and links. The font colour is the text on buttons.</p></div></header>
+            <div class="ap2-strip" [style.background]="grad(t.primary, t.primary_2)" [style.color]="t.primary_text">Preview gradient</div>
+            <div class="swatches">
+              @for (p of palettes; track p.name) {
+                <button type="button" class="swatch" [class.on]="t.primary === p.color && t.primary_2 === p.color2" [style.background]="grad(p.color, p.color2)" [attr.aria-label]="p.name" [title]="p.name" (click)="setTheme({ primary: p.color, primary_2: p.color2 })"></button>
+              }
+            </div>
+            <div class="ap2-fields">
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'primary', label: 'Primary' }" />
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'primary_2', label: 'Secondary' }" />
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'primary_text', label: 'Font colour' }" />
+            </div>
+          </section>
+
+          <section class="ap2-card">
+            <header class="ap2-head"><span class="ap2-ico"><ion-icon name="sparkles-outline"></ion-icon></span><div><h2>Accent colour</h2><p>Soft cards: draft orders, order details, profile and inbox.</p></div></header>
+            <div class="ap2-soft" [style.background]="'color-mix(in srgb, ' + (t.accent || t.primary) + ' 12%, white)'">
+              <span class="ap-dot" [style.background]="t.accent || t.primary"></span>
+              <b [style.color]="t.accent || t.primary">Draft Order</b>
+              <span class="ap-pill" [style.background]="t.accent || t.primary">Draft Saved</span>
+            </div>
+            <div class="swatches">
+              @for (a of accents; track a.color) {
+                <button type="button" class="swatch" [class.on]="(t.accent || '').toUpperCase() === a.color" [style.background]="a.color" [attr.aria-label]="a.name" [title]="a.name" (click)="setTheme({ accent: a.color })"></button>
+              }
+            </div>
+            <div class="ap2-fields one"><ng-container *ngTemplateOutlet="cf; context: { $implicit: 'accent', label: 'Accent' }" /></div>
+          </section>
+
+          <section class="ap2-card">
+            <header class="ap2-head"><span class="ap2-ico"><ion-icon name="notifications-outline"></ion-icon></span><div><h2>Count bubbles</h2><p>Small numbers on Orders, Inbox and the bell.</p></div></header>
+            <div class="ap2-strip bubble" [style.background]="grad(t.badge_bg, t.badge_bg_2)" [style.color]="t.badge_text">12</div>
+            <div class="ap2-fields">
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'badge_bg', label: 'Primary' }" />
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'badge_bg_2', label: 'Secondary' }" />
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'badge_text', label: 'Number' }" />
+            </div>
+          </section>
+
+          <section class="ap2-card">
+            <header class="ap2-head"><span class="ap2-ico"><ion-icon name="chatbubble-ellipses-outline"></ion-icon></span><div><h2>Notifications</h2><p>Pop-up messages and unread items in the notification list.</p></div></header>
+            <div class="ap2-strip" [style.background]="grad(t.notification_bg, t.notification_bg_2)" [style.color]="t.notification_text">Your order is now: Cutting</div>
+            <div class="ap2-fields">
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'notification_bg', label: 'Primary' }" />
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'notification_bg_2', label: 'Secondary' }" />
+              <ng-container *ngTemplateOutlet="cf; context: { $implicit: 'notification_text', label: 'Text' }" />
+            </div>
+          </section>
+
+          <section class="ap2-card">
+            <header class="ap2-head"><span class="ap2-ico"><ion-icon name="radio-button-on-outline"></ion-icon></span><div><h2>Button style</h2><p>How the main buttons look (New, Continue, chat bubble, selected tabs).</p></div></header>
+            <div class="style-pick" role="radiogroup" aria-label="Button style">
+              <button type="button" class="style-opt" role="radio" [class.on]="t.button_style !== 'outline' && t.button_style !== 'fade'" [attr.aria-checked]="t.button_style !== 'outline' && t.button_style !== 'fade'" (click)="setTheme({ button_style: 'solid' })">
+                <span class="demo solid" [style.background]="grad(t.primary, t.primary_2)" [style.color]="t.primary_text"><ion-icon name="chatbubble-ellipses-outline"></ion-icon></span>
+                <b>Solid</b><small>Filled</small>
+              </button>
+              <button type="button" class="style-opt" role="radio" [class.on]="t.button_style === 'outline'" [attr.aria-checked]="t.button_style === 'outline'" (click)="setTheme({ button_style: 'outline' })">
+                <span class="demo soft" [style.color]="t.primary" [style.background]="'color-mix(in srgb, ' + t.primary + ' 12%, white)'" [style.outline-color]="'color-mix(in srgb, ' + t.primary + ' 55%, white)'"><ion-icon name="chatbubble-ellipses-outline"></ion-icon></span>
+                <b>Outline</b><small>Tint + ring</small>
+              </button>
+              <button type="button" class="style-opt" role="radio" [class.on]="t.button_style === 'fade'" [attr.aria-checked]="t.button_style === 'fade'" (click)="setTheme({ button_style: 'fade' })">
+                <span class="demo" [style.color]="t.primary" [style.background]="'color-mix(in srgb, ' + t.primary + ' 12%, white)'"><ion-icon name="chatbubble-ellipses-outline"></ion-icon></span>
+                <b>Fade</b><small>Tint only</small>
+              </button>
+            </div>
+          </section>
+
+          <section class="ap2-card wide">
+            <header class="ap2-head"><span class="ap2-ico"><ion-icon name="text-outline"></ion-icon></span><div><h2>Fonts and sizes</h2><p>Headings use the heading font. Text, descriptions and buttons use the text font.</p></div></header>
+            <div class="ft-grid">
+              <div class="ft-card">
+                <div class="ft-top"><span class="ft-badge">Aa</span><div><b>Headings</b><small>Page titles and section headings</small></div></div>
+                <label class="ft-label" for="apHead">Font</label>
+                <select id="apHead" class="select ft-select" [style.font-family]="t.heading_font" (change)="setTheme({ heading_font: $any($event.target).value })">
+                  @for (f of fonts(); track f) { <option [value]="f" [selected]="f === t.heading_font" [style.font-family]="f">{{ f }}</option> }
+                </select>
+                <div class="ft-size"><label class="ft-label" for="apHeadSize">Size</label><span class="ft-val">{{ t.heading_size || 32 }} px</span></div>
+                <input id="apHeadSize" class="ft-range" type="range" min="24" max="44" step="1" [value]="t.heading_size || 32" (input)="setTheme({ heading_size: +$any($event.target).value })" />
+                <div class="ft-scale"><span>Small</span><span>Large</span></div>
+                <div class="ft-sample ft-sample-head" [style.font-family]="t.heading_font" [style.font-size.px]="t.heading_size || 32">Good morning, Zaryab</div>
+              </div>
+              <div class="ft-card">
+                <div class="ft-top"><span class="ft-badge ft-badge-text">Aa</span><div><b>Text</b><small>Descriptions, labels, forms and buttons</small></div></div>
+                <label class="ft-label" for="apBody">Font</label>
+                <select id="apBody" class="select ft-select" [style.font-family]="t.body_font" (change)="setTheme({ body_font: $any($event.target).value })">
+                  @for (f of fonts(); track f) { <option [value]="f" [selected]="f === t.body_font" [style.font-family]="f">{{ f }}</option> }
+                </select>
+                <div class="ft-size"><label class="ft-label" for="apSize">Size</label><span class="ft-val">{{ t.font_size }} px</span></div>
+                <input id="apSize" class="ft-range" type="range" min="13" max="19" step="1" [value]="t.font_size" (input)="setTheme({ font_size: +$any($event.target).value })" />
+                <div class="ft-scale"><span>Small</span><span>Large</span></div>
+                <p class="ft-sample" [style.font-family]="t.body_font" [style.font-size.px]="t.font_size">{{ sampleText }}</p>
+              </div>
+            </div>
+          </section>
+        </div>
+        }
+      </section>
+      }
+
+      <!-- 3 · Preview -->
+      <aside class="col col-preview" aria-label="Preview">
+        <span class="eyebrow">Live preview</span>
+        @let t = tv();
+        <div class="device">
+          <i class="btn-side b-silent"></i><i class="btn-side b-vol-up"></i><i class="btn-side b-vol-down"></i><i class="btn-side b-power"></i>
+          <div class="phone" [style.font-family]="t.body_font + ', sans-serif'" [style.font-size.px]="t.font_size">
+            <div class="status"><span>9:41</span><i class="notch"><u class="cam"></u></i><span class="sys">●●● ▮</span></div>
+
+            <div class="p-header">
+              <span class="p-logo" [style.background]="grad(t.primary, t.primary_2)" [style.color]="t.primary_text" [style.font-family]="t.heading_font + ', serif'">V</span>
+              <b class="p-brand" [style.font-family]="t.heading_font + ', serif'">V360</b>
+              <span class="p-code"><small>CODE</small> <span [style.color]="t.primary">STX-10011</span></span>
+              <span class="p-ico"><ion-icon name="mail-outline"></ion-icon><b class="bubble" [style.background]="grad(t.badge_bg, t.badge_bg_2)" [style.color]="t.badge_text">1</b></span>
+              <span class="p-ico"><ion-icon name="notifications-outline"></ion-icon><b class="bubble" [style.background]="grad(t.badge_bg, t.badge_bg_2)" [style.color]="t.badge_text">26</b></span>
+            </div>
+
+            <div class="p-scroll">
+              <div class="p-greet">
+                <small [style.color]="t.primary">BESPOKE STITCHING ATELIER</small>
+                <b [style.font-family]="t.heading_font + ', serif'">Good morning, Zaryab</b>
+              </div>
+
+              @if (tab() === 'appearance') {
+                <div class="p-toast" [style.background]="grad(t.notification_bg, t.notification_bg_2)" [style.color]="t.notification_text">Your order is now: Cutting</div>
+                <div class="p-unread" [style.background]="unreadBg()"><b>Order updated</b><span>Unread notification</span></div>
+                <button type="button" class="p-btn" [style.background]="t.button_style === 'outline' || t.button_style === 'fade' ? 'color-mix(in srgb, ' + t.primary + ' 12%, white)' : grad(t.primary, t.primary_2)" [style.color]="t.button_style === 'outline' || t.button_style === 'fade' ? t.primary : t.primary_text" [style.outline]="t.button_style === 'outline' ? '1.5px solid color-mix(in srgb, ' + t.primary + ' 55%, white)' : 'none'" [style.outline-offset.px]="-1.5">Complete</button>
+              }
+
+          @for (s of sections(); track s.id) {
+            @if (!s.hidden) {
+              <div class="p-sec" [class.sel]="s.id === selectedId()" (click)="select(s.id)">
+                @switch (s.type) {
+                  @case ('announcement') {
+                    <div class="p-announce" [style.background]="s.settings['bg']" [style.color]="s.settings['color']" [style.text-align]="s.settings['align']" [class.roomy]="s.settings['size'] === 'medium'">@if (s.settings['image_url']) { <img class="pv-img" [src]="s.settings['image_url']" alt="" /> }{{ s.settings['text'] || (s.settings['image_url'] ? '' : 'Announcement text') }}</div>
+                  }
+                  @case ('marquee') {
+                    <div class="p-marquee" [style.background]="s.settings['bg']" [style.color]="s.settings['color']"><span>@if (s.settings['image_url']) { <img class="pv-img" [class.md]="s.settings['image_size'] === 'medium'" [class.lg]="s.settings['image_size'] === 'large'" [src]="s.settings['image_url']" alt="" /> }{{ s.settings['text'] || (s.settings['image_url'] ? '' : 'Running text') }}</span></div>
+                  }
+                  @case ('banners') {
+                    <div class="p-banners">
+                      @if (banners().length) { <img [src]="banners()[0].image_url" alt="" /> } @else { <span>No active banners</span> }
+                      @if (banners().length > 1) { <i class="dots"><u class="on"></u><u></u></i> }
+                    </div>
+                  }
+                  @case ('hero') {
+                    <div class="p-hero" [class.sm]="s.settings['height'] === 'small'" [class.lg]="s.settings['height'] === 'large'" [class.ctr]="s.settings['align'] === 'center'">
+                      @if (s.settings['image_url']) { <img [src]="s.settings['image_url']" alt="" /> }
+                      <i class="shade" [style.opacity]="s.settings['overlay'] / 100"></i>
+                      <div class="copy">
+                        <b>{{ s.settings['heading'] || 'Heading' }}</b>
+                        @if (s.settings['subheading']) { <span>{{ s.settings['subheading'] }}</span> }
+                        @if (s.settings['button_label']) { <u>{{ s.settings['button_label'] }}</u> }
+                      </div>
+                    </div>
+                  }
+                  @case ('image_text') {
+                    <div class="p-imgtext" [class.rev]="s.settings['layout'] === 'image-right'" [style.background]="s.settings['bg']" [style.color]="s.settings['color']">
+                      <div class="pic">@if (s.settings['image_url']) { <img [src]="s.settings['image_url']" alt="" /> }</div>
+                      <div class="copy">
+                        <b>{{ s.settings['heading'] || 'Heading' }}</b>
+                        <span>{{ s.settings['body'] }}</span>
+                        @if (s.settings['button_label']) { <u>{{ s.settings['button_label'] }}</u> }
+                      </div>
+                    </div>
+                  }
+                  @case ('articles') {
+                    <div class="p-block">
+                      @if (s.settings['title']) { <b class="t">{{ s.settings['title'] }}</b> }
+                      <div class="p-arts" [class]="'l-' + s.settings['layout']" [style.--cols]="s.settings['columns']">
+                        @for (id of s.settings['article_ids']; track id) {
+                          @if (articleById(id); as a) {
+                            <div class="p-art">
+                              <div class="im">@if (a.image_url) { <img [src]="a.image_url" alt="" /> } @else { <span>{{ initial(a.name) }}</span> }</div>
+                              <div class="bd"><b>{{ a.name }}</b><small>{{ a.type_name }}</small></div>
+                            </div>
+                          }
+                        } @empty { <span class="none">Pick articles to show</span> }
+                      </div>
+                    </div>
+                  }
+                  @case ('collection') {
+                    <div class="p-block">
+                      @if (s.settings['title']) { <b class="t">{{ s.settings['title'] }}</b> }
+                      <div class="p-arts" [class]="'l-' + s.settings['layout']" [style.--cols]="s.settings['columns']">
+                        @for (id of s.settings['article_ids']; track id) {
+                          @if (articleById(id); as a) {
+                            <div class="p-art">
+                              <div class="im">@if (a.image_url) { <img [src]="a.image_url" alt="" /> } @else { <span>{{ initial(a.name) }}</span> }</div>
+                              <div class="bd"><b>{{ a.name }}</b><small>{{ a.type_name }}</small></div>
+                            </div>
+                          }
+                        } @empty { <span class="none">Pick articles to show</span> }
+                      </div>
+                    </div>
+                  }
+                  @case ('custom') {
+                    <div class="p-custom" [style.background]="s.settings['bg']" [style.color]="s.settings['color']" [style.text-align]="s.settings['align']">
+                      <b>{{ s.settings['heading'] || 'Heading' }}</b>
+                      <span>{{ s.settings['body'] }}</span>
+                      @if (s.settings['button_label']) { <u>{{ s.settings['button_label'] }}</u> }
+                    </div>
+                  }
+                }
+              </div>
+            }
+          } @empty {
+            <p class="none">Your sections appear here.</p>
+          }
+            </div>
+
+            <nav class="p-tabs">
+              <span class="p-tab on" [style.color]="t.primary"><i [style.background]="softPrimary()"><ion-icon name="home"></ion-icon></i>Home</span>
+              <span class="p-tab"><i><ion-icon name="cube-outline"></ion-icon><b class="bubble" [style.background]="grad(t.badge_bg, t.badge_bg_2)" [style.color]="t.badge_text">2</b></i>Orders</span>
+              <span class="p-tab"><i class="plus" [style.background]="grad(t.primary, t.primary_2)" [style.color]="t.primary_text"><ion-icon name="add-outline"></ion-icon></i>New order</span>
+              <span class="p-tab"><i><ion-icon name="options-outline"></ion-icon></i>Sizes</span>
+              <span class="p-tab"><i><ion-icon name="person-outline"></ion-icon></i>Profile</span>
+            </nav>
+            <span class="home-bar"></span>
+          </div>
+        </div>
+      </aside>
+    </div>
+  }
+</div>
+
+@if (addAt() !== null) {
+  <div class="modal-backdrop" (click)="addAt.set(null)">
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="addTitle" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div><span class="eyebrow">Home page</span><h3 id="addTitle">Add section</h3></div>
+        <button type="button" class="close-btn" (click)="addAt.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="type-grid">
+          @for (m of metas; track m.type) {
+            <button type="button" class="type-card" (click)="addSection(m.type)">
+              <span class="ico"><ion-icon [name]="m.icon" aria-hidden="true"></ion-icon></span>
+              <b>{{ m.label }}</b>
+              <small>{{ m.help }}</small>
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}
+
+@if (bannerForm(); as f) {
+  <div class="modal-backdrop" (click)="!bannerSaving() && bannerForm.set(null)">
+    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="bnTitle" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); saveBanner()">
+      <div class="modal-head">
+        <h3 id="bnTitle">{{ f.id ? 'Edit banner' : 'New banner' }}</h3>
+        <button type="button" class="close-btn" (click)="bannerForm.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="bnFile">Banner picture</label>
+          <label class="bn-drop" [class.empty]="!f.preview" for="bnFile">
+            @if (f.preview) { <img [src]="f.preview" alt="Banner preview" /> }
+            <span class="bn-drop-cta"><ion-icon name="cloud-upload-outline"></ion-icon>{{ f.preview ? 'Click to change picture' : 'Click to upload picture' }}</span>
+          </label>
+          <input #bnFile id="bnFile" class="bn-file" type="file" accept="image/jpeg,image/png,image/webp" (change)="onBannerFile(bnFile)" />
+          <span class="hint">A wide picture works best (for example 1200 × 500). JPG, PNG or WebP.</span>
+          @if (bannerFileError()) { <span class="hint bn-err">{{ bannerFileError() }}</span> }
+        </div>
+        <div class="field">
+          <label for="bnLink">Link or app page (optional)</label>
+          <select class="select app-pick" aria-label="Pick a page inside the app" (change)="patchBanner({ link_url: $any($event.target).value }); $any($event.target).value = ''">
+                <option value="">Or pick a page inside the app…</option>
+                @for (pg of appPages; track pg.path) { <option [value]="pg.path">{{ pg.label }}</option> }
+              </select>
+          <input id="bnLink" class="input" type="text" placeholder="https://example.com/sale or /app/orders/new" [value]="f.link_url" (input)="patchBanner({ link_url: $any($event.target).value })" />
+          <span class="hint" [class.bn-err]="!bannerLinkValid()">{{ bannerLinkValid() ? 'Opens when a customer taps the banner. Leave empty for a banner that is not clickable.' : 'Enter a full address starting with http:// or https://, or pick an app page' }}</span>
+        </div>
+        <div class="field">
+          <label for="bnName">Title (optional)</label>
+          <input id="bnName" class="input" maxlength="120" placeholder="e.g. Eid collection" [value]="f.title" (input)="patchBanner({ title: $any($event.target).value })" />
+        </div>
+        <label class="check"><input type="checkbox" [checked]="f.is_active" (change)="patchBanner({ is_active: $any($event.target).checked })" /> Show to customers</label>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="bannerSaving()" (click)="bannerForm.set(null)">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="!bannerFormValid() || bannerSaving()">
+          @if (bannerSaving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add banner' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}
+
+<ng-template #cf let-key let-label="label">
+  <label class="cf">
+    <span class="cf-l">{{ label }}</span>
+    <span class="cf-row">
+      <input type="color" [value]="$any(theme())[key]" (input)="setThemeColor(key, $any($event.target).value)" />
+      <input class="input hex" [value]="$any(theme())[key]" maxlength="7" (input)="setThemeColor(key, $any($event.target).value)" />
+    </span>
+  </label>
+</ng-template>

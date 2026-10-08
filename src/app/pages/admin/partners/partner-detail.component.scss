@@ -148,3 +148,9 @@
   .masters-grid { grid-template-columns: 1fr; }
   .module-actions .btn { flex: 1 1 auto; }
 }
+
+.prof { display: grid; gap: 14px; }
+.prof-h { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted); }
+.prof-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.prof-f { display: grid; gap: 5px; font-size: 12.5px; font-weight: 600; &.wide { grid-column: 1 / -1; } small { font-weight: 400; color: var(--c-muted); } }
+.prof-switch { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px; }

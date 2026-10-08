@@ -1,0 +1,97 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Setup</span>
+      <h1>Home banners</h1>
+      <p class="subtitle">Pictures shown at the top of the customer app's home page. Add a link and customers who tap the banner are taken there.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" (click)="openNew()">+ Add banner</button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <app-empty-state kind="error" [message]="error()" (retry)="load()" />
+  } @else if (loading()) {
+    <div class="banner-list">
+      @for (i of [1, 2]; track i) { <div class="banner-row"><span class="skeleton banner-skel"></span></div> }
+    </div>
+  } @else {
+    <div class="banner-list">
+      @for (b of banners(); track b.id; let i = $index) {
+        <article class="banner-row" [class.inactive]="!b.is_active">
+          <img class="banner-img" [src]="b.image_url" [alt]="b.title || 'Banner'" loading="lazy" />
+          <div class="banner-info">
+            <span class="cell-main">{{ b.title || 'Untitled banner' }}</span>
+            @if (b.link_url) {
+              <a class="banner-link" [href]="b.link_url" target="_blank" rel="noopener noreferrer">{{ b.link_url }}</a>
+            } @else {
+              <span class="muted">No link — not clickable</span>
+            }
+            <div class="banner-switch">
+              <button type="button" class="switch" role="switch" [attr.aria-checked]="b.is_active" [class.on]="b.is_active" [disabled]="busyId() === b.id"
+                aria-label="Show this banner to customers" (click)="toggleActive(b)"><span></span></button>
+              <span class="switch-label" aria-hidden="true">{{ b.is_active ? 'Shown' : 'Hidden' }}</span>
+            </div>
+          </div>
+          <div class="banner-actions">
+            <button type="button" class="btn btn-sm btn-ghost" [disabled]="i === 0" aria-label="Move up" (click)="move(i, -1)">↑</button>
+            <button type="button" class="btn btn-sm btn-ghost" [disabled]="i === banners().length - 1" aria-label="Move down" (click)="move(i, 1)">↓</button>
+            <button type="button" class="btn btn-sm" (click)="openEdit(b)">Edit</button>
+            <button type="button" class="btn btn-sm btn-ghost danger" [disabled]="busyId() === b.id" (click)="remove(b)">Delete</button>
+          </div>
+        </article>
+      } @empty {
+        <app-empty-state title="No banners yet" message="Add a banner and it appears at the top of the customer home page.">
+          <button type="button" class="btn btn-sm btn-primary" (click)="openNew()">+ Add banner</button>
+        </app-empty-state>
+      }
+    </div>
+  }
+</div>
+
+@if (form(); as f) {
+  <div class="modal-backdrop" (click)="!saving() && form.set(null)">
+    <form class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="bnTitle" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); save()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Home banner</span>
+          <h3 id="bnTitle">{{ f.id ? 'Edit banner' : 'Add banner' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="form.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field span-2">
+            <label for="bnFile">Banner picture</label>
+            <input #fileInput id="bnFile" type="file" class="input" accept="image/jpeg,image/png,image/webp" (change)="onFile(fileInput)" />
+            <span class="hint">A wide picture works best (for example 1200 × 500). JPG, PNG or WebP.</span>
+            @if (fileError()) { <span class="hint error">{{ fileError() }}</span> }
+            @if (f.preview) { <img class="banner-preview" [src]="f.preview" alt="Banner preview" /> }
+          </div>
+          <div class="field span-2">
+            <label for="bnLink">Link (optional)</label>
+            <input id="bnLink" class="input" type="url" placeholder="https://example.com/sale" [value]="f.link_url" (input)="patchForm({ link_url: $any($event.target).value })" />
+            <span class="hint" [class.error]="!linkValid()">
+              {{ linkValid() ? 'This page opens when a customer taps the banner. Leave empty for a banner that is not clickable.' : 'Enter a full address starting with http:// or https://' }}
+            </span>
+          </div>
+          <div class="field span-2">
+            <label for="bnName">Title (optional)</label>
+            <input id="bnName" class="input" maxlength="120" placeholder="e.g. Eid collection" [value]="f.title" (input)="patchForm({ title: $any($event.target).value })" />
+            <span class="hint">For your own reference and screen readers; it is not printed on the banner.</span>
+          </div>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" [checked]="f.is_active" (change)="patchForm({ is_active: $any($event.target).checked })" /> Show to customers</label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="form.set(null)">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="!formValid() || saving()">
+          @if (saving()) { <ion-spinner name="crescent" /> } {{ f.id ? 'Save changes' : 'Add banner' }}
+        </button>
+      </div>
+    </form>
+  </div>
+}

@@ -30,6 +30,8 @@ export interface ArticleType {
   status: CatalogueStatus;
   sort_order: number;
   articles_count: number;
+  /** null = shared by every partner (read-only for partners). */
+  partner_id?: string | null;
 }
 
 export interface ArticleTypeInput {
@@ -51,6 +53,7 @@ export interface Article {
   status: CatalogueStatus;
   sort_order: number;
   type?: { id: string; name: string } | null;
+  partner_id?: string | null;
   created_at: string;
   updated_at?: string;
 }

@@ -87,6 +87,8 @@ const TYPE_ICON: Record<string, string> = {
     .bell:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     .count { position: absolute; top: 2px; right: 1px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--c-red); color: #fff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid var(--c-surface); font-variant-numeric: tabular-nums; }
     .panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(400px, calc(100vw - 24px)); background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 16px; box-shadow: var(--shadow-lg); z-index: 900; overflow: hidden; animation: popIn .18s ease both; }
+    /* phones: the panel spans the screen under the top bar instead of hanging off the bell */
+    @media (max-width: 700px) { .panel { position: fixed; top: calc(var(--topbar-h, 60px) + 8px); left: 12px; right: 12px; width: auto; max-height: calc(100dvh - var(--topbar-h, 60px) - 24px); display: flex; flex-direction: column; } .panel .list { max-height: none; flex: 1; overflow-y: auto; min-height: 0; } }
     .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid var(--c-line-soft); }
     h4 { font-family: var(--font-sans); font-size: 15px; font-weight: 600; }
     .sub { font-size: 11.5px; color: var(--c-muted); }

@@ -1,0 +1,146 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Setup</span>
+      <h1>Portal theme</h1>
+      <p class="subtitle">Choose the colours of the admin and partner portals: sidebar, buttons and page backgrounds. Only admins can change this; everyone sees the result.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="resetAll()">Reset to original</button>
+      <button type="button" class="btn btn-ghost" [disabled]="!dirty() || saving()" (click)="discard()">Discard changes</button>
+      <button type="button" class="btn btn-primary" [disabled]="!dirty() || saving()" (click)="save()">
+        @if (saving()) { <ion-spinner name="crescent" /> } Save
+      </button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <p class="pt-error" role="alert">{{ error() }}</p>
+  } @else if (loading()) {
+    <div class="skeleton" style="height: 360px"></div>
+  } @else if (theme(); as t) {
+    <div class="pt-grid">
+      <div class="pt-form">
+        <section class="pt-card">
+          <h2>Ready-made themes</h2>
+          <p class="hint">Pick one to start from. Use <b>+ New theme</b> to keep your current colours and fonts as your own theme.</p>
+          <div class="pt-strip">
+          <button type="button" class="pt-preset pt-new" [class.on]="naming()" (click)="naming.set(!naming())" [attr.aria-expanded]="naming()">
+            <span class="pt-mini pt-plus">+</span>
+            <b>New theme</b>
+          </button>
+          <div class="pt-presets pt-scroll" role="list" aria-label="Themes">
+            @for (p of presets; track p.name) {
+              <button type="button" class="pt-preset" [class.on]="isPreset(p.theme)" (click)="usePreset(p.theme)" [attr.aria-pressed]="isPreset(p.theme)">
+                <span class="pt-mini" [style.background]="p.theme.page_bg">
+                  <i class="pt-mini-sb" [style.background]="p.theme.sidebar_bg"><u [style.background]="p.theme.sidebar_accent"></u></i>
+                  <i class="pt-mini-btn" [style.background]="p.theme.primary"></i>
+                </span>
+                <b>{{ p.name }}</b>
+              </button>
+            }
+            @for (p of myPresets(); track p.id) {
+              <div class="pt-preset-wrap">
+                <button type="button" class="pt-preset" [class.on]="isPreset(p.theme)" (click)="usePreset(p.theme)" [attr.aria-pressed]="isPreset(p.theme)">
+                  <span class="pt-mini" [style.background]="p.theme.page_bg">
+                    <i class="pt-mini-sb" [style.background]="p.theme.sidebar_bg"><u [style.background]="p.theme.sidebar_accent"></u></i>
+                    <i class="pt-mini-btn" [style.background]="p.theme.primary"></i>
+                  </span>
+                  <b>{{ p.name }}</b>
+                </button>
+                <button type="button" class="pt-del" [attr.aria-label]="'Delete ' + p.name" (click)="deletePreset(p)">×</button>
+              </div>
+            }
+          </div>
+          </div>
+          @if (naming()) {
+            <form class="pt-save" (submit)="$event.preventDefault(); saveAsPreset()">
+              <input class="input" maxlength="40" placeholder="Name your theme, e.g. Eid look" autofocus [value]="newName()" (input)="newName.set($any($event.target).value)" />
+              <button type="submit" class="btn btn-primary btn-sm" [disabled]="newName().trim().length < 2 || savingPreset()">
+                @if (savingPreset()) { <ion-spinner name="crescent" /> } Add theme
+              </button>
+            </form>
+            <p class="hint">It saves everything you have set now: sidebar, buttons, page colours, fonts and sizes.</p>
+          }
+        </section>
+
+        <section class="pt-card">
+          <h2>Fonts</h2>
+          <p class="hint">Headings and page titles use the heading font. Everything else (text, descriptions, tables, buttons) uses the text font.</p>
+          <div class="ft-grid">
+            <div class="ft-card">
+              <div class="ft-top"><span class="ft-badge">Aa</span><div><b>Headings</b><small>Page titles and section headings</small></div></div>
+              <label class="ft-label" for="ptHeadFont">Font</label>
+              <select id="ptHeadFont" class="select ft-select" [style.font-family]="t.heading_font" (change)="setFont('heading_font', $any($event.target).value)">
+                @for (f of fonts(); track f) { <option [value]="f" [selected]="f === t.heading_font" [style.font-family]="f">{{ f }}</option> }
+              </select>
+              <div class="ft-size">
+                <label class="ft-label" for="ptHeadSize">Size</label>
+                <span class="ft-val">{{ t.heading_size }} px</span>
+              </div>
+              <input id="ptHeadSize" class="ft-range" type="range" min="22" max="44" step="1" [value]="t.heading_size" (input)="setSize('heading_size', +$any($event.target).value)" />
+              <div class="ft-scale"><span>Small</span><span>Large</span></div>
+              <div class="ft-sample ft-sample-head" [style.font-family]="t.heading_font" [style.font-size.px]="t.heading_size">Orders overview</div>
+            </div>
+
+            <div class="ft-card">
+              <div class="ft-top"><span class="ft-badge ft-badge-text">Aa</span><div><b>Text</b><small>Descriptions, tables, forms and buttons</small></div></div>
+              <label class="ft-label" for="ptBodyFont">Font</label>
+              <select id="ptBodyFont" class="select ft-select" [style.font-family]="t.body_font" (change)="setFont('body_font', $any($event.target).value)">
+                @for (f of fonts(); track f) { <option [value]="f" [selected]="f === t.body_font" [style.font-family]="f">{{ f }}</option> }
+              </select>
+              <div class="ft-size">
+                <label class="ft-label" for="ptBodySize">Size</label>
+                <span class="ft-val">{{ t.body_size }} px</span>
+              </div>
+              <input id="ptBodySize" class="ft-range" type="range" min="12" max="18" step="1" [value]="t.body_size" (input)="setSize('body_size', +$any($event.target).value)" />
+              <div class="ft-scale"><span>Small</span><span>Large</span></div>
+              <p class="ft-sample" [style.font-family]="t.body_font" [style.font-size.px]="t.body_size">Every order from placement to delivery, in one place. 1,250 orders this month.</p>
+            </div>
+          </div>
+        </section>
+
+        @for (g of groups; track g.title) {
+          <section class="pt-card">
+            <h2>{{ g.title }}</h2>
+            <p class="hint">{{ g.hint }}</p>
+            <div class="pt-fields">
+              @for (f of g.fields; track f.key) {
+                <label class="pt-field">
+                  <span>{{ f.label }}</span>
+                  <span class="pt-row">
+                    <input type="color" [value]="t[f.key]" (input)="set(f.key, $any($event.target).value)" />
+                    <input class="input hex" [value]="t[f.key]" maxlength="7" (input)="set(f.key, $any($event.target).value)" />
+                  </span>
+                </label>
+              }
+            </div>
+          </section>
+        }
+      </div>
+
+      <aside class="pt-preview-col" aria-label="Preview">
+        <span class="eyebrow">Live preview</span>
+        <div class="pt-preview" [style]="previewVars()">
+          <div class="pv-sidebar">
+            <b class="pv-logo">V360</b>
+            <span class="pv-item"><ion-icon name="grid-outline"></ion-icon>Overview</span>
+            <span class="pv-item active"><ion-icon name="cube-outline"></ion-icon>Orders</span>
+            <span class="pv-item"><ion-icon name="people-outline"></ion-icon>Customers</span>
+            <span class="pv-item"><ion-icon name="settings-outline"></ion-icon>Settings</span>
+          </div>
+          <div class="pv-main">
+            <div class="pv-top"><b class="pv-h">Orders</b><span class="pv-btn">New order</span></div>
+            <p class="pv-desc">Every order from placement to delivery, in one place.</p>
+            <div class="pv-card">
+              <div class="pv-tabs"><span class="on">All</span><span>Active</span><span>Done</span></div>
+              <div class="pv-line"></div>
+              <div class="pv-line short"></div>
+              <div class="pv-line"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  }
+</div>

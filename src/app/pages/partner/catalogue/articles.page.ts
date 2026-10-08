@@ -11,6 +11,7 @@ import {
 } from '../../../core/services/catalogue.service';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { UiService } from '../../../core/services/ui.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { compressImage } from '../../../core/utils/image';
 import { PkrPipe } from '../../../shared/pipes';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
@@ -73,6 +74,16 @@ interface ArticleForm {
 export class PartnerArticlesPage implements OnInit {
   private catalogue = inject(CatalogueService);
   private ui = inject(UiService);
+  private auth = inject(AuthService);
+
+  /** Rows with no partner are shared by everyone; only an admin may change them. */
+  isShared(row: { partner_id?: string | null }): boolean {
+    return row.partner_id === null;
+  }
+
+  isLocked(row: { partner_id?: string | null }): boolean {
+    return row.partner_id === null && !this.auth.isAdmin();
+  }
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);

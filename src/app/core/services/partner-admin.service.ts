@@ -49,6 +49,16 @@ export interface PartnerRecord {
   permissions: string[];
   is_default: boolean;
   created_at: string;
+  /** What customers see when they choose a partner, and where they send their parcel. */
+  short_code?: string | null;
+  city?: string | null;
+  tagline?: string | null;
+  turnaround_days?: number | null;
+  is_listed?: boolean;
+  receiving_name?: string | null;
+  receiving_address?: string | null;
+  receiving_city?: string | null;
+  receiving_phone?: string | null;
 }
 
 /** GET /admin/partners row. */
@@ -123,6 +133,15 @@ export interface PartnerPatch {
   status?: 'active' | 'inactive';
   permissions?: string[];
   is_default?: true;
+  short_code?: string | null;
+  city?: string | null;
+  tagline?: string | null;
+  turnaround_days?: number | null;
+  is_listed?: boolean;
+  receiving_name?: string | null;
+  receiving_address?: string | null;
+  receiving_city?: string | null;
+  receiving_phone?: string | null;
 }
 
 export interface PartnerListParams {
