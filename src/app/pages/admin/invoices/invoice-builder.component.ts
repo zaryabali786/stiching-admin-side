@@ -31,6 +31,8 @@ interface EditLine {
   partner_amount: number;
   price_item_id: string | null;
   unit_id: string | null;
+  /** Set when the line is a partner's extra item (it is on the invoice once). */
+  extra_cost_id: string | null;
   /** Per-unit prices when the line came from the price list: quantity changes recompute the amounts. */
   unitCustomer: number | null;
   unitPartner: number | null;
@@ -425,6 +427,7 @@ export class InvoiceBuilderComponent {
             partner_amount: l.kind === 'discount' ? 0 : round2(num(l.partner_amount)),
             price_item_id: l.price_item_id,
             unit_id: l.unit_id,
+            ...(l.extra_cost_id ? { extra_cost_id: l.extra_cost_id } : {}),
           })),
         })
       );
@@ -440,6 +443,49 @@ export class InvoiceBuilderComponent {
     } finally {
       if (!silent) this.busy.set(null);
     }
+  }
+
+  // ───────── the partner's extra items ─────────
+  readonly extraBusy = signal<string | null>(null);
+  readonly extraCosts = computed(() => this.data()?.extraCosts ?? []);
+  /** Items already on the lines being edited (so they cannot be added twice). */
+  private extraOnLines = computed(() => new Set(this.lines().map((l) => l.extra_cost_id).filter(Boolean) as string[]));
+  readonly extraPendingCount = computed(() => this.extraCosts().filter((c) => c.status === 'pending').length);
+
+  isOnInvoice(id: string): boolean {
+    return this.extraOnLines().has(id);
+  }
+
+  decideExtra(c: { id: string; name: string }, decision: 'approve' | 'reject'): void {
+    if (this.extraBusy()) return;
+    this.extraBusy.set(c.id);
+    this.admin.decideExtraCost(c.id, decision).subscribe({
+      next: (res) => {
+        this.extraBusy.set(null);
+        this.data.update((d) => (d ? { ...d, extraCosts: (d.extraCosts ?? []).map((x) => (x.id === c.id ? { ...x, ...res.data } : x)) } : d));
+        this.ui.success(res.message || 'Saved.');
+        // an approved item goes straight onto the invoice being built
+        if (decision === 'approve' && this.canEdit()) this.addExtraLine(res.data);
+      },
+      error: (err) => {
+        this.extraBusy.set(null);
+        this.ui.error(err);
+      },
+    });
+  }
+
+  /** Put an approved extra item on the invoice (once). The customer pays its cost; the partner is paid back what they spent. */
+  addExtraLine(c: { id: string; name: string; quantity: number; unit_price: number; total_pkr: number; notes: string | null; status: string }): void {
+    if (c.status !== 'approved' || this.isOnInvoice(c.id)) return;
+    this.push({
+      kind: 'other',
+      label: `Extra material · ${c.name}`.slice(0, 160),
+      description: `${Number(c.quantity)} × PKR ${Number(c.unit_price)}${c.notes ? ` · ${c.notes}` : ''}`,
+      quantity: 1,
+      customer_amount: Number(c.total_pkr),
+      partner_amount: Number(c.total_pkr),
+      extra_cost_id: c.id,
+    });
   }
 
   private push(line: Partial<EditLine> & Pick<EditLine, 'kind' | 'label'>): void {
@@ -458,6 +504,7 @@ export class InvoiceBuilderComponent {
       partner_amount: num(l.partner_amount),
       price_item_id: l.price_item_id || null,
       unit_id: l.unit_id || null,
+      extra_cost_id: l.extra_cost_id || null,
       unitCustomer: l.unitCustomer ?? null,
       unitPartner: l.unitPartner ?? null,
     };

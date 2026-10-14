@@ -10,7 +10,7 @@
   <div class="tabs" role="tablist" aria-label="Settings sections">
     <button type="button" role="tab" [class.active]="query().tab === 'team'" [attr.aria-selected]="query().tab === 'team'" (click)="setTab('team')">Team &amp; roles</button>
     <button type="button" role="tab" [class.active]="query().tab === 'address'" [attr.aria-selected]="query().tab === 'address'" (click)="setTab('address')">Ship-to address</button>
-    <button type="button" role="tab" [class.active]="query().tab === 'express'" [attr.aria-selected]="query().tab === 'express'" (click)="setTab('express')">Express stitching</button>
+    <button type="button" role="tab" [class.active]="query().tab === 'express'" [attr.aria-selected]="query().tab === 'express'" (click)="setTab('express')">Express</button>
     <button type="button" role="tab" [class.active]="query().tab === 'postex'" [attr.aria-selected]="query().tab === 'postex'" (click)="setTab('postex')">PostEx</button>
     <button type="button" role="tab" [class.active]="query().tab === 'account'" [attr.aria-selected]="query().tab === 'account'" (click)="setTab('account')">Account</button>
   </div>
@@ -46,6 +46,7 @@
     </section>
   } @else if (query().tab === 'express') {
     <!-- ═══ Express stitching ═══ -->
+    <div class="express-grid">
     <section class="card address-card">
       <h3 class="card-title">Express stitching</h3>
       <p class="muted small">Customers can ask for express stitching when they create an order. You decide here how many days it takes; the number is shown to them and becomes the order's due date.</p>
@@ -62,6 +63,11 @@
           <input id="exDays" type="number" min="1" max="90" step="1" class="input" [value]="express().days" (input)="setExpress({ days: +$any($event.target).value })" />
           <span class="hint">Whole days, 1 to 90. Counted from the day the order is created.</span>
         </div>
+        <div class="field">
+          <label for="exPrice">Express stitching price (PKR)</label>
+          <input id="exPrice" type="number" min="0" step="1" class="input" [value]="express().price_pkr" (input)="setExpress({ price_pkr: +$any($event.target).value })" />
+          <span class="hint">Added to the customer's total when they choose express stitching. 0 = no extra charge.</span>
+        </div>
         <div class="row-end">
           <button type="submit" class="btn btn-primary" [disabled]="!expressLoaded() || !expressValid() || !expressDirty() || savingExpress()">
             @if (savingExpress()) { <ion-spinner name="crescent" /> } Save
@@ -69,6 +75,35 @@
         </div>
       </form>
     </section>
+    <section class="card address-card">
+      <h3 class="card-title">Express shipping</h3>
+      <p class="muted small">Customers can ask for express shipping when they create an order. You decide here how many days the delivery takes; the number is shown to them and to the team on the order.</p>
+      <form (submit)="$event.preventDefault(); saveExpressShip()">
+        <div class="field">
+          <label for="exShipEnabled">Offer express shipping to customers</label>
+          <select id="exShipEnabled" class="select" (change)="setExpressShip({ enabled: $any($event.target).value === 'yes' })">
+            <option value="yes" [selected]="expressShip().enabled">Yes</option>
+            <option value="no" [selected]="!expressShip().enabled">No</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="exShipDays">Days to deliver an express shipping order</label>
+          <input id="exShipDays" type="number" min="1" max="90" step="1" class="input" [value]="expressShip().days" (input)="setExpressShip({ days: +$any($event.target).value })" />
+          <span class="hint">Whole days, 1 to 90. Counted from the day the order is dispatched.</span>
+        </div>
+        <div class="field">
+          <label for="exShipPrice">Express shipping price (PKR)</label>
+          <input id="exShipPrice" type="number" min="0" step="1" class="input" [value]="expressShip().price_pkr" (input)="setExpressShip({ price_pkr: +$any($event.target).value })" />
+          <span class="hint">Added to the customer's total when they choose express shipping. 0 = no extra charge.</span>
+        </div>
+        <div class="row-end">
+          <button type="submit" class="btn btn-primary" [disabled]="!expressShipLoaded() || !expressShipValid() || !expressShipDirty() || savingExpressShip()">
+            @if (savingExpressShip()) { <ion-spinner name="crescent" /> } Save
+          </button>
+        </div>
+      </form>
+    </section>
+    </div>
   } @else if (query().tab === 'postex') {
     <!-- ═══ PostEx ═══ -->
     <section class="card address-card">

@@ -40,8 +40,16 @@
           </thead>
           <tbody>
             @for (o of rows(); track o.id) {
-              <tr>
-                <td data-label="Order"><span class="cell-main">{{ o.reference }}</span>@if (o.order_kind === 'return') { <span class="cell-sub">Return</span> }</td>
+              <tr class="clickable" tabindex="0" role="button" [attr.aria-label]="'Open order ' + o.reference" [class.selected]="openId() === o.id" (click)="openOrder(o)" (keydown.enter)="openOrder(o)" (keydown.space)="$event.preventDefault(); openOrder(o)">
+                <td data-label="Order">
+                  <span class="order-cell">
+                    <app-brand-logo [url]="o.brand_logo_url" [name]="o.brand" [size]="36" />
+                    <span>
+                      <span class="cell-main">{{ o.reference }}</span>
+                      <span class="cell-sub">{{ o.brand || '' }}@if (o.order_kind === 'return') { · Return }</span>
+                    </span>
+                  </span>
+                </td>
                 <td data-label="Created">{{ o.created_at | day }}</td>
                 <td data-label="Due">{{ o.due_date ? (o.due_date | day) : '—' }}</td>
                 <td data-label="Customer">
@@ -59,4 +67,101 @@
       <app-pagination [meta]="meta()" (pageChange)="goToPage($event)" />
     }
   </section>
+
+  @if (openId()) {
+    <div class="drawer-backdrop" (click)="closeOrder()"></div>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-label="Order details">
+      <header class="drawer-head">
+        <div class="dh-title">
+          @if (detail(); as d) {
+            <app-brand-logo [url]="d.brand.logo_url" [name]="d.brand.name" [size]="44" />
+            <div>
+              <span class="eyebrow">{{ d.brand.name || 'Order' }}@if (d.brand.order_number) { · {{ d.brand.order_number }} }</span>
+              <h2>{{ d.reference }}</h2>
+            </div>
+          } @else {
+            <h2>Order</h2>
+          }
+        </div>
+        <button type="button" class="close-btn" (click)="closeOrder()" aria-label="Close">×</button>
+      </header>
+
+      <div class="drawer-body">
+        @if (detailLoading()) {
+          <span class="skeleton" style="height: 28px"></span>
+          <span class="skeleton" style="height: 120px"></span>
+          <span class="skeleton" style="height: 160px"></span>
+        } @else if (detailError()) {
+          <app-empty-state kind="error" [message]="detailError()" (retry)="loadDetail(openId()!)" />
+        } @else if (detail(); as d) {
+          <div class="d-row">
+            <app-status-badge [status]="d.status" [label]="d.status_label" />
+            @if (d.express.rush) { <span class="badge red">Rush</span> }
+            @if (d.express.stitching) { <span class="badge amber">Express stitching · {{ d.express.stitching }} days</span> }
+            @if (d.express.shipping) { <span class="badge amber">Express shipping · {{ d.express.shipping }} days</span> }
+          </div>
+
+          <section class="d-card earnings" aria-label="Partner earnings">
+            <span class="d-label">Partner Earnings</span>
+            @switch (d.earnings.state) {
+              @case ('earned') { <strong class="amount">{{ d.earnings.amount_pkr | pkr }}</strong><span class="muted small">Earned: the customer has paid this order.</span> }
+              @case ('pending') { <strong class="amount">{{ d.earnings.amount_pkr | pkr }}</strong><span class="muted small">Pending: counted as earned once the customer pays.</span> }
+              @default { <strong class="amount none">Not available yet</strong><span class="muted small">It is calculated when the invoice is issued.</span> }
+            }
+          </section>
+
+          <section class="d-card">
+            <span class="d-label">Order</span>
+            <dl class="d-kv">
+              <dt>Customer</dt><dd>{{ d.customer.name || '—' }}@if (d.customer.code) { <span class="muted"> · {{ d.customer.code }}</span> }</dd>
+              <dt>Deliver to</dt><dd>{{ addressText(d.delivery) || '—' }}</dd>
+              <dt>Created</dt><dd>{{ d.created_at | day }}</dd>
+              <dt>Due</dt><dd>{{ d.due_date ? (d.due_date | day) : '—' }}</dd>
+            </dl>
+            @if (d.notes) { <p class="d-note"><b>Customer notes:</b> {{ d.notes }}</p> }
+          </section>
+
+          <section class="d-card">
+            <span class="d-label">{{ d.units.length }} {{ d.units.length === 1 ? 'article' : 'articles' }}</span>
+            @for (u of d.units; track u.id) {
+              <article class="d-unit">
+                @if (u.image_url) { <img class="d-thumb" [src]="u.image_url" alt="" loading="lazy" referrerpolicy="no-referrer" /> }
+                <div class="d-unit-body">
+                  <strong>{{ u.title }}@if (u.quantity > 1) { <span class="muted"> × {{ u.quantity }}</span> }</strong>
+                  @if (u.code) { <span class="muted small mono">{{ u.code }}</span> }
+                  @if (u.stitching_type) { <span class="small">{{ u.stitching_type }}</span> }
+                  @if (u.size; as sz) {
+                    <span class="small"><b>Size:</b> {{ sz.name || sz.person || 'Size chart' }}@if (sz.nearest) { · nearest {{ sz.nearest }} }</span>
+                    @if (measureText(sz.measurements); as mt) { <span class="small muted">{{ mt }}</span> }
+                  }
+                  @if (u.customizations.length) {
+                    <span class="chips-line">
+                      @for (c of u.customizations; track $index) { <span class="chip-s">{{ c.type }}: {{ c.name }}</span> }
+                    </span>
+                  }
+                  @if (u.notes) { <span class="small"><b>Notes:</b> {{ u.notes }}</span> }
+                </div>
+              </article>
+            }
+          </section>
+
+          <section class="d-card">
+            <span class="d-label">Timeline</span>
+            <ol class="d-timeline">
+              @for (e of d.timeline; track e.id) {
+                <li>
+                  <span class="t-dot" aria-hidden="true"></span>
+                  <div>
+                    <strong>{{ e.label }}</strong>
+                    @if (e.note) { <span class="muted small"> · {{ e.note }}</span> }
+                    <span class="muted small t-at">{{ e.at | day: true }}</span>
+                  </div>
+                </li>
+              } @empty { <li class="muted small">No history yet.</li> }
+            </ol>
+          </section>
+        }
+      </div>
+    </aside>
+  }
 </div>

@@ -44,7 +44,12 @@
             } @else {
               @for (r of list.items(); track r.id) {
                 <tr [class.inactive]="r.status !== 'active'">
-                  <td class="c-name"><span class="cell-main">{{ r.name }}</span></td>
+                  <td class="c-name">
+                    <span class="name-with-logo">
+                      @if (!isCourier) { <app-brand-logo [url]="r.logo_url" [name]="r.name" [size]="32" /> }
+                      <span class="cell-main">{{ r.name }}</span>
+                    </span>
+                  </td>
                   @if (isCourier) {
                     <td class="c-extra">
                       <span class="badge" [class.blue]="r.requires_tracking !== false">{{ r.requires_tracking !== false ? 'Required' : 'Optional' }}</span>
@@ -99,6 +104,23 @@
             (input)="patchForm({ name: $any($event.target).value })" />
           @if (showErrors() && nameError()) { <span class="error" id="lkNameErr">{{ nameError() }}</span> }
         </div>
+
+        @if (!isCourier) {
+          <div class="field">
+            <span class="label">Logo <span class="muted small">optional · shown next to this brand's orders</span></span>
+            <div class="logo-pick">
+              <app-brand-logo [url]="f.upload ? f.upload.dataUrl : f.removeLogo ? null : f.logo" [name]="f.name" [size]="56" />
+              <div class="logo-actions">
+                <label class="btn btn-sm" [class.disabled]="logoBusy()">
+                  @if (logoBusy()) { <ion-spinner name="crescent" /> } {{ f.upload || (f.logo && !f.removeLogo) ? 'Change logo' : 'Upload logo' }}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden [disabled]="logoBusy()" (change)="onLogoFile($any($event.target))" />
+                </label>
+                @if (f.upload || (f.logo && !f.removeLogo)) { <button type="button" class="btn btn-sm btn-ghost" (click)="removeLogo()">Remove</button> }
+              </div>
+            </div>
+            @if (logoError()) { <span class="error">{{ logoError() }}</span> }
+          </div>
+        }
 
         @if (isCourier) {
           <div class="switch-row">

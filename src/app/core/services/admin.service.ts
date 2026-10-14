@@ -100,7 +100,12 @@ export interface AdminOrderRow {
 export interface ExpressStitchingSetting {
   enabled: boolean;
   days: number;
+  /** What the customer pays on top when they choose it (PKR). */
+  price_pkr: number;
 }
+
+/** Express shipping: can customers ask for it, and how many days the delivery takes (decided by the admin). */
+export type ExpressShippingSetting = ExpressStitchingSetting;
 
 /** The PostEx connection as the admin sees it: the token itself is never returned, only its last 4 characters. */
 export interface PostexSettings {
@@ -200,7 +205,7 @@ export interface OrderEvent {
   created_at: string;
 }
 
-export type InvoiceLineKind = 'stitching' | 'accessory' | 'accessory_stitching' | 'shipping' | 'duties' | 'discount' | 'other';
+export type InvoiceLineKind = 'stitching' | 'accessory' | 'accessory_stitching' | 'shipping' | 'duties' | 'discount' | 'other' | 'express_stitching' | 'express_shipping';
 
 export interface InvoiceLine {
   id?: string;
@@ -213,6 +218,26 @@ export interface InvoiceLine {
   sort_order?: number;
   price_item_id?: string | null;
   unit_id?: string | null;
+  /** Set when the line is a partner's extra item. */
+  extra_cost_id?: string | null;
+}
+
+/** A material the partner bought while cutting or stitching, with the supplier's bill. */
+export interface OrderExtraCost {
+  id: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  total_pkr: number;
+  notes: string | null;
+  stage: 'cutting' | 'stitching';
+  status: 'pending' | 'approved' | 'rejected';
+  decision_note: string | null;
+  added_by_name: string | null;
+  created_at: string;
+  bill: { name: string; type: string; url?: string | null } | null;
+  /** Already a line of the invoice being built. */
+  in_invoice: boolean;
 }
 
 export interface Invoice {
@@ -307,6 +332,9 @@ export interface AdminOrderDetail {
   customer_code: string | null;
   brand: string | null;
   brand_order_number: string | null;
+  /** Read from the brand's order confirmation email; empty when the email did not say. */
+  brand_payment_method?: string | null;
+  brand_payment_status?: 'paid' | 'pending' | null;
   import_source?: 'manual' | 'invoice' | 'link' | 'email';
   brand_order_total?: number | null;
   brand_order_currency?: string | null;
@@ -331,6 +359,8 @@ export interface AdminOrderDetail {
   destination_phone?: string | null;
   express_stitching?: boolean;
   express_days?: number | null;
+  express_shipping?: boolean;
+  express_shipping_days?: number | null;
   shipping_service: string | null;
   priority: 'normal' | 'rush';
   due_date: string | null;
@@ -605,6 +635,8 @@ export interface InvoiceBuilderData {
   suggestedLines: InvoiceLine[] | null;
   priceItems: PriceItem[];
   shippingOptions: ShippingOption[];
+  /** The partner's extra items for this order (name, quantity, price, bill). */
+  extraCosts?: OrderExtraCost[];
   /** Shipment weight = total of the article weights entered in Receiving. `missing` lists articles that still need one. */
   weight?: {
     total_kg: number | null;
@@ -732,6 +764,8 @@ export const LINE_KIND_OPTIONS: { value: InvoiceLineKind; label: string }[] = [
   { value: 'duties', label: 'Duties' },
   { value: 'discount', label: 'Discount' },
   { value: 'other', label: 'Other' },
+  { value: 'express_stitching', label: 'Express stitching' },
+  { value: 'express_shipping', label: 'Express shipping' },
 ];
 
 export const PRICE_CATEGORY_OPTIONS: { value: PriceCategory; label: string }[] = [
@@ -817,6 +851,18 @@ export class AdminService {
 
   testPostex(): Observable<ApiResult<{ ok: boolean }>> {
     return this.send<{ ok: boolean }>('POST', '/admin/settings/postex/test', {});
+  }
+
+  decideExtraCost(id: string, decision: 'approve' | 'reject', note?: string): Observable<ApiResult<OrderExtraCost>> {
+    return this.send<OrderExtraCost>('POST', `/admin/extra-costs/${id}/decision`, { decision, note });
+  }
+
+  getExpressShipping(): Observable<ExpressShippingSetting> {
+    return this.api.get<ExpressShippingSetting>('/admin/settings/express-shipping');
+  }
+
+  setExpressShipping(value: ExpressShippingSetting): Observable<ApiResult<ExpressShippingSetting>> {
+    return this.send<ExpressShippingSetting>('PUT', '/admin/settings/express-shipping', value);
   }
 
   getExpressStitching(): Observable<ExpressStitchingSetting> {

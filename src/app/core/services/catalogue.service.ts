@@ -14,12 +14,16 @@ export interface LookupRow {
   name: string;
   status: CatalogueStatus;
   requires_tracking?: boolean;
+  /** A brand's logo. */
+  logo_url?: string | null;
   created_at: string;
   updated_at?: string;
 }
 
 export interface LookupInput {
   name?: string;
+  logo_upload?: { name: string; dataUrl: string };
+  remove_logo?: boolean;
   status?: CatalogueStatus;
   requires_tracking?: boolean;
 }

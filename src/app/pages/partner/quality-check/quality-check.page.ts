@@ -84,7 +84,7 @@ export class PartnerQualityCheckPage implements OnInit {
   });
 
   // Pack modal
-  readonly packing = signal<{ group: QcOrderGroup; weight: number | null } | null>(null);
+  readonly packing = signal<{ group: QcOrderGroup } | null>(null);
   readonly packSaving = signal(false);
   readonly packError = signal<string | null>(null);
 
@@ -256,11 +256,7 @@ export class PartnerQualityCheckPage implements OnInit {
 
   openPack(group: QcOrderGroup): void {
     this.packError.set(null);
-    this.packing.set({ group, weight: null });
-  }
-
-  setPackWeight(v: number | null): void {
-    this.packing.update((p) => (p ? { ...p, weight: v } : p));
+    this.packing.set({ group });
   }
 
   closePack(): void {
@@ -270,19 +266,13 @@ export class PartnerQualityCheckPage implements OnInit {
   submitPack(): void {
     const p = this.packing();
     if (!p) return;
-    // the parcel weighs what its articles weighed in Receiving; a weight is typed only for an older order that has none
-    const typed = p.weight === null || (p.weight as unknown) === '' ? null : Number(p.weight);
-    if (typed !== null && !(typed > 0 && typed < 50)) {
-      this.packError.set('Enter the parcel weight in kg (for example 1.2).');
-      return;
-    }
     this.packError.set(null);
     this.packSaving.set(true);
-    this.partner.packOrder(p.group.orderId, typed).subscribe({
+    this.partner.sendToPressing(p.group.orderId).subscribe({
       next: (res) => {
         this.packSaving.set(false);
         this.packing.set(null);
-        this.ui.success(res.message || 'Order packed.');
+        this.ui.success(res.message || 'Moved to Pressing.');
         this.refresh();
       },
       error: (e) => {

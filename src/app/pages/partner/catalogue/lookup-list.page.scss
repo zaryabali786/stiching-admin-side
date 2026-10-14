@@ -52,3 +52,7 @@ tr.inactive .cell-main { color: var(--c-ink-2); }
     .empty-row td { display: block; }
   }
 }
+
+.name-with-logo { display: inline-flex; align-items: center; gap: 10px; }
+.logo-pick { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+.logo-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

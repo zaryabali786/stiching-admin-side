@@ -138,18 +138,13 @@
           </div>
           @if (canPack()) {
             <div class="next-actions no-print">
-              <label class="pack-weight">
-                <span>Parcel weight (kg)</span>
-                <input class="input" type="number" min="0.1" max="49" step="0.1" inputmode="decimal" placeholder="e.g. 1.2"
-                  [value]="packWeight() ?? ''" (input)="setPackWeight($any($event.target).value)" (keyup.enter)="packOrder()" />
-              </label>
-              <button type="button" class="btn btn-green primary-step" (click)="packOrder()" [disabled]="!!action() || !packWeight()">
+              <button type="button" class="btn btn-green primary-step" (click)="packOrder()" [disabled]="!!action()">
                 @if (action() === 'pack') { <ion-spinner name="crescent" /> }
                 Move to Packed
               </button>
             </div>
           }
-          @if (c.stage !== 'packed' && !(c.stage === 'qc' && c.qc_passed && approvalStatus() === 'approved')) {
+          @if (c.stage !== 'packed' && c.stage !== 'pressing') {
             <div *can="'production.update'" class="next-actions no-print">
               @if (c.stage === 'qc' && !c.qc_passed) {
                 <button type="button" class="btn fix-btn" (click)="needsFixing()" [disabled]="!!action()">
@@ -211,6 +206,11 @@
           Master: {{ c.master ? masterLabel(c.master.name) : '—' }} · Tailor: {{ c.tailor?.name || '—' }} · Due: {{ c.due_date ? shortDate(c.due_date) : '—' }}
         </p>
       </div>
+
+      <!-- Extra materials bought while the article is cut or stitched -->
+      @if (c.order_id || c.order?.id; as extraOrderId) {
+        <app-extra-costs-panel [orderId]="extraOrderId" [canEdit]="canEdit()" [stage]="c.stage" />
+      }
 
       <!-- Measurements / Design / Quality check -->
       <div class="detail-grid">
@@ -283,7 +283,7 @@
                 <span class="d-value">{{ d.value }}</span>
               </div>
             } @empty {
-              <p class="design-none muted">No customisation selected</p>
+              <p class="design-none muted">No customization selected</p>
             }
           </div>
 

@@ -112,6 +112,7 @@
                 <div class="meta-line">
                   @if (o.tracking_number) { <span>Tracking <b>{{ o.tracking_number }}</b></span> } @else { <span>No tracking number</span> }
                   <span>Ordered {{ o.created_at | day }}</span>
+                  @if (o.express_shipping) { <span class="deliver-to"><b>Express shipping</b>@if (o.express_shipping_days) { · {{ o.express_shipping_days }} days }</span> }
                   @if (o.express_stitching) { <span class="deliver-to"><b>Express stitching</b>@if (o.express_days) { · {{ o.express_days }} days }</span> }
                   @if (destination(o)) { <span>Ships to {{ destination(o) }}</span> }
                   @if (o.destination_address) { <span class="deliver-to"><b>Deliver to:</b> {{ o.destination_address }}</span> }
@@ -139,6 +140,7 @@
                 <li class="unit" [class.has-issue]="u.status === 'issue'" [class.done]="u.status === 'received'">
                   <div class="unit-row">
                     <span class="line" aria-hidden="true">{{ u.line_no }}</span>
+                    @if (u.product_image_url) { <img class="unit-thumb" [src]="u.product_image_url" alt="" loading="lazy" referrerpolicy="no-referrer" /> }
                     <div class="unit-info">
                       <strong>{{ u.unit_title }}@if (u.quantity > 1) { <span class="qty"> × {{ u.quantity }}</span> }</strong>
                       @if (u.code) { <span class="unit-code"><b>{{ u.code }}</b></span> }

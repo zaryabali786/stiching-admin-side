@@ -1,4 +1,5 @@
 import { AuthService } from '../../../core/services/auth.service';
+import { ExtraCostsPanelComponent } from '../../../shared/components/extra-costs-panel.component';
 import { CanDirective } from '../../../shared/can.directive';
 import { Component, DestroyRef, ElementRef, HostListener, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -66,12 +67,12 @@ interface DesignBox {
 type ActionKey = 'primary' | 'pack' | 'fail' | 'ask' | 'patch' | 'send' | 'comment';
 
 
-const STEP_INDEX: Record<ProductionStage, number> = { to_assign: 0, cutting: 1, stitching: 2, qc: 3, pressing: 3, packed: 4 };
+const STEP_INDEX: Record<ProductionStage, number> = { to_assign: 0, cutting: 1, stitching: 2, qc: 3, pressing: 4, packed: 5 };
 
 @Component({
   selector: 'app-partner-job-detail',
   standalone: true,
-  imports: [CanDirective, RouterLink, IonSpinner, EmptyStateComponent, TimeAgoPipe, HumanizePipe, VoiceNoteFieldComponent, VoiceNotePlayComponent, ApprovalChipComponent],
+  imports: [ExtraCostsPanelComponent, CanDirective, RouterLink, IonSpinner, EmptyStateComponent, TimeAgoPipe, HumanizePipe, VoiceNoteFieldComponent, VoiceNotePlayComponent, ApprovalChipComponent],
   templateUrl: './job-detail.page.html',
   styleUrls: ['./job-detail.page.scss'],
 })
@@ -154,7 +155,7 @@ export class PartnerJobDetailPage implements OnInit {
   readonly steps = computed<Step[]>(() => {
     const c = this.card();
     if (!c) return [];
-    const current = c.stage === 'packed' ? 5 : STEP_INDEX[c.stage];
+    const current = c.stage === 'packed' ? 6 : STEP_INDEX[c.stage];
     const state = (i: number): StepState => (i < current ? 'done' : i === current ? 'now' : 'next');
     const master = c.master ? masterLabel(c.master.name) : null;
     const receivedAt = c.unit?.received_at || c.order?.received_at || c.created_at;
@@ -171,7 +172,8 @@ export class PartnerJobDetailPage implements OnInit {
         at: c.qc_at,
         state: state(3),
       },
-      { key: 'packed', label: 'Packed', person: 'Warehouse team', sub: 'Packed & weighed', avatar: 'W', at: c.packed_at, state: state(4) },
+      { key: 'pressing', label: 'Pressing', person: 'Pressing team', sub: 'Pressed and folded', avatar: 'P', at: c.pressing_at, state: state(4) },
+      { key: 'packed', label: 'Packed', person: 'Warehouse team', sub: 'Packed', avatar: 'W', at: c.packed_at, state: state(5) },
     ];
   });
 
@@ -226,13 +228,13 @@ export class PartnerJobDetailPage implements OnInit {
           ? this.approvalStatus() === 'pending'
             ? 'Photos are with the customer. Waiting for them to approve this piece or ask for changes.'
             : this.approvalStatus() === 'approved'
-              ? this.pieces() <= 1
-                ? 'The customer approved this piece. It is the only piece in this order, so you can pack the order now.'
-                : 'The customer approved this piece. Pack the order once every piece is ready.'
+              ? 'The customer approved this piece. Move it to Pressing next; packing comes after pressing.'
               : 'QC passed. Send finished photos of this piece so the customer can approve it.'
           : `QC is in progress. ${master} checks it against the measurements, then the customer approves photos.`;
       case 'pressing':
-        return 'Pressing is in progress. Packing staff receive it next by scanning its QR code.';
+        return this.pieces() <= 1
+          ? 'Pressing is the last step. When the piece is pressed and folded, move it to Packed.'
+          : 'Pressing is the last step. Once every piece of the order is pressed, pack the order.';
       case 'packed': {
         const progress = cardDisplayLabel(c);
         return progress ? `Done at the workshop. The order is now: ${progress}.` : 'Packed and handed to the warehouse team.';
@@ -363,28 +365,16 @@ export class PartnerJobDetailPage implements OnInit {
 
   // ───────── Pack the order (same call as Quality check > Pack) ─────────
 
-  readonly packWeight = signal<number | null>(null);
-
-  /** The piece passed QC and the customer approved it: the order can be weighed and packed from here. */
+  /** The piece finished Pressing: the order can be packed from here (no weight is asked: it comes from Receiving). */
   readonly canPack = computed(() => {
     const c = this.card();
-    return !!c && c.stage === 'qc' && c.qc_passed && this.approvalStatus() === 'approved' && this.auth.can('quality.update');
+    return !!c && c.stage === 'pressing' && this.auth.can('production.update');
   });
-
-  setPackWeight(value: string): void {
-    const n = parseFloat(value);
-    this.packWeight.set(Number.isFinite(n) ? n : null);
-  }
 
   packOrder(): void {
     const c = this.card();
-    const w = this.packWeight();
     if (!c || !this.canPack()) return;
-    if (!w || w <= 0 || w >= 50) {
-      this.ui.error('Enter the parcel weight in kg (for example 1.2).');
-      return;
-    }
-    this.run('pack', this.partnerApi.packOrder(c.order_id, w), (r) => r.message);
+    this.run('pack', this.partnerApi.packOrder(c.order_id), (r) => r.message);
   }
 
   // ───────── Actions ─────────
@@ -423,6 +413,10 @@ export class PartnerJobDetailPage implements OnInit {
         this.run('primary', this.production.move(c.id, 'qc', null, null), (r) => r.message);
         break;
       case 'qc':
+        if (c.qc_passed && this.approvalStatus() === 'approved') {
+          this.run('primary', this.production.move(c.id, 'pressing', null, null), (r) => r.message);
+          return;
+        }
         if (c.qc_passed) {
           this.openPhotos();
           return;
@@ -447,7 +441,7 @@ export class PartnerJobDetailPage implements OnInit {
       case 'stitching':
         return 'Stitching done → send to QC';
       case 'qc':
-        return c.qc_passed ? (this.approvalStatus() === 'pending' ? 'Resend photos' : 'Send photos to the customer') : 'QC passed · send photos';
+        return c.qc_passed ? (this.approvalStatus() === 'pending' ? 'Resend photos' : this.approvalStatus() === 'approved' ? 'Move to Pressing' : 'Send photos to the customer') : 'QC passed · send photos';
       default:
         return '';
     }

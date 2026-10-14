@@ -403,3 +403,5 @@ app-search-input.search-lg {
   .link-btn { background: none; border: 0; padding: 0; color: var(--c-green); font-weight: 600; font-size: inherit; cursor: pointer; text-decoration: underline; } }
 .rcv-weight { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; font-size: 13.5px; font-weight: 600;
   .input { width: 120px; min-height: 40px; } b { color: var(--c-red, #b3261e); } }
+
+.unit-thumb { flex: none; width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: var(--c-neutral-soft); }

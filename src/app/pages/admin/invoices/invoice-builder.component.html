@@ -32,6 +32,39 @@
         <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
       } @else if (data(); as d) {
         @if (notPackedReason(); as reason) { <div class="banner warn">{{ reason }}</div> }
+        @if (extraCosts().length) {
+          <section class="extra-panel" aria-label="Partner extra costs">
+            <div class="ep-head">
+              <strong>Partner's extra items</strong>
+              <span class="muted small">Materials the partner bought while cutting or stitching. Approve the ones to charge; they go on the invoice once.@if (extraPendingCount()) { <b> {{ extraPendingCount() }} waiting for you.</b> }</span>
+            </div>
+            @for (c of extraCosts(); track c.id) {
+              <div class="ep-row">
+                <div class="ep-main">
+                  <strong>{{ c.name }}</strong>
+                  <span class="muted small">{{ c.quantity }} × {{ c.unit_price | pkr }} = <b>{{ c.total_pkr | pkr }}</b> · added in {{ c.stage }}@if (c.added_by_name) { by {{ c.added_by_name }} }</span>
+                  @if (c.notes) { <span class="small">{{ c.notes }}</span> }
+                  @if (c.bill?.url) { <a class="ep-bill" [href]="c.bill!.url" target="_blank" rel="noopener">Open supplier bill · {{ c.bill!.name }}</a> } @else { <span class="muted small">No bill uploaded</span> }
+                </div>
+                <div class="ep-actions">
+                  @if (c.status === 'pending') {
+                    <span class="badge amber">Waiting</span>
+                    @if (canEdit()) {
+                      <button type="button" class="btn btn-sm btn-green" [disabled]="!!extraBusy()" (click)="decideExtra(c, 'approve')">Approve &amp; add</button>
+                      <button type="button" class="btn btn-sm btn-ghost" [disabled]="!!extraBusy()" (click)="decideExtra(c, 'reject')">Reject</button>
+                    }
+                  } @else if (c.status === 'approved') {
+                    <span class="badge green">Approved</span>
+                    @if (isOnInvoice(c.id)) { <span class="muted small">On the invoice</span> }
+                    @else if (canEdit()) { <button type="button" class="btn btn-sm" (click)="addExtraLine(c)">Add to invoice</button> }
+                  } @else {
+                    <span class="badge red">Rejected</span>
+                  }
+                </div>
+              </div>
+            }
+          </section>
+        }
         @if (missingWeights().length && canEdit()) {
           <div class="banner warn" role="alert">
             <b>Weight missing.</b> The shipping price needs every article's weight. Ask the partner to add it in Receiving first:

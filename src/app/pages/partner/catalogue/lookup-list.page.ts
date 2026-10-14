@@ -11,6 +11,8 @@ import { SearchInputComponent } from '../../../shared/components/search-input.co
 import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge.component';
+import { compressImage } from '../../../core/utils/image';
+import { BrandLogoComponent } from '../../../shared/components/brand-logo.component';
 import { PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../../admin/admin-list';
 
 const STATUSES: readonly StatusFilter[] = ['all', 'active', 'inactive'];
@@ -28,6 +30,10 @@ interface LookupForm {
   name: string;
   active: boolean;
   requires_tracking: boolean;
+  /** The saved logo, a new picture waiting to be uploaded, and whether the saved one is to be removed. */
+  logo: string | null;
+  upload: { name: string; dataUrl: string } | null;
+  removeLogo: boolean;
 }
 
 /** Wording per list, so one component serves both Brands and Couriers. */
@@ -54,7 +60,7 @@ const COPY: Record<LookupKind, { title: string; one: string; subtitle: string; e
 @Component({
   selector: 'app-partner-lookup-list',
   standalone: true,
-  imports: [CanDirective, IonSpinner, DayPipe, SearchInputComponent, PaginationComponent, EmptyStateComponent, StatusBadgeComponent],
+  imports: [CanDirective, BrandLogoComponent, IonSpinner, DayPipe, SearchInputComponent, PaginationComponent, EmptyStateComponent, StatusBadgeComponent],
   templateUrl: './lookup-list.page.html',
   styleUrls: ['./lookup-list.page.scss'],
 })
@@ -132,13 +138,13 @@ export class PartnerLookupListPage implements OnInit {
   openNew(): void {
     this.formError.set(null);
     this.showErrors.set(false);
-    this.form.set({ id: null, name: '', active: true, requires_tracking: true });
+    this.form.set({ id: null, name: '', active: true, requires_tracking: true, logo: null, upload: null, removeLogo: false });
   }
 
   openEdit(r: LookupRow): void {
     this.formError.set(null);
     this.showErrors.set(false);
-    this.form.set({ id: r.id, name: r.name, active: r.status === 'active', requires_tracking: r.requires_tracking !== false });
+    this.form.set({ id: r.id, name: r.name, active: r.status === 'active', requires_tracking: r.requires_tracking !== false, logo: r.logo_url ?? null, upload: null, removeLogo: false });
   }
 
   closeForm(): void {
@@ -157,6 +163,10 @@ export class PartnerLookupListPage implements OnInit {
     if (this.nameError()) return;
     const body: LookupInput = { name: f.name.trim(), status: f.active ? 'active' : 'inactive' };
     if (this.isCourier) body.requires_tracking = f.requires_tracking;
+    if (!this.isCourier) {
+      if (f.upload) body.logo_upload = f.upload;
+      else if (f.removeLogo) body.remove_logo = true;
+    }
     this.saving.set(true);
     this.formError.set(null);
     const req = f.id ? this.catalogue.updateLookup(this.kind, f.id, body) : this.catalogue.createLookup(this.kind, body);
@@ -173,6 +183,36 @@ export class PartnerLookupListPage implements OnInit {
         this.formError.set(apiErrorMessage(err));
       },
     });
+  }
+
+  readonly logoError = signal<string | null>(null);
+  readonly logoBusy = signal(false);
+
+  async onLogoFile(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.logoError.set(null);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      this.logoError.set('Use a JPG, PNG or WebP picture.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      this.logoError.set('This picture is larger than 8 MB. Choose a smaller one.');
+      return;
+    }
+    this.logoBusy.set(true);
+    try {
+      this.patchForm({ upload: await compressImage(file), removeLogo: false });
+    } catch (err) {
+      this.logoError.set(err instanceof Error ? err.message : 'Could not read this picture.');
+    } finally {
+      this.logoBusy.set(false);
+    }
+  }
+
+  removeLogo(): void {
+    this.patchForm({ upload: null, removeLogo: true });
   }
 
   toggleStatus(r: LookupRow): void {

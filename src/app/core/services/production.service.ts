@@ -280,6 +280,7 @@ export interface Card {
   cutting_at: string | null;
   stitching_at: string | null;
   qc_at: string | null;
+  pressing_at: string | null;
   packed_at: string | null;
   created_at: string;
   comments_count: number;

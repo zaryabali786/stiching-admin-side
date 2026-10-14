@@ -80,6 +80,8 @@ export interface ReceivingUnit {
   receive_media?: MediaItem[] | null;
   /** Weight of this article in kg, entered in Receiving (the invoice's shipping weight is the total of these). */
   weight_kg?: number | null;
+  /** Product picture read from the brand's order email (or the product page). */
+  product_image_url?: string | null;
   /** The customer's decision on the received article. */
   review_status?: 'none' | 'pending' | 'approved' | 'rejected';
   review_note?: string | null;
@@ -179,6 +181,8 @@ export interface ReceivingOrder {
   priority: 'normal' | 'rush';
   express_stitching?: boolean;
   express_days?: number | null;
+  express_shipping?: boolean;
+  express_shipping_days?: number | null;
   due_date: string | null;
   customer_notes: string | null;
   created_at: string;
@@ -470,6 +474,8 @@ export interface PartnerOrderRow {
   id: string;
   reference: string;
   brand: string | null;
+  /** The brand's logo (null when none was uploaded). */
+  brand_logo_url?: string | null;
   created_at: string;
   due_date: string | null;
   customer_name: string | null;
@@ -482,6 +488,37 @@ export interface PartnerOrderRow {
   /** The order's own status. */
   parent_status: OrderStatus;
   parent_status_label: string;
+}
+
+/** One order in the partner's side panel: the workshop's view only (no customer phone / email, no admin or money fields). */
+export interface PartnerOrderDetail {
+  id: string;
+  reference: string;
+  order_kind?: 'order' | 'return';
+  status: OrderStatus;
+  status_label: string;
+  created_at: string;
+  due_date: string | null;
+  brand: { name: string | null; logo_url: string | null; order_number: string | null };
+  customer: { name: string | null; code: string | null };
+  delivery: { address: string | null; city: string | null; country: string | null };
+  notes: string | null;
+  express: { stitching: number | null; shipping: number | null; rush: boolean };
+  units: {
+    id: string;
+    code: string | null;
+    line_no: number;
+    title: string;
+    quantity: number;
+    image_url: string | null;
+    stitching_type: string | null;
+    notes: string | null;
+    size: { name: string | null; person: string | null; nearest: string | null; measurements: Record<string, unknown> } | null;
+    customizations: { type: string | null; name: string | null; image_url: string | null }[];
+  }[];
+  timeline: { id: string; status: string; label: string; note: string | null; at: string }[];
+  /** The partner's own share: earned once the customer paid, pending until then, unavailable until an invoice is issued. */
+  earnings: { state: 'earned' | 'pending' | 'unavailable'; amount_pkr: number | null };
 }
 
 export interface EarningRow {
@@ -644,8 +681,12 @@ export class PartnerService {
     return this.api.postWithMessage<{ photos?: MediaItem[] }>(`${this.base}/qc/cards/${cardId}/request-approval`, { photos });
   }
 
-  packOrder(orderId: string, weightKg: number | null) {
-    return this.api.postWithMessage<{ orderStatus: OrderStatus }>(`${this.base}/qc/orders/${orderId}/pack`, weightKg == null ? {} : { weight_kg: weightKg });
+  sendToPressing(orderId: string) {
+    return this.api.postWithMessage<{ orderStatus: OrderStatus; moved: number }>(`${this.base}/qc/orders/${orderId}/pressing`, {});
+  }
+
+  packOrder(orderId: string) {
+    return this.api.postWithMessage<{ orderStatus: OrderStatus }>(`${this.base}/qc/orders/${orderId}/pack`, {});
   }
 
   // Warehouse
@@ -722,6 +763,10 @@ export class PartnerService {
   // Earnings
   earningsSummary(): Observable<EarningsSummary> {
     return this.api.get<EarningsSummary>(`${this.base}/earnings/summary`);
+  }
+
+  orderDetail(id: string): Observable<PartnerOrderDetail> {
+    return this.api.get<PartnerOrderDetail>(`${this.base}/orders/${id}`);
   }
 
   allOrders(params: { search?: string; page?: number; limit?: number }): Observable<Paged<PartnerOrderRow>> {

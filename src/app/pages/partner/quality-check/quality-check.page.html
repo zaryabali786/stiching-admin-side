@@ -1,7 +1,7 @@
 <div class="page">
   <header class="page-header">
     <div>
-      <span class="eyebrow">Before packing</span>
+      <span class="eyebrow">Before pressing</span>
       <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Quality check', 'کوالٹی چیک') }}</h1>
       <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Check measurements, finishing and the customer’s notes. Pass it, or send it back to the tailor with a note.', 'ناپ، فنشنگ اور گاہک کے نوٹس چیک کریں۔ پاس کریں یا نوٹ کے ساتھ درزی کو واپس بھیجیں۔') }}</p>
     </div>
@@ -34,7 +34,7 @@
       } @else if (tab() === 'pending') {
         <app-empty-state title="Nothing waiting for QC" message="Articles appear here when a tailor finishes stitching." />
       } @else {
-        <app-empty-state title="No passed articles waiting to be packed" message="Passed articles stay here until their order is packed." />
+        <app-empty-state title="No passed articles waiting to be packed" message="Passed articles stay here until they are sent to Pressing." />
       }
     </div>
   } @else {
@@ -89,7 +89,7 @@
                     @for (d of ds; track d.label) { <span class="pill">{{ d.label }} <b>{{ d.value }}</b></span> }
                   </div>
                 } @else {
-                  <span class="muted small">No customisation selected</span>
+                  <span class="muted small">No customization selected</span>
                 }
               </div>
             }
@@ -187,7 +187,7 @@
               }
               <button *can="'quality.update'" type="button" class="btn btn-primary btn-floor" (click)="openPack(g)" [disabled]="waiting(g).length > 0"
                 [attr.title]="waiting(g).length ? 'Waiting for the customer to approve: ' + waitingTitles(g) : null">
-                <span [class.urdu]="lang.isUrdu()">{{ lang.t('Pack order', 'آرڈر پیک کریں') }}</span>
+                <span [class.urdu]="lang.isUrdu()">{{ lang.t('Send to Pressing', 'پریسنگ کو بھیجیں') }}</span>
               </button>
             </div>
           </section>
@@ -206,24 +206,19 @@
       <div class="modal-head">
         <div>
           <span class="eyebrow">{{ p.group.order.reference }} · {{ p.group.order.customer_code }}</span>
-          <h3 id="pack-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Pack order', 'آرڈر پیک کریں') }}</h3>
+          <h3 id="pack-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Send to Pressing', 'پریسنگ کو بھیجیں') }}</h3>
         </div>
         <button type="button" class="close-btn" (click)="closePack()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <p class="muted small">All articles of this order must have passed QC. The parcel weight is the total of the article weights entered in Receiving, and admin uses it for the shipping quote.</p>
-        <div class="field">
-          <label for="pack-weight">Parcel weight (kg) <span class="muted small">only for older orders without article weights</span></label>
-          <input id="pack-weight" class="input" type="number" min="0.05" max="50" step="0.05" placeholder="e.g. 1.2"
-            [ngModel]="p.weight" (ngModelChange)="setPackWeight($event)" (keydown.enter)="submitPack()" />
-        </div>
+        <p class="muted small">The articles of this order that passed QC move to Pressing. Packing comes after pressing.</p>
         @if (packError()) { <p class="form-error" role="alert">{{ packError() }}</p> }
       </div>
       <div class="modal-foot">
         <button type="button" class="btn" (click)="closePack()" [disabled]="packSaving()">Cancel</button>
         <button type="button" class="btn btn-primary" (click)="submitPack()" [disabled]="packSaving()">
           @if (packSaving()) { <ion-spinner name="crescent" /> }
-          Pack order
+          Send to Pressing
         </button>
       </div>
     </div>

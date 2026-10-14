@@ -1,11 +1,12 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, catchError, combineLatest, map, of, startWith, switchMap, tap } from 'rxjs';
 import { PageMeta } from '../../../core/models/api.models';
 import { apiErrorMessage } from '../../../core/services/api.service';
-import { PartnerOrderRow, PartnerService } from '../../../core/services/partner.service';
-import { DayPipe } from '../../../shared/pipes';
+import { PartnerOrderDetail, PartnerOrderRow, PartnerService } from '../../../core/services/partner.service';
+import { DayPipe, PkrPipe } from '../../../shared/pipes';
+import { BrandLogoComponent } from '../../../shared/components/brand-logo.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
@@ -15,7 +16,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
 @Component({
   selector: 'app-partner-orders',
   standalone: true,
-  imports: [DayPipe, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent],
+  imports: [DayPipe, PkrPipe, BrandLogoComponent, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent],
   templateUrl: './orders.page.html',
   styleUrls: ['./orders.page.scss'],
 })
@@ -31,6 +32,52 @@ export class PartnerOrdersPage implements OnInit {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   private reload$ = new Subject<void>();
+
+  // ───────── side panel: one order, without leaving the list ─────────
+  readonly openId = signal<string | null>(null);
+  readonly detail = signal<PartnerOrderDetail | null>(null);
+  readonly detailLoading = signal(false);
+  readonly detailError = signal<string | null>(null);
+
+  openOrder(row: PartnerOrderRow): void {
+    this.openId.set(row.id);
+    this.detail.set(null);
+    this.loadDetail(row.id);
+  }
+
+  loadDetail(id: string): void {
+    this.detailLoading.set(true);
+    this.detailError.set(null);
+    this.partner.orderDetail(id).subscribe({
+      next: (d) => {
+        if (this.openId() !== id) return;
+        this.detail.set(d);
+        this.detailLoading.set(false);
+      },
+      error: (e) => {
+        if (this.openId() !== id) return;
+        this.detailError.set(apiErrorMessage(e));
+        this.detailLoading.set(false);
+      },
+    });
+  }
+
+  @HostListener('document:keydown.escape')
+  closeOrder(): void {
+    this.openId.set(null);
+  }
+
+  addressText(d: { address: string | null; city: string | null; country: string | null }): string {
+    return [d.address, d.city, d.country].filter((x) => !!x && x.trim()).join(', ');
+  }
+
+  /** "Length 40 · Chest 38" from a size chart's measurements. */
+  measureText(m: Record<string, unknown> | undefined): string {
+    return Object.entries(m || {})
+      .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+      .map(([k, v]) => `${k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())} ${v}`)
+      .join(' · ');
+  }
 
   ngOnInit(): void {
     combineLatest([this.route.queryParamMap, this.reload$.pipe(startWith(undefined))])

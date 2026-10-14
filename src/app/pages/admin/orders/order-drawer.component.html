@@ -8,6 +8,7 @@
         <div class="head-badges">
           <app-status-badge [status]="o.status" [label]="o.status_label" />
           @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
+          @if (o.express_shipping) { <span class="badge amber">Express shipping@if (o.express_shipping_days) { · {{ o.express_shipping_days }} days }</span> }
           @if (o.express_stitching) { <span class="badge amber">Express stitching@if (o.express_days) { · {{ o.express_days }} days }</span> }
           @if (o.has_issue) { <span class="badge red">Issue</span> }
           @if (o.partner) { <span class="badge" title="Partner making this order">Partner: {{ o.partner.name }}</span> }
@@ -67,7 +68,10 @@
         <dl class="kv">
           <dt>Brand</dt><dd>{{ o.brand || '—' }}</dd>
           <dt>Brand order no.</dt><dd>{{ o.brand_order_number || '—' }}</dd>
-          @if (o.brand_order_total) { <dt>Paid to brand</dt><dd>{{ o.brand_order_currency || 'PKR' }} {{ o.brand_order_total | number: '1.0-2' }}</dd> }
+          @if (o.brand_payment_method || o.brand_payment_status) {
+            <dt>Payment to brand</dt><dd>{{ o.brand_payment_method }}@if (o.brand_payment_method && o.brand_payment_status) { · }@if (o.brand_payment_status === 'paid') { Paid } @else if (o.brand_payment_status === 'pending') { Payment pending }</dd>
+          }
+          @if (o.brand_order_total) { <dt>Brand order total</dt><dd>{{ o.brand_order_currency || 'PKR' }} {{ o.brand_order_total | number: '1.0-2' }}</dd> }
           @if (o.import_source && o.import_source !== 'manual') {
             <dt>Added from</dt>
             <dd>{{ o.import_source === 'invoice' ? 'Uploaded brand invoice' : o.import_source === 'link' ? 'Product links' : 'Forwarded brand email' }}</dd>

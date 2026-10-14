@@ -144,7 +144,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
     const groups: NavGroup[] = [
       { label: '', items: [
         { path: '/partner/overview', label: 'Overview', urdu: 'جائزہ', icon: 'grid-outline', permission: 'overview.view' },
-        { path: '/partner/orders', label: 'All orders', urdu: 'تمام آرڈرز', icon: 'list-outline', permission: 'overview.view' },
+        { path: '/partner/orders', label: 'All orders', urdu: 'تمام آرڈرز', icon: 'cube-outline', permission: 'overview.view' },
       ] },
       {
         label: 'Daily work',

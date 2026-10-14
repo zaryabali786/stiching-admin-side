@@ -113,23 +113,7 @@
                     @if (o.destination_phone) { <span class="cell-sub">{{ o.destination_phone }}</span> }
                   </td>
                   <td class="weight-cell" (click)="$event.stopPropagation()">
-                    @if (weightEdit()?.id === o.id) {
-                      <div class="weight-edit">
-                        <input class="input" type="number" min="0.05" max="50" step="0.05" aria-label="Weight in kg"
-                          [ngModel]="weightEdit()!.value" (ngModelChange)="setWeightValue($event)"
-                          (keydown.enter)="saveWeight(o)" (keydown.escape)="cancelWeight()" />
-                        <button type="button" class="btn btn-green btn-xs" [disabled]="isBusy('w:' + o.id)" (click)="saveWeight(o)" aria-label="Save weight">
-                          @if (isBusy('w:' + o.id)) { <ion-spinner name="crescent" /> } @else { ✓ }
-                        </button>
-                        <button type="button" class="btn btn-ghost btn-xs" (click)="cancelWeight()" aria-label="Cancel">×</button>
-                      </div>
-                    } @else if (canEditWeight(o)) {
-                      <button type="button" class="weight-btn" (click)="editWeight(o)" title="Edit weight" [attr.aria-label]="(o.weight_kg ? 'Weight ' + o.weight_kg + ' kg' : 'Add weight') + ' for ' + o.reference + '. Edit'">
-                        {{ o.weight_kg ? o.weight_kg + ' kg' : 'Add weight' }} <span aria-hidden="true">✎</span>
-                      </button>
-                    } @else {
-                      {{ o.weight_kg ? o.weight_kg + ' kg' : '—' }}
-                    }
+                    <span class="weight-text" title="Weight is the total of the article weights entered in Receiving">{{ o.weight_kg ? o.weight_kg + ' kg' : '—' }}</span>
                   </td>
                   <td>
                     @if (o.invoice; as inv) {
@@ -316,22 +300,22 @@
         <button type="button" class="close-btn" (click)="closeShip()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <p class="muted small">Ships to {{ destination(f.order) }}. Book the parcel with the courier (their app, branch or portal) and enter the CN they give you. This system does not place the booking with the courier for you.</p>
+        <p class="muted small ship-intro">Ships to <b>{{ destination(f.order) }}</b>. @if (apiBookable(f) && !f.manual) { Choose the courier and book it from here. } @else { Book the parcel with the courier (their app, branch or portal) and enter the CN they give you. }</p>
         @if (f.order.destination_address || f.order.destination_phone) {
           <p class="deliver-box">
             @if (f.order.destination_address) { <span><b>Deliver to:</b> {{ f.order.destination_address }}</span> }
             @if (f.order.destination_phone) { <span><b>Phone:</b> {{ f.order.destination_phone }}</span> }
           </p>
         }
-        <div class="form-grid">
+        <div class="ship-form">
           <div class="field">
             <span class="label" id="ship-courier-label">Courier *</span>
             <app-courier-select [selected]="f.courier" (selectedChange)="patchShip({ courier: $event })" label="Courier" />
           </div>
           @if (apiBookable(f) && !f.manual) {
-            <div class="field api-note">
-              <span class="label">Booking</span>
-              <p class="muted small"><b>{{ f.courier?.name }}</b> is booked through its API from here: the customer, phone, address and items are sent and the CN comes back from {{ f.courier?.name }}. Nothing is saved unless {{ f.courier?.name }} confirms the booking.</p>
+            <div class="api-note" role="note">
+              <span class="api-title"><span class="api-dot" aria-hidden="true"></span> Booked through {{ f.courier?.name }} from here</span>
+              <p>The customer, phone, address and items are sent to {{ f.courier?.name }}, and the CN comes back. Nothing is saved unless {{ f.courier?.name }} confirms the booking.</p>
               <button type="button" class="link-btn" (click)="patchShip({ manual: true })">I booked it myself, enter the CN instead</button>
             </div>
           } @else {

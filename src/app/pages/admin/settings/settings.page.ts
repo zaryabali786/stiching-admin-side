@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { distinctUntilChanged, filter, map } from 'rxjs';
-import { AdminService, AdminUser, ExpressStitchingSetting, PostexSettings, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
+import { AdminService, AdminUser, ExpressShippingSetting, ExpressStitchingSetting, PostexSettings, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { UiService } from '../../../core/services/ui.service';
 import { Role } from '../../../core/models/api.models';
@@ -139,12 +139,41 @@ export class AdminSettingsPage implements OnInit {
   }
 
   // ── Express stitching: the days are decided here and shown to customers when they create an order ──
-  readonly express = signal<ExpressStitchingSetting>({ enabled: true, days: 5 });
-  private readonly expressSaved = signal<ExpressStitchingSetting>({ enabled: true, days: 5 });
+  readonly express = signal<ExpressStitchingSetting>({ enabled: true, days: 5, price_pkr: 0 });
+  private readonly expressSaved = signal<ExpressStitchingSetting>({ enabled: true, days: 5, price_pkr: 0 });
   readonly expressLoaded = signal(false);
   readonly savingExpress = signal(false);
   readonly expressDirty = computed(() => JSON.stringify(this.express()) !== JSON.stringify(this.expressSaved()));
-  readonly expressValid = computed(() => Number.isInteger(this.express().days) && this.express().days >= 1 && this.express().days <= 90);
+  readonly expressValid = computed(() => Number.isInteger(this.express().days) && this.express().days >= 1 && this.express().days <= 90 && this.express().price_pkr >= 0);
+
+  // ── Express shipping: same idea, the days of the delivery ──
+  readonly expressShip = signal<ExpressShippingSetting>({ enabled: true, days: 3, price_pkr: 0 });
+  private readonly expressShipSaved = signal<ExpressShippingSetting>({ enabled: true, days: 3, price_pkr: 0 });
+  readonly expressShipLoaded = signal(false);
+  readonly savingExpressShip = signal(false);
+  readonly expressShipDirty = computed(() => JSON.stringify(this.expressShip()) !== JSON.stringify(this.expressShipSaved()));
+  readonly expressShipValid = computed(() => Number.isInteger(this.expressShip().days) && this.expressShip().days >= 1 && this.expressShip().days <= 90 && this.expressShip().price_pkr >= 0);
+
+  setExpressShip(patch: Partial<ExpressShippingSetting>): void {
+    this.expressShip.update((e) => ({ ...e, ...patch }));
+  }
+
+  saveExpressShip(): void {
+    if (!this.expressShipValid() || this.savingExpressShip()) return;
+    this.savingExpressShip.set(true);
+    this.admin.setExpressShipping(this.expressShip()).subscribe({
+      next: (res) => {
+        this.savingExpressShip.set(false);
+        this.expressShip.set(res.data);
+        this.expressShipSaved.set(res.data);
+        this.ui.success(res.message || 'Express shipping saved.');
+      },
+      error: (err) => {
+        this.savingExpressShip.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
 
   setExpress(patch: Partial<ExpressStitchingSetting>): void {
     this.express.update((e) => ({ ...e, ...patch }));
@@ -234,6 +263,14 @@ export class AdminSettingsPage implements OnInit {
       error: () => undefined,
     });
 
+    this.admin.getExpressShipping().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (e) => {
+        this.expressShip.set(e);
+        this.expressShipSaved.set(e);
+        this.expressShipLoaded.set(true);
+      },
+      error: (err) => this.ui.error(err),
+    });
     this.admin.getExpressStitching().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (e) => {
         this.express.set(e);
