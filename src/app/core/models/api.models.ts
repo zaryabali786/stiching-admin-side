@@ -50,7 +50,7 @@ export interface Profile {
   /** EFFECTIVE permissions, e.g. 'production.view'. Admins hold all of them. */
   permissions: string[];
   job_title: string | null;
-  staff_type?: 'master' | 'tailor' | 'staff' | null;
+  staff_type?: 'master' | 'tailor' | 'qa' | 'pressing' | 'packing' | 'staff' | null;
   /** A temporary password was set for this login: the person must choose their own before anything else. */
   must_change_password: boolean;
 }

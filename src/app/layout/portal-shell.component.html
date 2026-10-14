@@ -82,15 +82,31 @@
       </form>
 
       @if (auth.isAdmin() && activePartner.partners().length) {
-        <label class="partner-switch">
-          <span class="sr-only">Partner</span>
-          <select [value]="activePartner.partnerId() ?? ''" (change)="onPartnerPick($event)" aria-label="Active partner">
-            <option value="">All partners</option>
-            @for (p of activePartner.partners(); track p.id) {
-              <option [value]="p.id" [selected]="p.id === activePartner.partnerId()">{{ p.name }}{{ p.status === 'inactive' ? ' (off)' : '' }}</option>
-            }
-          </select>
-        </label>
+        <div class="pm">
+          <button type="button" class="pm-btn" (click)="partnerMenuOpen.set(!partnerMenuOpen())" [attr.aria-expanded]="partnerMenuOpen()" aria-haspopup="listbox" aria-label="Choose which partner to view">
+            <span class="pm-ico" [class.all]="!activePartner.partner()">
+              @if (activePartner.partner(); as ap) { {{ ap.name.charAt(0).toUpperCase() }} } @else { <ion-icon name="business-outline" aria-hidden="true"></ion-icon> }
+            </span>
+            <span class="pm-text"><small>Viewing</small><b>{{ activePartner.partner()?.name || 'All partners' }}</b></span>
+            <ion-icon name="chevron-down-outline" class="pm-chev" [class.open]="partnerMenuOpen()" aria-hidden="true"></ion-icon>
+          </button>
+          @if (partnerMenuOpen()) {
+            <div class="pm-list" role="listbox" aria-label="Partners">
+              <button type="button" role="option" class="pm-item" [class.on]="!activePartner.partnerId()" [attr.aria-selected]="!activePartner.partnerId()" (click)="choosePartner(null)">
+                <span class="pm-ico all"><ion-icon name="business-outline" aria-hidden="true"></ion-icon></span>
+                <span class="pm-name">All partners<small>Everything across the platform</small></span>
+                @if (!activePartner.partnerId()) { <ion-icon name="checkmark-outline" class="pm-check" aria-hidden="true"></ion-icon> }
+              </button>
+              @for (p of activePartner.partners(); track p.id) {
+                <button type="button" role="option" class="pm-item" [class.on]="p.id === activePartner.partnerId()" [class.off]="p.status === 'inactive'" [attr.aria-selected]="p.id === activePartner.partnerId()" (click)="choosePartner(p.id)">
+                  <span class="pm-ico">{{ p.name.charAt(0).toUpperCase() }}</span>
+                  <span class="pm-name">{{ p.name }}<small>{{ p.status === 'inactive' ? 'Switched off' : (p.active_orders || 0) + ' open orders' }}</small></span>
+                  @if (p.id === activePartner.partnerId()) { <ion-icon name="checkmark-outline" class="pm-check" aria-hidden="true"></ion-icon> }
+                </button>
+              }
+            </div>
+          }
+        </div>
       }
 
       <div class="top-actions">

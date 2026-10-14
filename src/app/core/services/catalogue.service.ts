@@ -111,6 +111,11 @@ export class CatalogueService {
     return this.remove(`/partner/${kind}/${id}`);
   }
 
+  /** Copy the standard set of article types and articles into the signed-in partner's own catalogue. */
+  copyStandardSet(): Observable<WriteResult<{ typesAdded: number; articlesAdded: number }>> {
+    return this.send<{ typesAdded: number; articlesAdded: number }>('POST', '/partner/catalogue/standard-set', {});
+  }
+
   // ── Article types ──
   listTypes(q: ListQuery): Observable<Paged<ArticleType>> {
     return this.api.list<ArticleType>('/partner/article-types', this.clean(q));

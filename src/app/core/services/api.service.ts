@@ -23,6 +23,11 @@ export class ApiService {
       .pipe(map((r) => ({ items: r.data || [], meta: (r.meta || { page: 1, limit: 0, total: 0, totalPages: 1, hasMore: false }) as Paged<T, M>['meta'] })));
   }
 
+  /** GET a file (e.g. a loadsheet): the raw bytes, nothing is unwrapped. */
+  getBlob(path: string): Observable<Blob> {
+    return this.http.get(this.url(path), { responseType: 'blob' });
+  }
+
   post<T>(path: string, body: unknown = {}): Observable<T> {
     return this.http.post<ApiEnvelope<T>>(this.url(path), body).pipe(map((r) => r.data));
   }

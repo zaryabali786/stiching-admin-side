@@ -9,12 +9,20 @@
       </p>
     </div>
     <div class="actions">
+      <div class="seg" role="group" aria-label="View">
+        <button type="button" [class.on]="view() === 'board'" [attr.aria-pressed]="view() === 'board'" (click)="view.set('board')">Board</button>
+        <button type="button" [class.on]="view() === 'orders'" [attr.aria-pressed]="view() === 'orders'" (click)="view.set('orders')">By order</button>
+      </div>
       <button type="button" class="btn btn-icon refresh-btn" (click)="reload()" [disabled]="loading()" title="Refresh board" aria-label="Refresh board">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 4a8 8 0 0 1 7.75 6h-2.08A6 6 0 1 0 18 14h2.05A8 8 0 1 1 12 4Zm5-1h3v6h-6V7h2.3A6 6 0 0 0 17 6.4V3Z"/></svg>
       </button>
-      <button type="button" class="btn btn-primary scan-btn" (click)="openScan()">
+      <button *can="'production.update'" type="button" class="btn btn-primary scan-btn" (click)="receiveOpen.set(true)">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 5a2 2 0 0 1 2-2h4v2H5v4H3V5Zm12-2h4a2 2 0 0 1 2 2v4h-2V5h-4V3ZM3 15h2v4h4v2H5a2 2 0 0 1-2-2v-4Zm16 0h2v4a2 2 0 0 1-2 2h-4v-2h4v-4ZM7 7h4v4H7V7Zm6 0h4v4h-4V7ZM7 13h4v4H7v-4Zm6 2h2v2h-2v-2Zm2-2h2v2h-2v-2Z"/></svg>
+        <span [class.urdu]="lang.isUrdu()">{{ lang.t('Scan to receive', 'اسکین کر کے وصول کریں') }}</span>
+      </button>
+      <button type="button" class="btn scan-btn" (click)="openScan()">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 5a2 2 0 0 1 2-2h3v2H5v3H3V5Zm13-2h3a2 2 0 0 1 2 2v3h-2V5h-3V3ZM3 16h2v3h3v2H5a2 2 0 0 1-2-2v-3Zm16 0h2v3a2 2 0 0 1-2 2h-3v-2h3v-3ZM7 7h2v10H7V7Zm3 0h1v10h-1V7Zm2 0h2v10h-2V7Zm3 0h2v10h-2V7Z"/></svg>
-        <span [class.urdu]="lang.isUrdu()">{{ lang.t('Scan job card', 'جاب کارڈ اسکین کریں') }}</span>
+        <span [class.urdu]="lang.isUrdu()">{{ lang.t('Find job card', 'جاب کارڈ تلاش کریں') }}</span>
       </button>
     </div>
   </header>
@@ -62,7 +70,9 @@
     </div>
   </div>
 
-  @if (error()) {
+  @if (view() === 'orders') {
+    <app-production-orders [search]="filters().search" />
+  } @else if (error()) {
     <div class="card">
       <app-empty-state kind="error" title="Could not load the production board" [message]="error()" (retry)="reload()" />
     </div>
@@ -240,21 +250,23 @@
       <div class="modal-head">
         <div>
           <span class="eyebrow">Production</span>
-          <h3 id="scan-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Scan job card', 'جاب کارڈ اسکین کریں') }}</h3>
+          <h3 id="scan-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Find job card', 'جاب کارڈ تلاش کریں') }}</h3>
         </div>
         <button type="button" class="close-btn" (click)="closeScan()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
+        <app-qr-scanner [active]="scanOpen()" [busy]="scanning()" (scanned)="onQr($event)" />
+
         <form (submit)="$event.preventDefault(); submitScan()">
           <div class="field">
-            <label for="scan-code">Order reference or customer code</label>
+            <label for="scan-code">Or type an article code, order reference or customer code</label>
             <div class="scan-row">
               <input
                 id="scan-code"
                 class="input scan-input"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="SA-1001 or STX-10001"
+                placeholder="SA-1001-1, SA-1001 or STX-10001"
                 [value]="scanCode()"
                 (input)="scanCode.set($any($event.target).value)" />
               <button type="submit" class="btn btn-primary" [disabled]="scanning() || !scanCode().trim()">
@@ -262,7 +274,7 @@
                 Find
               </button>
             </div>
-            <span class="hint">Scan the barcode on the job card, or type the code and press Enter.</span>
+            <span class="hint">Point the camera at the article's QR code, or type its code and press Enter.</span>
           </div>
         </form>
 
@@ -294,3 +306,5 @@
     </div>
   </div>
 }
+
+<app-scan-receive [open]="receiveOpen()" (closed)="receiveOpen.set(false)" (received)="reload()" />

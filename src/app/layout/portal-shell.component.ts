@@ -7,7 +7,7 @@ import {
   gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
   airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
   searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-  chatbubblesOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, albumsOutline,
+  chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, chevronDownOutline, checkmarkOutline, albumsOutline,
 } from 'ionicons/icons';
 import { filter } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
@@ -68,6 +68,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
   readonly navOpen = signal(false);
   readonly collapsed = signal(readCollapsed());
   readonly userMenuOpen = signal(false);
+  readonly partnerMenuOpen = signal(false);
   readonly pageTitle = signal('');
   /** Fallback label (platform config) when the signed-in person has no partner, e.g. an admin looking at the partner portal. */
   private readonly configPartnerName = signal('Partner');
@@ -89,7 +90,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
       gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
       airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
       searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-      chatbubblesOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline,
+      chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline,
     });
   }
 
@@ -104,6 +105,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           items: [
             { path: '/admin/orders', label: 'Orders', icon: 'cube-outline', badge: b?.orders, tone: 'red' },
             { path: '/admin/messages', label: 'Messages', icon: 'chatbubbles-outline', badge: b?.messages, tone: 'amber' },
+            { path: '/admin/support', label: 'Support chat', icon: 'help-buoy-outline' },
             { path: '/admin/warehouse', label: 'Warehouse', icon: 'file-tray-stacked-outline', badge: b?.warehouse, tone: 'amber' },
           ],
         },
@@ -126,27 +128,31 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           items: [
             { path: '/admin/price-list', label: 'Price list', icon: 'pricetags-outline' },
             { path: '/admin/shipping', label: 'Shipping rates', icon: 'airplane-outline' },
-            { path: '/admin/portal-theme', label: 'Portal theme', icon: 'color-fill-outline' },
             { path: '/admin/settings', label: 'Settings', icon: 'settings-outline' },
           ],
         },
         {
-          label: 'App builder',
+          label: 'Build & theming',
           items: [
-            { path: '/admin/home-layout', label: 'Build', icon: 'construct-outline' },
+            { path: '/admin/home-layout', label: 'App build & theme', icon: 'construct-outline' },
+            { path: '/admin/portal-theme', label: 'Portal theme', icon: 'color-fill-outline' },
           ],
         },
       ];
     }
     const p = this.badges.partner();
     const groups: NavGroup[] = [
-      { label: '', items: [{ path: '/partner/overview', label: 'Overview', urdu: 'جائزہ', icon: 'grid-outline', permission: 'overview.view' }] },
+      { label: '', items: [
+        { path: '/partner/overview', label: 'Overview', urdu: 'جائزہ', icon: 'grid-outline', permission: 'overview.view' },
+        { path: '/partner/orders', label: 'All orders', urdu: 'تمام آرڈرز', icon: 'list-outline', permission: 'overview.view' },
+      ] },
       {
         label: 'Daily work',
         urdu: 'روزانہ کام',
         items: [
           { path: '/partner/receiving', label: 'Receiving', urdu: 'وصولی', icon: 'download-outline', badge: p?.receiving, tone: 'amber', permission: 'receiving.view' },
           { path: '/partner/production', label: 'Production', urdu: 'پیداوار', icon: 'layers-outline', permission: 'production.view' },
+          { path: '/partner/master-tracking', label: 'Master tracking', urdu: 'ماسٹر ٹریکنگ', icon: 'people-outline', permission: 'production.view' },
           { path: '/partner/quality-check', label: 'Quality check', urdu: 'کوالٹی چیک', icon: 'shield-checkmark-outline', badge: p?.qualityCheck, tone: 'amber', permission: 'quality.view' },
           { path: '/partner/warehouse', label: 'Warehouse', urdu: 'گودام', icon: 'file-tray-stacked-outline', badge: p?.warehouse, tone: 'amber', permission: 'warehouse.view' },
           { path: '/partner/messages', label: 'Messages', urdu: 'پیغامات', icon: 'chatbubbles-outline', badge: p?.messages, tone: 'amber', permission: 'messages.view' },
@@ -166,7 +172,6 @@ export class PortalShellComponent implements OnInit, OnDestroy {
         urdu: 'ٹیم اور کمائی',
         items: [
           { path: '/partner/teams', label: 'Teams', urdu: 'ٹیمیں', icon: 'people-outline', permission: 'teams.view' },
-          { path: '/partner/users', label: 'Users', urdu: 'صارفین', icon: 'id-card-outline', permission: 'users.view' },
           { path: '/partner/earnings', label: 'Earnings', urdu: 'کمائی', icon: 'wallet-outline', permission: 'earnings.view' },
         ],
       },
@@ -215,8 +220,9 @@ export class PortalShellComponent implements OnInit, OnDestroy {
     return this.portal === 'partner' && item.urdu ? this.lang.t(item.label, item.urdu) : item.label;
   }
 
-  onPartnerPick(event: Event): void {
-    this.activePartner.select((event.target as HTMLSelectElement).value || null);
+  choosePartner(id: string | null): void {
+    this.partnerMenuOpen.set(false);
+    this.activePartner.select(id);
   }
 
   toggleCollapsed(): void {
@@ -255,6 +261,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
     }
     if (e.key === 'Escape') {
       this.userMenuOpen.set(false);
+      this.partnerMenuOpen.set(false);
       this.navOpen.set(false);
     }
   }
@@ -263,6 +270,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
   onDocClick(e: MouseEvent): void {
     const target = e.target as HTMLElement;
     if (this.userMenuOpen() && !target.closest('.user-menu')) this.userMenuOpen.set(false);
+    if (this.partnerMenuOpen() && !target.closest('.pm')) this.partnerMenuOpen.set(false);
   }
 
   private updateTitle(): void {

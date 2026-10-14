@@ -20,6 +20,7 @@ const STAGE_LABELS: Record<JobStage, { en: string; ur: string }> = {
   cutting: { en: 'Cutting', ur: 'کٹنگ' },
   stitching: { en: 'Stitching', ur: 'سلائی' },
   qc: { en: 'Quality check', ur: 'کوالٹی چیک' },
+  pressing: { en: 'Pressing', ur: 'پریسنگ' },
   packed: { en: 'In warehouse', ur: 'گودام میں' },
 };
 

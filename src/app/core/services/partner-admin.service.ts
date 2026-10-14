@@ -157,7 +157,7 @@ export interface UserListParams {
   limit?: number;
 }
 
-export type StaffType = 'master' | 'tailor' | 'staff';
+export type StaffType = 'master' | 'tailor' | 'qa' | 'pressing' | 'packing' | 'staff';
 
 export interface UserCreateInput {
   email: string;

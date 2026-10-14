@@ -1,15 +1,15 @@
 <div class="page">
   <header class="page-header">
     <div>
-      <span class="eyebrow">Masters and tailors</span>
+      <span class="eyebrow">Masters, tailors, quality check, pressing and packing</span>
       <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Teams and capacity', 'ٹیمیں اور گنجائش') }}</h1>
       <p class="subtitle" [class.urdu]="lang.isUrdu()">
         {{ lang.t('Each master cuts for their own tailors. New work goes to the least busy team and person.', 'ہر ماسٹر اپنے درزیوں کے لیے کٹنگ کرتا ہے۔ نیا کام سب سے کم مصروف ٹیم کے پاس جاتا ہے۔') }}
       </p>
     </div>
     <div *can="'teams.update'" class="actions">
-      <button type="button" class="btn" (click)="openAdd('tailor')" [disabled]="!activeMasters().length" [title]="activeMasters().length ? '' : 'Add a master first'">
-        <span [class.urdu]="lang.isUrdu()">+ {{ lang.t('Add tailor', 'درزی شامل کریں') }}</span>
+      <button type="button" class="btn" (click)="openAdd('qa')">
+        <span [class.urdu]="lang.isUrdu()">+ {{ lang.t('Add QA / pressing / packing', 'کیو اے / پریسنگ / پیکنگ شامل کریں') }}</span>
       </button>
       <button type="button" class="btn btn-primary" (click)="openAdd('master')">
         <span [class.urdu]="lang.isUrdu()">+ {{ lang.t('Add master', 'ماسٹر شامل کریں') }}</span>
@@ -64,7 +64,7 @@
       </label>
     </div>
 
-    @if (!masters().length && !unassigned().length) {
+    @if (!masters().length && !unassigned().length && !stageStaff().length) {
       <div class="card">
         <app-empty-state title="No team yet — add your first master" message="Masters cut the fabric for their own tailors. Add a master, then the tailors who work with them.">
           <button *can="'teams.update'" type="button" class="btn btn-primary btn-sm" (click)="openAdd('master')">+ Add master</button>
@@ -132,7 +132,7 @@
 
             <div class="team-foot">
               @if (team.is_active) {
-                <button *can="'teams.update'" type="button" class="btn btn-sm" (click)="openAdd('tailor', team.id)" [attr.aria-label]="'Add tailor to ' + team.name">+ <span [class.urdu]="lang.isUrdu()">{{ lang.t('Add tailor', 'درزی شامل کریں') }}</span></button>
+                <button *can="'teams.update'" type="button" class="btn btn-sm" (click)="openAdd('tailor', team.id)" [attr.aria-label]="'Add a member to ' + team.name">+ <span [class.urdu]="lang.isUrdu()">{{ lang.t('Add member', 'ممبر شامل کریں') }}</span></button>
                 <span class="spacer"></span>
                 <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm" (click)="openEdit(team)" [attr.aria-label]="'Edit ' + team.name">Edit master</button>
                 <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm danger" [disabled]="isBusy('m:' + team.id)" (click)="remove(team)" [attr.aria-label]="'Remove ' + team.name">
@@ -147,6 +147,37 @@
           </article>
         }
       </section>
+
+      @if (stageStaff().length) {
+        <section class="card unassigned" aria-label="Quality check, pressing and packing">
+          <div class="card-head">
+            <h3 class="card-title">Quality check, pressing and packing</h3>
+            <span class="badge">{{ stageStaff().length }} {{ stageStaff().length === 1 ? 'person' : 'people' }}</span>
+          </div>
+          <p class="muted small">Each person signs in with their own login and receives articles for their stage by scanning the QR code.</p>
+          <ul class="tailors">
+            @for (t of stageStaff(); track t.id) {
+              <li [class.inactive]="!t.is_active">
+                <span class="avatar sm" aria-hidden="true">{{ initial(t.name) }}</span>
+                <div class="t-info">
+                  <span class="t-name">{{ t.name }}</span>
+                  @if (t.login) { <span class="muted tiny login-tag" [title]="'Login: ' + t.login.email">🔑 {{ t.login.email }}{{ t.login.is_active ? '' : ' (off)' }}</span> }
+                  @else if (canCreateLogin() && t.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(t)">+ Create login</button> }
+                </div>
+                <span class="badge blue">{{ roleName(t.role) }}</span>
+                <div class="row-actions">
+                  @if (t.is_active) {
+                    <button *can="'teams.update'" type="button" class="btn btn-sm row-btn" (click)="openEdit(t)" [attr.aria-label]="'Edit ' + t.name">Edit</button>
+                    <button *can="'teams.update'" type="button" class="btn btn-ghost btn-sm row-btn danger" [disabled]="isBusy('m:' + t.id)" (click)="remove(t)" [attr.aria-label]="'Remove ' + t.name">Remove</button>
+                  } @else {
+                    <button *can="'teams.update'" type="button" class="btn btn-sm row-btn" [disabled]="isBusy('m:' + t.id)" (click)="restore(t)" [attr.aria-label]="'Restore ' + t.name">Restore</button>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
+      }
 
       @if (unassigned().length) {
         <section class="card unassigned">
@@ -191,7 +222,8 @@
           <h3 id="tm-title" [class.urdu]="lang.isUrdu()">
             @if (f.id) { {{ f.name || 'Team member' }} }
             @else if (f.role === 'master') { {{ lang.t('Add master', 'ماسٹر شامل کریں') }} }
-            @else { {{ lang.t('Add tailor', 'درزی شامل کریں') }} }
+            @else if (f.role === 'tailor') { {{ lang.t('Add tailor', 'درزی شامل کریں') }} }
+            @else { Add {{ roleName(f.role).toLowerCase() }} staff }
           </h3>
         </div>
         <button type="button" class="close-btn" (click)="closeForm()" aria-label="Close">×</button>
@@ -199,14 +231,13 @@
       <div class="modal-body">
         <div class="field">
           <label for="tm-name">Name *</label>
-          <input id="tm-name" class="input" [ngModel]="f.name" (ngModelChange)="patchForm({ name: $event })" [placeholder]="f.role === 'master' ? 'e.g. Master Farooq' : 'e.g. Tariq'" maxlength="80" />
+          <input id="tm-name" class="input" [ngModel]="f.name" (ngModelChange)="patchForm({ name: $event })" [placeholder]="f.role === 'master' ? 'e.g. Master Farooq' : f.role === 'tailor' ? 'e.g. Tariq' : 'e.g. Imran'" maxlength="80" />
         </div>
         <div class="form-grid">
           <div class="field">
             <label for="tm-role">Role</label>
-            <select id="tm-role" class="select" [ngModel]="f.role" (ngModelChange)="setRole($event)" [disabled]="!!f.id">
-              <option value="master">Master (cutting)</option>
-              <option value="tailor">Tailor (stitching)</option>
+            <select id="tm-role" class="select" [ngModel]="f.role" (ngModelChange)="setRole($event)" [disabled]="!!f.id || f.roles.length === 1">
+              @for (r of formRoleOptions(); track r.value) { <option [value]="r.value">{{ r.label }}</option> }
             </select>
           </div>
           <div class="field">
@@ -226,7 +257,31 @@
             </select>
           </div>
         }
-        @if (canCreateLogin() && access()) {
+        @if (f.hasLogin && canManageLogin()) {
+          <div class="login-box">
+            <strong class="login-title">Login</strong>
+            <div class="form-grid">
+              <div class="field">
+                <label for="tm-email-e">Email (their login) *</label>
+                <input id="tm-email-e" class="input" type="email" autocomplete="off" maxlength="160" [ngModel]="f.email" (ngModelChange)="patchForm({ email: $event })" />
+              </div>
+              <div class="field">
+                <label for="tm-pw-e">New password <span class="muted">(optional)</span></label>
+                <span class="pw-wrap">
+                  <input id="tm-pw-e" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [ngModel]="f.password" (ngModelChange)="patchForm({ password: $event })" />
+                  <button type="button" class="btn btn-sm btn-ghost" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
+                </span>
+                <span class="hint">Leave empty to keep the current password. They choose their own at the next sign-in.</span>
+              </div>
+            </div>
+            @if (access(); as acc) {
+              <app-permission-matrix [modules]="acc.modules" [available]="acc.delegable" [(value)]="formPerms" [disabled]="saving()" />
+              @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so they will not be able to open any page.</p> }
+            } @else {
+              <p class="hint-line">Loading the permissions you can give. If you are an admin, choose a partner at the top first.</p>
+            }
+          </div>
+        } @else if (canCreateLogin() && !f.hasLogin) {
           <div class="login-box">
             <label class="login-toggle">
               <input type="checkbox" [ngModel]="f.withLogin" (ngModelChange)="patchForm({ withLogin: $event })" />
@@ -247,8 +302,12 @@
                   <span class="hint">Leave empty to generate one. They choose their own at first sign-in.</span>
                 </div>
               </div>
-              <app-permission-matrix [modules]="access()!.modules" [available]="access()!.delegable" [(value)]="formPerms" [disabled]="saving()" />
-              @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so they will not be able to open any page.</p> }
+              @if (access(); as acc) {
+                <app-permission-matrix [modules]="acc.modules" [available]="acc.delegable" [(value)]="formPerms" [disabled]="saving()" />
+                @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so they will not be able to open any page.</p> }
+              } @else {
+                <p class="hint-line">Loading the permissions you can give. If you are an admin, choose a partner at the top first.</p>
+              }
             }
           </div>
         }
@@ -260,7 +319,7 @@
         <button type="button" class="btn" (click)="closeForm()" [disabled]="saving()">Cancel</button>
         <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
           @if (saving()) { <ion-spinner name="crescent" /> }
-          {{ f.id ? 'Save changes' : 'Add ' + f.role }}
+          {{ f.id ? 'Save changes' : 'Add ' + roleName(f.role).toLowerCase() }}
         </button>
       </div>
     </div>

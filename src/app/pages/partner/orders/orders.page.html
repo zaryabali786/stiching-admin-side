@@ -1,0 +1,62 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Orders</span>
+      <h1>All orders</h1>
+      <p class="subtitle">Every order sent to your workshop. Search by order number, customer or brand.</p>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <app-search-input placeholder="Order no., customer, brand…" [value]="search()" (search)="onSearch($event)" />
+  </div>
+
+  <section class="table-card">
+    @if (loading()) {
+      <div class="sk-wrap">
+        @for (i of [1, 2, 3, 4, 5]; track i) { <span class="skeleton" style="height: 38px"></span> }
+      </div>
+    } @else if (error()) {
+      <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
+    } @else if (!rows().length) {
+      @if (search()) {
+        <app-empty-state title="No orders match your search" [message]="'Nothing found for “' + search() + '”.'" />
+      } @else {
+        <app-empty-state title="No orders yet" message="Orders appear here once customers send them to your workshop." />
+      }
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Created</th>
+              <th>Due</th>
+              <th>Customer</th>
+              <th class="num">Articles</th>
+              <th>Current status</th>
+              <th>Order status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (o of rows(); track o.id) {
+              <tr>
+                <td data-label="Order"><span class="cell-main">{{ o.reference }}</span>@if (o.order_kind === 'return') { <span class="cell-sub">Return</span> }</td>
+                <td data-label="Created">{{ o.created_at | day }}</td>
+                <td data-label="Due">{{ o.due_date ? (o.due_date | day) : '—' }}</td>
+                <td data-label="Customer">
+                  <span class="cell-main">{{ o.customer_name || '—' }}</span>
+                  <span class="cell-sub">{{ o.customer_code }}</span>
+                </td>
+                <td class="num" data-label="Articles">{{ o.articles }}</td>
+                <td data-label="Current status">{{ o.current_status }}</td>
+                <td data-label="Order status"><app-status-badge [status]="o.parent_status" [label]="o.parent_status_label" /></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="meta()" (pageChange)="goToPage($event)" />
+    }
+  </section>
+</div>

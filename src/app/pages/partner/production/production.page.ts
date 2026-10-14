@@ -16,7 +16,7 @@ import {
 } from '@angular/cdk/drag-drop';
 import { CdkScrollable } from '@angular/cdk/scrolling';
 import { IonSpinner } from '@ionic/angular';
-import { Subject, Subscription, catchError, map, of, switchMap, tap } from 'rxjs';
+import { Subject, Subscription, catchError, debounceTime, map, of, switchMap, tap } from 'rxjs';
 
 import {
   BoardColumn,
@@ -33,6 +33,10 @@ import { LanguageService } from '../../../core/services/language.service';
 import { BadgeService } from '../../../core/services/badge.service';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
+import { ScanReceiveComponent } from '../../../shared/components/scan-receive/scan-receive.component';
+import { QrScannerComponent } from '../../../shared/components/qr-scanner.component';
+import { ProductionOrdersComponent } from './production-orders.component';
+import { ChatSocketService } from '../../../core/services/chat-socket.service';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { InViewDirective } from './in-view.directive';
 import { STAGE_META, cardDisplayLabel, cardDisplayTone, StageMeta, initial, masterLabel, shortDate, swatchBackground } from './production.utils';
@@ -62,6 +66,9 @@ const PAGE_SIZE = 15;
     CdkScrollable,
     IonSpinner,
     SearchInputComponent,
+    ScanReceiveComponent,
+    QrScannerComponent,
+    ProductionOrdersComponent,
     EmptyStateComponent,
     InViewDirective,
     ApprovalChipComponent,
@@ -118,6 +125,11 @@ export class PartnerProductionPage implements OnInit {
   readonly searchKey = signal(0);
   private lastSearch = '';
 
+  // ───────── Board / by-order view and the QR receive screen ─────────
+  readonly view = signal<'board' | 'orders'>('board');
+  readonly receiveOpen = signal(false);
+  private socket = inject(ChatSocketService);
+
   // ───────── Scan modal ─────────
   readonly scanOpen = signal(false);
   readonly scanCode = signal('');
@@ -134,6 +146,13 @@ export class PartnerProductionPage implements OnInit {
   readonly shortDate = shortDate;
 
   ngOnInit(): void {
+    // an article was received / approved / moved anywhere: the board follows without a manual refresh
+    this.socket
+      .on('unit:update')
+      .pipe(debounceTime(600), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.view() === 'board' && !this.dragging()) this.reload();
+      });
     // Whole-board loads: every filter change goes through the URL, stale requests are cancelled.
     this.load$
       .pipe(
@@ -459,6 +478,12 @@ export class PartnerProductionPage implements OnInit {
   @HostListener('document:keydown.escape')
   onEscape(): void {
     if (this.scanOpen()) this.closeScan();
+  }
+
+  /** The camera read a QR code (an article or an order): search with it. */
+  onQr(code: string): void {
+    this.scanCode.set(code);
+    this.submitScan();
   }
 
   submitScan(): void {

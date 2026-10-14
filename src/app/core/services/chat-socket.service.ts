@@ -7,7 +7,7 @@ import { AuthService } from './auth.service';
 import { BadgeService } from './badge.service';
 import { NotificationService } from './notification.service';
 
-const EVENTS: (keyof ServerEvents)[] = ['message:new', 'message:read', 'typing', 'inbox:update', 'notification:new'];
+const EVENTS: (keyof ServerEvents)[] = ['message:new', 'message:read', 'typing', 'inbox:update', 'notification:new', 'support:new', 'support:read', 'unit:update', 'shipment:update'];
 const ACK_TIMEOUT_MS = 8000;
 
 /** Socket.IO lives on the API host (the API url without its /api path). */

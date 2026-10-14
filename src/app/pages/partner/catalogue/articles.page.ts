@@ -81,6 +81,30 @@ export class PartnerArticlesPage implements OnInit {
     return row.partner_id === null;
   }
 
+  readonly copyingStandard = signal(false);
+
+  async copyStandard(): Promise<void> {
+    const ok = await this.ui.confirm({
+      title: 'Add the standard set?',
+      message: 'This copies the standard article types and articles (with their prices) into your catalogue. Anything you already have is left as it is. You can change prices and switch articles off afterwards.',
+      confirmText: 'Add them',
+    });
+    if (!ok) return;
+    this.copyingStandard.set(true);
+    this.catalogue.copyStandardSet().subscribe({
+      next: (res) => {
+        this.copyingStandard.set(false);
+        this.ui.success(res.message || 'Done.');
+        this.types.reload();
+        this.articles.reload();
+      },
+      error: (err) => {
+        this.copyingStandard.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
   isLocked(row: { partner_id?: string | null }): boolean {
     return row.partner_id === null && !this.auth.isAdmin();
   }

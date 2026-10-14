@@ -161,6 +161,13 @@ export interface ServerEvents {
   'message:read': ReadPayload;
   typing: TypingPayload;
   'inbox:update': InboxPayload;
+  /** General chat with a customer (not about an order). */
+  'support:new': { id: string; customer_id: string; sender_role: 'customer' | 'admin'; body: string; read_at: string | null; created_at: string };
+  'support:read': { customerId: string; readerRole: string; readAt: string };
+  /** One article moved: received by scan, approved / rejected by the customer, returned ... */
+  'unit:update': { orderId: string; reference: string; unitId: string; code: string | null; title: string | null; orderStatus: string; state?: string; stateLabel?: string; stage?: string; stageLabel?: string; receivedBy?: string; role?: string; receivedAt?: string; at: string };
+  /** A dispatched parcel moved: CN booked, loadsheet downloaded, handed over, in transit, delivered, failed delivery. */
+  'shipment:update': { orderId: string; reference: string; shipmentId: string | null; status: string | null; label: string | null; at: string };
   /** The saved notification (null when the server could not attach it: then the bell just refreshes). */
   'notification:new': { notification?: import('./api.models').AppNotification | null };
 }

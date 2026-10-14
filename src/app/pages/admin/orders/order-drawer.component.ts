@@ -48,6 +48,8 @@ export class OrderDrawerComponent {
   readonly notesDraft = signal('');
   readonly dueDraft = signal('');
   readonly priorityDraft = signal<'normal' | 'rush'>('normal');
+  readonly expressDraft = signal(false);
+  readonly expressDaysDraft = signal('');
   readonly statusDraft = signal<OrderStatus | ''>('');
   readonly statusNote = signal('');
   readonly notifyCustomer = signal(true);
@@ -63,7 +65,7 @@ export class OrderDrawerComponent {
   readonly notesDirty = computed(() => (this.order()?.admin_notes || '') !== this.notesDraft());
   readonly scheduleDirty = computed(() => {
     const o = this.order();
-    return !!o && ((o.due_date || '') !== this.dueDraft() || o.priority !== this.priorityDraft());
+    return !!o && ((o.due_date || '') !== this.dueDraft() || o.priority !== this.priorityDraft() || !!o.express_stitching !== this.expressDraft() || String(o.express_days ?? '') !== this.expressDaysDraft());
   });
   readonly invoiceLines = computed(() => this.order()?.invoice?.lines || []);
   readonly issueUnits = computed(() => (this.order()?.units || []).filter((u) => u.status === 'issue').length);
@@ -216,7 +218,16 @@ export class OrderDrawerComponent {
     const patch: OrderUpdate = {};
     if ((o.due_date || '') !== this.dueDraft()) patch.due_date = this.dueDraft() || null;
     if (o.priority !== this.priorityDraft()) patch.priority = this.priorityDraft();
-    this.patch(patch, 'schedule', 'Due date and priority updated.');
+    if (!!o.express_stitching !== this.expressDraft()) patch.express_stitching = this.expressDraft();
+    const days = this.expressDraft() && this.expressDaysDraft().trim() ? Number(this.expressDaysDraft()) : null;
+    if (this.expressDraft() && String(o.express_days ?? '') !== this.expressDaysDraft()) {
+      if (days !== null && (!Number.isInteger(days) || days < 1 || days > 90)) {
+        this.ui.error('Express days must be a whole number from 1 to 90.');
+        return;
+      }
+      patch.express_days = days;
+    }
+    this.patch(patch, 'schedule', 'Schedule updated.');
   }
 
   async changeStatus(): Promise<void> {
@@ -350,6 +361,8 @@ export class OrderDrawerComponent {
     this.notesDraft.set(o.admin_notes || '');
     this.dueDraft.set(o.due_date ? o.due_date.slice(0, 10) : '');
     this.priorityDraft.set(o.priority === 'rush' ? 'rush' : 'normal');
+    this.expressDraft.set(!!o.express_stitching);
+    this.expressDaysDraft.set(o.express_days != null ? String(o.express_days) : '');
     this.statusDraft.set(o.status);
     if (['submitted', 'received'].includes(o.status)) this.loadPartners();
   }

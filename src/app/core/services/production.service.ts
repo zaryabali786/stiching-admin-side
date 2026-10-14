@@ -7,10 +7,153 @@ import { ApiService } from './api.service';
 import { ApiEnvelope } from '../models/api.models';
 
 /** Production board stages, in flow order. See backend/API.md → "Production board". */
-export type ProductionStage = 'to_assign' | 'cutting' | 'stitching' | 'qc' | 'packed';
-export const PRODUCTION_STAGES: ProductionStage[] = ['to_assign', 'cutting', 'stitching', 'qc', 'packed'];
+export type ProductionStage = 'to_assign' | 'cutting' | 'stitching' | 'qc' | 'pressing' | 'packed';
+export const PRODUCTION_STAGES: ProductionStage[] = ['to_assign', 'cutting', 'stitching', 'qc', 'pressing', 'packed'];
 
 export type CardStatus = 'on_time' | 'rush' | 'delayed';
+
+export type ReceivingKind = 'awaiting' | 'received' | 'done' | 'not_ready' | 'assigned';
+
+export interface ReceivingArticle {
+  unit_id: string;
+  code: string | null;
+  line_no: number;
+  title: string;
+  kind: ReceivingKind;
+  reason: string | null;
+  stage: ProductionStage | null;
+  stage_label: string | null;
+  received_by: string | null;
+  received_role: string | null;
+  received_at: string | null;
+  /** Received by the person looking at the screen. */
+  mine: boolean;
+}
+
+/** One order at one stage: how many articles are received, how many remain, and who received each. */
+export interface ReceivingProgress {
+  order_id: string;
+  reference: string;
+  customer_name: string | null;
+  customer_code: string | null;
+  brand: string | null;
+  stage: ProductionStage;
+  stage_label: string;
+  total: number;
+  received: number;
+  mine: number;
+  remaining: number;
+  awaiting: number;
+  done: number;
+  next_action: string;
+  articles: ReceivingArticle[];
+}
+
+export interface ReceivingScreen {
+  role: string;
+  supervisor: boolean;
+  stage: ProductionStage | null;
+  stageLabel: string | null;
+  orders: ReceivingProgress[];
+}
+
+export type TeamArticleState = 'pending' | 'with_master' | 'with_tailor' | 'completed';
+
+export interface TrackedArticle {
+  unit_id: string;
+  code: string | null;
+  title: string;
+  line_no: number;
+  stage: ProductionStage;
+  stage_label: string;
+  state: TeamArticleState;
+  state_label: string;
+  master: string | null;
+  tailor: string | null;
+  tailor_id: string | null;
+  received_by: string | null;
+  received_at: string | null;
+}
+
+/** An order as the master's team sees it: how many articles were picked up and which ones still wait. */
+export interface TrackedOrder {
+  order_id: string;
+  reference: string;
+  customer_name: string | null;
+  brand: string | null;
+  due_date: string | null;
+  status: string;
+  total: number;
+  received: number;
+  remaining: number;
+  completed: number;
+  members: string[];
+  remaining_text: string;
+  articles: TrackedArticle[];
+}
+
+export interface TrackedMember {
+  id: string;
+  name: string;
+  role: string;
+  is_master: boolean;
+  received: number;
+  pending: number;
+  completed: number;
+}
+
+export interface MasterTracking {
+  master: { id: string; name: string } | null;
+  members: TrackedMember[];
+  orders: TrackedOrder[];
+  totals: { orders: number; articles: number; received: number; remaining: number; completed: number };
+  /** The masters a manager can switch between (empty for a master or a tailor). */
+  masters: { id: string; name: string }[];
+  viewer: 'master' | 'tailor' | 'manager';
+}
+
+export interface ScanReceiveResult {
+  kind: 'article' | 'order';
+  card?: Card;
+  receipt?: { stage: ProductionStage; role: string; user_name: string | null; received_at: string };
+  orderStatus?: string;
+  order?: { id: string; reference: string };
+  stage?: ProductionStage;
+  /** The order's received / remaining numbers after this scan. */
+  progress?: ReceivingProgress;
+}
+
+
+export type ArticleState = 'pending_receipt' | 'received' | 'pending_approval' | 'approved' | 'rejected' | 'return_requested' | 'returned' | 'issue' | 'in_production' | 'completed';
+
+export interface ProductionOrderUnit {
+  id: string;
+  code: string | null;
+  line_no: number;
+  title: string;
+  state: ArticleState;
+  state_label: string;
+  stage: ProductionStage | null;
+  stage_label: string | null;
+  card_id: string | null;
+  master: string | null;
+  tailor: string | null;
+  receipts: { stage: ProductionStage; role: string; user_name: string | null; received_at: string }[];
+}
+
+export interface ProductionOrderRow {
+  id: string;
+  reference: string;
+  brand: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+  status: string;
+  status_label: string;
+  due_date: string | null;
+  updated_at: string;
+  units: ProductionOrderUnit[];
+  progress: { total: number; in_production: number; completed: number; waiting: number };
+}
 export type Priority = 'normal' | 'rush';
 
 export interface MediaRef {
@@ -79,6 +222,7 @@ export interface CardUnit {
 export interface CardOrder {
   id: string;
   reference: string;
+  import_source?: 'manual' | 'invoice' | 'link' | 'email';
   brand: string | null;
   customer_id: string;
   customer_name: string | null;
@@ -284,6 +428,28 @@ export class ProductionService {
 
   column(stage: ProductionStage, cursor: string, filters: BoardFilters, limit = 15): Observable<BoardColumn> {
     return this.api.get<BoardColumn>(`${this.base}/columns/${stage}`, { ...filterParams(filters), cursor, limit });
+  }
+
+  // ───────── Receiving articles by scanning their QR code ─────────
+
+  /** `code` is what the article's QR holds. The stage is found from the signed-in person, never chosen. */
+  scanReceive(code: string) {
+    return this.api.postWithMessage<ScanReceiveResult>(`${this.base}/scan-receive`, { code });
+  }
+
+  /** The receiving screen: this person's stage and, per order, received / remaining and who received each article. */
+  receiving(): Observable<ReceivingScreen> {
+    return this.api.get<ReceivingScreen>(`${this.base}/receiving`);
+  }
+
+  /** One master and their tailors: every order of the team, what was picked up and what still waits. */
+  masterTracking(masterId?: string | null): Observable<MasterTracking> {
+    return this.api.get<MasterTracking>(`${this.base}/master-tracking`, { master_id: masterId || null });
+  }
+
+  /** Orders as parents, every article under them with where it is and who received it. */
+  orders(params: { search?: string; page?: number; limit?: number }) {
+    return this.api.list<ProductionOrderRow>(`${this.base}/orders`, params as Record<string, string | number | undefined>);
   }
 
   scan(code: string): Observable<Card[]> {

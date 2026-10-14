@@ -43,6 +43,32 @@
       } @else if (error()) {
         <div class="card"><app-empty-state kind="error" [message]="error()" (retry)="retry()" /></div>
       } @else if (!orders().length) {
+        @if (elsewhere().length) {
+          @for (e of elsewhere(); track e.id) {
+            <article class="card elsewhere" role="alert">
+              <div class="el-head">
+                <span class="el-ico" aria-hidden="true">!</span>
+                <div>
+                  <strong>This parcel is for another partner</strong>
+                  <span class="muted">{{ e.reference }} · {{ e.customer_name || 'Customer' }} · code {{ e.customer_code }}@if (e.tracking_number) { · tracking {{ e.tracking_number }} }</span>
+                </div>
+              </div>
+              @if (e.partner; as ep) {
+                <div class="el-to">
+                  <span class="el-k">The customer was told to send it to</span>
+                  <strong>{{ ep.name }}@if (ep.short_code) { <span class="mono"> · {{ ep.short_code }}</span> }</strong>
+                  <span>{{ partnerLine(ep) }}</span>
+                  @if (ep.receiving_phone) { <span class="muted">{{ ep.receiving_phone }}</span> }
+                </div>
+              }
+              <div class="el-actions" *can="'receiving.update'">
+                <button type="button" class="btn btn-primary" [disabled]="forwarding() === e.id" (click)="forward(e)">
+                  @if (forwarding() === e.id) { <ion-spinner name="crescent" /> } I am sending it to {{ e.partner?.name || 'them' }}
+                </button>
+              </div>
+            </article>
+          }
+        }
         <div class="card">
           @if (search()) {
             <app-empty-state title="No parcels match your search" [message]="'Nothing found for “' + search() + '”. Check the customer code on the label, or log it as an unmatched parcel.'">
@@ -57,27 +83,50 @@
           }
         </div>
       } @else {
-        @for (o of orders(); track o.id) {
+        @if (tab() === 'ready_return') {
+          <div class="card sheet-bar" role="region" aria-label="Loadsheet">
+            <div class="sheet-text">
+              <b>Loadsheet</b>
+              <span class="muted small">Tick the parcels you are handing to one courier, then download the loadsheet. They move to “Handed over to courier” once the file is downloaded.</span>
+            </div>
+            <div class="sheet-actions">
+              @for (c of bookedCouriers(); track c) { <button type="button" class="btn btn-sm btn-ghost" (click)="pickAllOfCourier(c)">All {{ c }}</button> }
+              @if (picked().size) { <button type="button" class="btn btn-sm btn-ghost" (click)="clearPicked()">Clear</button> }
+              <button *can="'receiving.update'" type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy()" (click)="downloadLoadsheet()">
+                @if (sheetBusy()) { <ion-spinner name="crescent" /> } Download Loadsheet@if (picked().size) { ({{ picked().size }}) }
+              </button>
+            </div>
+          </div>
+        }
+        @for (o of orders(); track o.row_key || o.id) {
           <article class="card order-card" [class.has-issue]="o.has_issue">
             <div class="order-head">
               <div class="label-code" [attr.aria-label]="'Customer code ' + (o.customer_code || 'missing')">
                 <span class="lc-caption">Code</span>
                 <span class="lc-value">{{ o.customer_code || '—' }}</span>
               </div>
+              @if (o.reference) { <app-qr-code class="order-qr" [value]="o.reference" [size]="64" [showText]="false" /> }
               <div class="order-id">
                 <h3 class="customer">{{ o.customer_name || 'Customer' }}</h3>
-                <span class="brand-ref">{{ o.brand || 'Brand' }} · {{ o.reference }}@if (o.brand_order_number) { <span class="muted"> · brand order {{ o.brand_order_number }}</span> }</span>
+                <span class="brand-ref">{{ o.brand || 'Brand' }} · {{ o.group_reference || o.reference }}@if (o.group && o.group !== 'main') { <span class="group-tag" [attr.data-g]="o.group">{{ o.group === 'hold' ? 'Hold' : o.group === 'return' ? 'Return' : 'Resolved' }}</span> <span class="muted"> · original {{ o.original_reference || o.reference }}</span> }@if (o.brand_order_number) { <span class="muted"> · brand order {{ o.brand_order_number }}</span> }</span>
                 <div class="meta-line">
                   @if (o.tracking_number) { <span>Tracking <b>{{ o.tracking_number }}</b></span> } @else { <span>No tracking number</span> }
                   <span>Ordered {{ o.created_at | day }}</span>
+                  @if (o.express_stitching) { <span class="deliver-to"><b>Express stitching</b>@if (o.express_days) { · {{ o.express_days }} days }</span> }
                   @if (destination(o)) { <span>Ships to {{ destination(o) }}</span> }
+                  @if (o.destination_address) { <span class="deliver-to"><b>Deliver to:</b> {{ o.destination_address }}</span> }
+                  @if (o.destination_phone) { <span class="deliver-to"><b>Phone:</b> {{ o.destination_phone }}</span> }
+                  @if (orderedFor(o)) { <span class="ordered-for" title="The address the customer was told to send the parcel to"><b>Customer chose:</b> {{ orderedFor(o) }}</span> }
                   @if (o.received_at) { <span>Received {{ o.received_at | timeAgo }}</span> }
                 </div>
               </div>
               <div class="badges">
+                <span class="badge blue" [title]="'Order source: ' + sourceLabel(o)">{{ sourceLabel(o) }} order</span>
                 @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
                 @if (o.has_issue) { <span class="badge red dot">Has issue</span> }
                 <app-status-badge [status]="o.status" [label]="o.status_label" />
+                @if (o.parcel_review === 'pending') { <span class="badge amber">Waiting for customer to approve</span> }
+                @else if (o.parcel_review === 'approved') { <span class="badge green">Customer approved</span> }
               </div>
             </div>
 
@@ -92,25 +141,145 @@
                     <span class="line" aria-hidden="true">{{ u.line_no }}</span>
                     <div class="unit-info">
                       <strong>{{ u.unit_title }}@if (u.quantity > 1) { <span class="qty"> × {{ u.quantity }}</span> }</strong>
+                      @if (u.code) { <span class="unit-code"><b>{{ u.code }}</b></span> }
                       @if (u.stitching_type) { <span class="muted small">{{ u.stitching_type }}</span> }
+                      @if (weightEdit()?.id === u.id) {
+                        <span class="weight-edit">
+                          <input class="input" type="number" min="0.001" max="49.999" step="0.01" inputmode="decimal" placeholder="kg" aria-label="Weight in kg"
+                            [ngModel]="weightEdit()!.value" (ngModelChange)="setWeightText($event)" (keydown.enter)="saveWeight(u)" />
+                          <button type="button" class="btn btn-sm btn-primary" [disabled]="weightSaving()" (click)="saveWeight(u)">Save</button>
+                          <button type="button" class="btn btn-sm btn-ghost" (click)="weightEdit.set(null)">Cancel</button>
+                        </span>
+                      } @else if (u.weight_kg) {
+                        <span class="small unit-weight">Weight <b>{{ u.weight_kg }} kg</b>@if (canEditWeight(o)) { <button *can="'receiving.update'" type="button" class="link-btn" (click)="editWeight(u)">Edit</button> }</span>
+                      } @else if (u.status !== 'pending') {
+                        <span class="small unit-weight missing">No weight yet @if (canEditWeight(o)) { <button *can="'receiving.update'" type="button" class="link-btn" (click)="editWeight(u)">Add weight</button> }</span>
+                      }
                       @if (u.notes) { <span class="small unit-note">Customer note: {{ u.notes }}</span> }
                       <app-voice-note-play [note]="u.notes_audio" label="Article note, voice" />
                     </div>
+                    @if (u.code) { <app-qr-code class="unit-qr" [value]="u.code" [size]="56" /> }
                     <span [class]="'badge dot unit-status ' + unitTone(u.status)" [class.urdu]="lang.isUrdu()">{{ unitLabel(u.status) }}</span>
-                    @if (u.status !== 'received') {
-                      <div *can="'receiving.update'" class="unit-actions">
-                        @if (u.status !== 'issue') {
-                          <button type="button" class="btn btn-issue" [disabled]="isBusy('unit:' + u.id)" (click)="openIssue(o, u)" [attr.aria-label]="'Report issue with ' + u.unit_title">
-                            <span [class.urdu]="lang.isUrdu()">{{ lang.t('Report issue', 'مسئلہ بتائیں') }}</span>
-                          </button>
-                        }
-                        <button type="button" class="btn btn-green btn-floor" [disabled]="isBusy('unit:' + u.id)" (click)="receiveUnit(u)" [attr.aria-label]="'Mark ' + u.unit_title + ' received'">
-                          @if (isBusy('unit:' + u.id)) { <ion-spinner name="crescent" /> } @else { <span aria-hidden="true">✓</span> }
-                          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Received', 'وصول') }}</span>
-                        </button>
-                      </div>
-                    }
                   </div>
+                  @if (u.review_status === 'pending') {
+                    @if (u.status === 'issue') {
+                      <div class="review-line pending"><span aria-hidden="true">⏳</span> Problem reported · waiting for the customer to choose Hold or Return</div>
+                    } @else {
+                      <div class="review-line pending"><span aria-hidden="true">⏳</span> Waiting for the customer to approve this article</div>
+                    }
+                  } @else if (u.review_status === 'approved') {
+                    <div class="review-line approved"><span aria-hidden="true">✓</span> Approved by the customer</div>
+                  }
+                  @if (u.hold_resolved_at) {
+                    <div class="review-line approved resolved">
+                      <span aria-hidden="true">✓</span> Hold resolved · corrected article received @if (u.hold_received_at) { {{ u.hold_received_at | day }} } · approved by the customer {{ u.hold_resolved_at | day }}
+                    </div>
+                  } @else if (u.return_status === 'held' && u.review_status === 'pending') {
+                    <div class="review-line pending"><span aria-hidden="true">⏳</span> Corrected article received {{ u.hold_received_at | timeAgo }} · the hold resolves when the customer approves it</div>
+                  }
+                  @if (u.review_status === 'rejected') {
+                    <div class="issue-box review-box" role="note">
+                      <div><b>Rejected by the customer</b> · {{ u.review_note }}</div>
+                      @if (u.review_media?.length) {
+                        <div class="thumbs">
+                          @for (m of u.review_media; track m.url) {
+                            <a [href]="m.url" target="_blank" rel="noopener" class="thumb" aria-label="Open the customer's photo"><img [src]="m.url" alt="Customer photo" loading="lazy" /></a>
+                          }
+                        </div>
+                      }
+                      @if (u.return_status === 'none') {
+                        <span class="hint">No return was requested.</span>
+                      } @else if (u.return_status === 'requested') {
+                        <div class="ret-flow">
+                          <span><b>Return to {{ returnWhere(u.return_to) }}</b></span>
+                          @if (u.return_shipping; as rs) {
+                            <span class="ret-ship"><b>Return to:</b> {{ rs.name }}@if (rs.phone) { · {{ rs.phone }} }<br />{{ rs.address }}, {{ rs.city }}@if (rs.country) { , {{ rs.country }} }</span>
+                          }
+                          @if (u.return_shipment; as sh) {
+                            <div class="ship-line booked">
+                              @if (tab() === 'ready_return') {
+                                <input type="checkbox" class="pick" [checked]="isPicked(sh.id)" [disabled]="!canPick(sh) && !isPicked(sh.id)" (change)="togglePick(sh.id)" [attr.aria-label]="'Select ' + (u.code || u.unit_title) + ' for the loadsheet'" />
+                              }
+                              <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
+                              <span class="ship-status">{{ sh.status_label }}</span>
+                            </div>
+                            <button *can="'receiving.update'" type="button" class="btn btn-sm btn-ghost" (click)="cancelBooking(u)">Cancel booking</button>
+                          } @else if (u.return_order; as ro) {
+                            <div class="ship-line booked">
+                              <span><b>In the Warehouse</b> · {{ ro.reference }} · {{ ro.destination === 'admin' ? 'sent to the admin warehouse' : 'returning directly to the customer' }}</span>
+                              <span class="ship-status">{{ ro.status_label }}</span>
+                            </div>
+                            <a class="btn btn-sm btn-ghost" [routerLink]="['/partner/warehouse']" [queryParams]="{ search: ro.reference }">Open in Warehouse</a>
+                          } @else {
+                            <span class="hint">Send this parcel to the Warehouse. It then leaves this tab and continues there.</span>
+                            <span *can="'receiving.update'" class="ship-actions">
+                              @if (u.return_to === 'customer') {
+                                <button type="button" class="btn btn-sm btn-primary" [disabled]="routing() === u.id" (click)="routeReturn(u, 'customer')">Send to Warehouse</button>
+                              } @else {
+                                <span class="hint">This parcel goes back to the brand, not to the customer.</span>
+                              }
+                            </span>
+                          }
+                        </div>
+                      } @else if (u.return_status === 'held') {
+                        <div class="review-sent hold">
+                          <span><b>On hold</b> by the customer@if (u.review_note || u.return_note) { · {{ u.return_note || u.review_note }} }</span>
+                          @if (u.hold_received_at) {
+                            <span class="hint">✓ Corrected article received {{ u.hold_received_at | timeAgo }}. Waiting for the customer to approve it. The hold resolves after that.</span>
+                          } @else {
+                            <span class="hint">Keep the article safe until the corrected one arrives.</span>
+                            <button *can="'receiving.update'" type="button" class="btn btn-sm btn-primary" (click)="openCorrected(o, u)">Receive Corrected Article</button>
+                          }
+                        </div>
+                      } @else if (u.return_status === 'sent_back' || u.return_status === 'returned') {
+                        <div class="ret-flow" [class.is-done]="u.return_status === 'returned'">
+                          <span><b>{{ u.return_status === 'returned' ? 'Returned' : 'Handed over to the courier' }}</b> · {{ returnWhere(u.return_to) }}</span>
+                          @if (u.return_shipment; as sh) {
+                            <div class="ship-line">
+                              <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
+                              <span class="ship-status">{{ sh.status_label }}</span>
+                            </div>
+                            <span class="small muted">
+                              @if (sh.handed_over_at) { Handed over {{ sh.handed_over_at | day }} }
+                              @if (sh.delivered_at) { · Delivered {{ sh.delivered_at | day }} }
+                            </span>
+                            @if (sh.events.length) {
+                              <ul class="ship-events">
+                                @for (ev of sh.events; track $index) {
+                                  <li><span class="ev-s">{{ ev.status === 'booked' ? 'CN booked' : ev.status === 'handed_over' ? 'Handed over' : ev.status === 'in_transit' ? 'In transit' : ev.status === 'delivered' ? 'Delivered' : ev.status }}</span>
+                                    <span class="muted">{{ ev.occurred_at | day }} · {{ ev.source === 'webhook' ? 'courier' : ev.source === 'manual' ? 'entered by staff' : 'system' }}@if (ev.note) { · {{ ev.note }} }</span></li>
+                                }
+                              </ul>
+                            }
+                            @if (u.return_status === 'sent_back') {
+                              <span *can="'receiving.update'" class="ship-actions">
+                                @if (sh.courier_name.toLowerCase() === 'postex') { <button type="button" class="btn btn-sm" (click)="refreshTracking(u)">Refresh PostEx tracking</button> }
+                                @if (sh.status === 'handed_over') { <button type="button" class="btn btn-sm" (click)="openTrack(o, u, 'in_transit')">Mark in transit</button> }
+                                <button type="button" class="btn btn-sm btn-primary" (click)="openTrack(o, u, 'delivered')">Courier delivered it</button>
+                              </span>
+                            }
+                          } @else if (u.return_courier || u.return_tracking) {
+                            <span class="small">{{ u.return_courier }}@if (u.return_courier && u.return_tracking) { · } @if (u.return_tracking) { Tracking {{ u.return_tracking }} }</span>
+                          }
+                          @if (u.return_status === 'sent_back') { <span class="hint">When the corrected article arrives, press “Receive corrected article”; the customer then reviews it again.</span> }
+                        </div>
+                      }
+                    </div>
+                  } @else if (u.return_status === 'sent_back') {
+                    <div class="issue-box review-box" role="note">
+                      <div><b>Sent back to {{ returnWhere(u.return_to) }}</b>@if (u.return_courier || u.return_tracking) { · {{ u.return_courier }} {{ u.return_tracking }} }</div>
+                      <span class="hint">When the corrected article arrives, press “Receive parcel”. The customer then reviews it again.</span>
+                    </div>
+                  }
+                  @if (u.receive_media?.length) {
+                    <div class="thumbs recv-thumbs">
+                      @for (m of u.receive_media; track m.url) {
+                        <a [href]="m.url" target="_blank" rel="noopener" class="thumb" [attr.aria-label]="'Open received ' + (m.type === 'video' ? 'video' : 'photo')">
+                          @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Received photo" loading="lazy" /> }
+                        </a>
+                      }
+                    </div>
+                  }
                   @if (u.status === 'issue') {
                     <div class="issue-box" role="note">
                       <div><b>{{ issueLabel(u.issue_type) }}</b>@if (u.issue_note) { · {{ u.issue_note }} }</div>
@@ -124,7 +293,7 @@
                           }
                         </div>
                       }
-                      <span *can="'receiving.update'" class="hint">Once sorted, press “Received”.</span>
+                      <span *can="'receiving.update'" class="hint">Once sorted, use “Receive parcel”.</span>
                     </div>
                   }
                 </li>
@@ -143,10 +312,16 @@
                   @if (pendingCount(o)) { · {{ pendingCount(o) }} to check }
                 </span>
               </div>
-              @if (pendingCount(o) > 0) {
-                <button *can="'receiving.update'" type="button" class="btn btn-primary btn-floor all-btn" [disabled]="isBusy('order:' + o.id)" (click)="receiveAll(o)">
-                  @if (isBusy('order:' + o.id)) { <ion-spinner name="crescent" /> } @else { <span aria-hidden="true">✓✓</span> }
-                  <span [class.urdu]="lang.isUrdu()">{{ lang.t('Mark all received', 'سب وصول') }}</span>
+              @if (o.group === 'hold' || o.group === 'resolved') {
+                <span class="muted small return-wait">{{ o.group === 'hold' ? 'Use “Receive Corrected Article” on the article when it arrives.' : 'This hold is resolved. The article continues with the normal order.' }}</span>
+              } @else if (o.group === 'return') {
+                <span class="muted small return-wait">Returned articles stay here until the return is resolved.</span>
+              } @else if (returnWaiting(o)) {
+                <span class="muted small return-wait">Send the rejected article back first. Receiving opens again after that.</span>
+              } @else if (pendingCount(o) > 0) {
+                <button *can="'receiving.update'" type="button" class="btn btn-primary btn-floor all-btn" (click)="openReceive(o)">
+                  <span aria-hidden="true">📦</span>
+                  <span [class.urdu]="lang.isUrdu()">{{ sentBackCount(o) ? 'Receive corrected article' : lang.t('Receive parcel', 'پارسل وصول کریں') }}</span>
                   @if (pendingCount(o) > 1) { <span class="all-count">{{ pendingCount(o) }}</span> }
                 </button>
               }
@@ -208,60 +383,183 @@
   </div>
 </div>
 
-<!-- Report issue -->
-@if (issue(); as f) {
-  <div class="modal-backdrop" (click)="closeIssue()">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="issue-title" (click)="$event.stopPropagation()">
+<!-- Book the courier CN of a returned article -->
+@if (book(); as f) {
+  <div class="modal-backdrop" (click)="book.set(null)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bk-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.order.group_reference || f.order.reference }} · {{ f.unit.code }}</span>
+          <h3 id="bk-title">Book courier CN</h3>
+          <p class="muted small">{{ f.unit.unit_title }} goes back to {{ returnWhere(f.unit.return_to) }}.</p>
+          @if (f.unit.return_shipping; as rs) {
+            <p class="ret-ship"><b>Return to:</b> {{ rs.name }}@if (rs.phone) { · {{ rs.phone }} }<br />{{ rs.address }}, {{ rs.city }}@if (rs.country) { , {{ rs.country }} }</p>
+          }
+        </div>
+        <button type="button" class="close-btn" (click)="book.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body sb-body">
+        <div class="sb-fields">
+          <div class="field">
+            <span class="sb-label">Courier <span class="req">required</span></span>
+            <app-courier-select [selected]="f.courier" (selectedChange)="book.set({ order: f.order, unit: f.unit, courier: $event, cn: f.cn, manual: f.manual })" label="Courier" />
+          </div>
+          @if (apiBookable(f) && !f.manual) {
+            <div class="field">
+              <span class="sb-label">Booking</span>
+              <p class="muted small"><b>{{ f.courier?.name }}</b> is booked through its API from here: the parcel goes from you to the return address above and the CN comes back from {{ f.courier?.name }}. Nothing is saved unless {{ f.courier?.name }} confirms the booking.</p>
+              <button type="button" class="link-btn" (click)="book.set({ order: f.order, unit: f.unit, courier: f.courier, cn: f.cn, manual: true })">I booked it myself, enter the CN instead</button>
+            </div>
+          } @else {
+            <div class="field">
+              <label for="bk-cn">CN number <span class="req">required</span></label>
+              <input id="bk-cn" class="input" autocomplete="off" maxlength="40" placeholder="e.g. 7741234567" [ngModel]="f.cn" (ngModelChange)="book.set({ order: f.order, unit: f.unit, courier: f.courier, cn: $event, manual: f.manual })" />
+              @if (apiBookable(f) && f.manual) { <button type="button" class="link-btn" (click)="book.set({ order: f.order, unit: f.unit, courier: f.courier, cn: f.cn, manual: false })">Book through {{ f.courier?.name }} instead</button> }
+              @if (apiMissing(f); as miss) { <span class="hint">{{ miss.message }}</span> }
+            </div>
+          }
+        </div>
+        <p class="sb-note">Book this parcel with the courier (their app, branch or portal) and enter the consignment (CN) number they give you. This system does not place the booking with the courier for you. The parcel then waits in “Ready for return”.</p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="book.set(null)" [disabled]="bookSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="confirmBook()" [disabled]="bookSaving()">
+          @if (bookSaving()) { <ion-spinner name="crescent" /> } {{ apiBookable(f) && !f.manual ? 'Book with ' + f.courier?.name : 'Save CN' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- A person enters what the courier's tracking shows -->
+@if (track(); as f) {
+  <div class="modal-backdrop" (click)="track.set(null)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tr-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.order.group_reference || f.order.reference }} · {{ f.unit.code }}</span>
+          <h3 id="tr-title">{{ f.status === 'delivered' ? 'Courier delivered it' : 'Mark in transit' }}</h3>
+          @if (f.unit.return_shipment; as sh) { <p class="muted small">{{ sh.courier_name }} · CN {{ sh.cn_number }}</p> }
+        </div>
+        <button type="button" class="close-btn" (click)="track.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body sb-body">
+        <div class="field">
+          <label for="tr-note">Note <span class="optional">optional</span></label>
+          <input id="tr-note" class="input" maxlength="200" placeholder="e.g. Received by Mr. Ali" [ngModel]="f.note" (ngModelChange)="track.set({ order: f.order, unit: f.unit, status: f.status, note: $event })" />
+        </div>
+        <p class="sb-note">
+          @if (f.status === 'delivered') { Only confirm this when the courier's own tracking shows the parcel was <b>delivered</b>. The article then becomes <b>Returned</b> and the customer is told. }
+          @else { Enter this when the courier's tracking shows the parcel is on its way. }
+          If the courier sends tracking to us automatically, you do not need to do this.
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="track.set(null)" [disabled]="trackSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="confirmTrack()" [disabled]="trackSaving()">
+          @if (trackSaving()) { <ion-spinner name="crescent" /> } {{ f.status === 'delivered' ? 'Confirm delivered' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Receive parcel: the whole parcel first, then each article -->
+@if (rcv(); as f) {
+  <div class="modal-backdrop" (click)="closeReceive()">
+    <div class="modal rcv-modal" role="dialog" aria-modal="true" aria-labelledby="rcv-title" (click)="$event.stopPropagation()">
       <div class="modal-head">
         <div>
           <span class="eyebrow">{{ f.order.reference }} · {{ f.order.customer_code }}</span>
-          <h3 id="issue-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Report issue', 'مسئلہ بتائیں') }}</h3>
-          <p class="muted small">{{ f.unit.unit_title }}</p>
+          <h3 id="rcv-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Receive parcel', 'پارسل وصول کریں') }}</h3>
+          <p class="muted small">Add photos or a video of the parcel as it arrived, then of each article. The customer sees them before approving.</p>
         </div>
-        <button type="button" class="close-btn" (click)="closeIssue()" aria-label="Close">×</button>
+        <button type="button" class="close-btn" (click)="closeReceive()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <div class="field">
-          <span class="label" id="issue-type-label">Issue</span>
-          <div class="chips" role="group" aria-labelledby="issue-type-label">
-            @for (t of issueTypes; track t.value) {
-              <button type="button" class="chip" [class.active]="f.issueType === t.value" [attr.aria-pressed]="f.issueType === t.value" (click)="patchIssue({ issueType: t.value })">
-                <span [class.urdu]="lang.isUrdu()">{{ lang.t(t.en, t.ur) }}</span>
-              </button>
-            }
-          </div>
-        </div>
-        <div class="field">
-          <label for="issue-note">What is wrong? *</label>
-          <textarea id="issue-note" class="textarea" rows="3" placeholder="e.g. Dupatta not in the brand packet"
-            [ngModel]="f.note" (ngModelChange)="patchIssue({ note: $event })"></textarea>
-          <app-voice-note-field [value]="f.audio" (valueChange)="patchIssue({ audio: $event })" [(pending)]="voiceBusy" label="Say it instead" />
-          @if (issueTouched() && !f.note.trim() && !f.audio) { <span class="error">Write or record what is wrong so admin can tell the customer.</span> }
-        </div>
-        <div class="field">
-          <label>Photos or video <span class="optional">optional</span></label>
+        <section class="rcv-section" aria-labelledby="rcv-parcel">
+          <h4 id="rcv-parcel"><span class="rcv-n">1</span> Whole parcel</h4>
+          @if (f.order.parcel_media?.length) {
+            <div class="thumbs">
+              @for (m of f.order.parcel_media; track m.url) {
+                <a [href]="m.url" target="_blank" rel="noopener" class="thumb" aria-label="Open saved parcel photo or video">
+                  @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Saved parcel photo" loading="lazy" /> }
+                </a>
+              }
+            </div>
+          }
           <div class="media-grid">
-            @for (m of f.media; track $index) {
+            @for (m of f.parcelMedia; track $index) {
               <div class="media-item">
                 @if (isVideo(m)) { <span class="video">▶ {{ m.name }}</span> } @else { <img [src]="m.dataUrl" [alt]="m.name" /> }
-                <button type="button" class="remove" (click)="removeMedia($index)" [attr.aria-label]="'Remove ' + m.name">×</button>
+                <button type="button" class="remove" (click)="removeRcvMedia(-1, $index)" [attr.aria-label]="'Remove ' + m.name">×</button>
               </div>
             }
-            @if (f.media.length < maxMedia) {
-              <label class="media-add" [class.disabled]="mediaReading()">
-                @if (mediaReading()) { <ion-spinner name="crescent" /> } @else { <span>+ Add</span> }
-                <input type="file" accept="image/*,video/*" multiple hidden [disabled]="mediaReading()" (change)="onMediaPicked($any($event.target))" />
+            @if (f.parcelMedia.length < maxMedia) {
+              <label class="rcv-add" [class.disabled]="mediaReading()">
+                @if (mediaReading()) { <ion-spinner name="crescent" /> } @else { <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h5l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.2"/></svg><span class="rcv-add-text"><b>Add photos or video</b><small>Up to {{ maxMedia }} · video up to 8 MB</small></span> }
+                <input type="file" accept="image/*,video/*" multiple hidden [disabled]="mediaReading()" (change)="onRcvMedia(-1, $any($event.target))" />
               </label>
             }
           </div>
-          <span class="hint">Not required. Add up to {{ maxMedia }} if it helps admin explain the problem to the customer. Photos are resized before upload; videos up to 8 MB.</span>
-        </div>
+        </section>
+
+        <section class="rcv-section" aria-labelledby="rcv-articles">
+          <h4 id="rcv-articles"><span class="rcv-n">2</span> Articles <span class="muted small">{{ f.units.length }} to receive</span></h4>
+          @for (u of f.units; track u.unit.id; let i = $index) {
+            <div class="rcv-unit" [class.has-problem]="u.problem">
+              <div class="rcv-unit-head">
+                @if (u.unit.code) { <app-qr-code [value]="u.unit.code" [size]="48" /> }
+                <div class="rcv-unit-title">
+                  <strong>{{ u.unit.unit_title }}@if (u.unit.quantity > 1) { <span class="qty"> × {{ u.unit.quantity }}</span> }</strong>
+                  @if (u.unit.code) { <span class="unit-code">{{ u.unit.code }}</span> }
+                </div>
+              </div>
+              <div class="media-grid">
+                @for (m of u.media; track $index) {
+                  <div class="media-item">
+                    @if (isVideo(m)) { <span class="video">▶ {{ m.name }}</span> } @else { <img [src]="m.dataUrl" [alt]="m.name" /> }
+                    <button type="button" class="remove" (click)="removeRcvMedia(i, $index)" [attr.aria-label]="'Remove ' + m.name">×</button>
+                  </div>
+                }
+                @if (u.media.length < maxMedia) {
+                  <label class="rcv-add" [class.disabled]="mediaReading()">
+                    @if (mediaReading()) { <ion-spinner name="crescent" /> } @else { <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h5l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.2"/></svg><span class="rcv-add-text"><b>Add photos or video</b><small>Up to {{ maxMedia }} · video up to 8 MB</small></span> }
+                    <input type="file" accept="image/*,video/*" multiple hidden [disabled]="mediaReading()" (change)="onRcvMedia(i, $any($event.target))" />
+                  </label>
+                }
+              </div>
+              <label class="rcv-weight">
+                <span>Weight (kg) @if (!u.problem) { <b aria-hidden="true">*</b> }</span>
+                <input class="input" type="number" min="0.001" max="49.999" step="0.01" inputmode="decimal" placeholder="e.g. 0.65"
+                  [ngModel]="u.weight" (ngModelChange)="patchRcvUnit(i, { weight: $event === null ? '' : '' + $event })" [attr.aria-label]="'Weight in kg of ' + u.unit.unit_title" />
+              </label>
+              <label class="rcv-problem-toggle">
+                <input type="checkbox" [ngModel]="u.problem" (ngModelChange)="patchRcvUnit(i, { problem: $event })" />
+                <span>There is a problem with this article</span>
+              </label>
+              @if (u.problem) {
+                <div class="rcv-problem">
+                  <div class="chips" role="group" [attr.aria-label]="'Problem with ' + u.unit.unit_title">
+                    @for (t of problemTypes; track t.value) {
+                      <button type="button" class="chip" [class.active]="u.issueType === t.value" [attr.aria-pressed]="u.issueType === t.value" (click)="patchRcvUnit(i, { issueType: t.value })">
+                        <span [class.urdu]="lang.isUrdu()">{{ lang.t(t.en, t.ur) }}</span>
+                      </button>
+                    }
+                  </div>
+                  <textarea class="textarea" rows="2" placeholder="What is wrong? e.g. Dupatta not in the brand packet" [ngModel]="u.note" (ngModelChange)="patchRcvUnit(i, { note: $event })"></textarea>
+                  @if (rcvTouched() && !u.note.trim()) { <span class="error">Write what is wrong so admin can tell the customer.</span> }
+                </div>
+              }
+            </div>
+          }
+        </section>
       </div>
       <div class="modal-foot">
-        <button type="button" class="btn" (click)="closeIssue()" [disabled]="issueSaving()">Cancel</button>
-        <button type="button" class="btn btn-danger" (click)="submitIssue()" [disabled]="issueSaving() || mediaReading() || voiceBusy()">
-          @if (issueSaving()) { <ion-spinner name="crescent" /> }
-          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Report issue', 'مسئلہ بتائیں') }}</span>
+        <button type="button" class="btn" (click)="closeReceive()" [disabled]="rcvSaving()">Cancel</button>
+        <button type="button" class="btn btn-green" (click)="confirmReceive()" [disabled]="rcvSaving() || mediaReading()">
+          @if (rcvSaving()) { <ion-spinner name="crescent" /> } @else { <span aria-hidden="true">✓</span> }
+          <span [class.urdu]="lang.isUrdu()">{{ rcvProblems() ? 'Save · ' + rcvProblems() + ' problem' + (rcvProblems() === 1 ? '' : 's') : lang.t('Confirm received', 'وصولی کی تصدیق') }}</span>
         </button>
       </div>
     </div>
@@ -305,6 +603,35 @@
         <button type="button" class="btn btn-primary" (click)="submitUnmatched()" [disabled]="unmatchedSaving()">
           @if (unmatchedSaving()) { <ion-spinner name="crescent" /> }
           Log parcel
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Hold: the corrected article arrived -->
+@if (corrected(); as f) {
+  <div class="modal-backdrop" (click)="corrected.set(null)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="co-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.order.group_reference || f.order.reference }} · {{ f.unit.code }}</span>
+          <h3 id="co-title">Receive Corrected Article</h3>
+          <p class="muted small">{{ f.unit.unit_title }} was put on hold: “{{ f.unit.return_note || f.unit.review_note }}”</p>
+        </div>
+        <button type="button" class="close-btn" (click)="corrected.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body sb-body">
+        <div class="field">
+          <label for="co-note">Note about the correction <span class="optional">optional</span></label>
+          <textarea id="co-note" class="textarea" rows="3" maxlength="300" placeholder="e.g. Hem fixed, colour re-checked" [ngModel]="f.note" (ngModelChange)="corrected.set({ order: f.order, unit: f.unit, note: $event })"></textarea>
+        </div>
+        <p class="sb-note">The customer reviews the corrected article next. The hold becomes {{ f.order.original_reference || f.order.reference }}-RESOLVED once they approve it.</p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="corrected.set(null)" [disabled]="correctedSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="confirmCorrected()" [disabled]="correctedSaving()">
+          @if (correctedSaving()) { <ion-spinner name="crescent" /> } Confirm received
         </button>
       </div>
     </div>

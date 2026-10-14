@@ -11,7 +11,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
 import { PAGE_SIZES, PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 import { OrderDrawerComponent } from './order-drawer.component';
 
-const GROUPS: readonly OrderGroup[] = ['all', 'awaiting_parcel', 'production', 'invoice', 'payment', 'warehouse', 'shipped', 'issues', 'cancelled'];
+const GROUPS: readonly OrderGroup[] = ['all', 'draft', 'awaiting_parcel', 'production', 'invoice', 'payment', 'warehouse', 'shipped', 'issues', 'cancelled'];
 const SORTS = ['created_at', 'reference', 'customer_name', 'due_date', 'status'] as const;
 type SortKey = (typeof SORTS)[number];
 
@@ -43,6 +43,7 @@ export class AdminOrdersPage implements OnInit {
     { key: 'all', label: 'All' },
     { key: 'issues', label: 'Issues', tone: 'bad' },
     { key: 'invoice', label: 'To invoice', tone: 'attn' },
+    { key: 'draft', label: 'Drafts (from email)' },
     { key: 'awaiting_parcel', label: 'Awaiting parcel' },
     { key: 'production', label: 'In production' },
     { key: 'payment', label: 'Awaiting payment' },

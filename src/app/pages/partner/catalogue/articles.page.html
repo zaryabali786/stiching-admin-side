@@ -3,7 +3,12 @@
     <div>
       <span class="eyebrow">Catalogue</span>
       <h1>Articles</h1>
-      <p class="subtitle">Create article types (for example Neckline, Sleeves or Collar) and the articles inside them. Customers see one dropdown per type on the order form.</p>
+      <p class="subtitle">These are your own articles and prices. Customers who choose your atelier for an order see exactly this list: one dropdown per type on the order form.</p>
+    </div>
+    <div *can="'catalogue.update'" class="actions">
+      <button type="button" class="btn" [disabled]="copyingStandard()" (click)="copyStandard()" title="Adds the standard types and articles you do not have yet, with their prices">
+        @if (copyingStandard()) { <ion-spinner name="crescent" /> } Add the standard set
+      </button>
     </div>
   </header>
 

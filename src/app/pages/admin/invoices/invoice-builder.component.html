@@ -7,7 +7,7 @@
           <h3>{{ o.reference }} · {{ o.customer?.full_name || o.customer_name }}</h3>
           <p class="sub">
             {{ o.customer?.customer_code || o.customer_code }} · {{ totalUnits() }} {{ totalUnits() === 1 ? 'article' : 'articles' }}
-            @if (o.weight_kg) { · {{ o.weight_kg }} kg }
+            @if (data()?.weight?.total_kg ?? o.weight_kg) { · {{ data()?.weight?.total_kg ?? o.weight_kg }} kg }
             · {{ o.destination_city }}{{ o.destination_country ? ', ' + o.destination_country : '' }}
             @if (o.packed_at) { · packed {{ o.packed_at | day }} }
           </p>
@@ -32,6 +32,16 @@
         <app-empty-state kind="error" [message]="error()" (retry)="retry()" />
       } @else if (data(); as d) {
         @if (notPackedReason(); as reason) { <div class="banner warn">{{ reason }}</div> }
+        @if (missingWeights().length && canEdit()) {
+          <div class="banner warn" role="alert">
+            <b>Weight missing.</b> The shipping price needs every article's weight. Ask the partner to add it in Receiving first:
+            @for (m of missingWeights(); track m.id) { <span class="miss-chip">{{ m.title }}@if (m.code) { ({{ m.code }}) }</span> }
+          </div>
+        } @else if (d.weight?.articles?.length && d.weight?.source === 'articles') {
+          <div class="banner weight-sum">
+            <b>Shipment weight {{ d.weight!.total_kg }} kg</b> = @for (a of d.weight!.articles; track a.id; let last = $last) { {{ a.title }} {{ a.weight_kg }} kg@if (!last) { + } }
+          </div>
+        }
         @if (invoice()?.status === 'issued') {
           <div class="banner">Issued {{ invoice()!.issued_at | day: true }} · waiting for the customer to pay. Reopen it to make corrections.</div>
         }
@@ -240,10 +250,10 @@
           <span class="foot-total" aria-hidden="true">Customer pays <b>{{ totals().total | pkr }}</b> · margin <b [class.neg]="totals().margin < 0">{{ totals().margin | pkr }}</b></span>
           <span class="foot-note">@if (dirty()) { <b class="unsaved">Unsaved changes · </b> }Issuing sets the order to Awaiting payment and notifies the customer.</span>
           <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
-          <button type="button" class="btn" [disabled]="!!busy() || !lines().length" (click)="saveDraft()">
+          <button type="button" class="btn" [disabled]="!!busy() || !lines().length || missingWeights().length > 0" (click)="saveDraft()">
             @if (busy() === 'save') { <ion-spinner name="crescent" /> } Save draft
           </button>
-          <button type="button" class="btn btn-green" [disabled]="!!busy() || !lines().length || totals().total <= 0" (click)="issue()">
+          <button type="button" class="btn btn-green" [disabled]="!!busy() || !lines().length || totals().total <= 0 || missingWeights().length > 0" (click)="issue()">
             @if (busy() === 'issue') { <ion-spinner name="crescent" /> } Issue invoice
           </button>
         } @else {

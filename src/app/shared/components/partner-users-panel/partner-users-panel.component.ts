@@ -26,13 +26,19 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const STAFF_TYPES: { id: StaffType; label: string }[] = [
   { id: 'master', label: 'Master' },
   { id: 'tailor', label: 'Tailor' },
+  { id: 'qa', label: 'Quality check (QA)' },
+  { id: 'pressing', label: 'Pressing' },
+  { id: 'packing', label: 'Packing' },
   { id: 'staff', label: 'Other staff' },
 ];
 
 /** Starting point only; the real access is whatever the partner saves. */
 export const STAFF_PRESETS: Record<StaffType, string[]> = {
   master: ['overview.view', 'production.view', 'production.update', 'quality.view', 'quality.update', 'teams.view'],
-  tailor: ['production.view'],
+  tailor: ['production.view', 'production.update'],
+  qa: ['overview.view', 'production.view', 'quality.view', 'quality.update'],
+  pressing: ['production.view', 'production.update'],
+  packing: ['production.view', 'production.update'],
   staff: [],
 };
 
@@ -89,6 +95,9 @@ export class PartnerUsersPanelComponent {
   readonly skeleton = SKELETON_ROWS;
   readonly titles = JOB_TITLE_SUGGESTIONS;
   readonly staffTypes = STAFF_TYPES;
+  staffTypeLabel(type: string | null | undefined): string {
+    return STAFF_TYPES.find((t) => t.id === type)?.label ?? 'Staff';
+  }
   readonly passwordMin = PASSWORD_MIN;
 
   readonly list = new PagedList<PartnerUser>();

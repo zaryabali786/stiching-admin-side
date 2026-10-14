@@ -69,11 +69,40 @@ export interface PartnerOverview {
 
 // ───────────────────────────── Receiving ─────────────────────────────
 
-export type ReceivingTab = 'expected' | 'issues' | 'recent';
+export type ReceivingTab = 'expected' | 'issues' | 'return_requested' | 'ready_return' | 'handed_over' | 'returns' | 'hold' | 'recent';
 export type IssueType = 'piece_missing' | 'damaged' | 'wrong_item' | 'other';
 
 export interface ReceivingUnit {
   id: string;
+  /** Permanent article code (<order reference>-<n>); also the QR code. */
+  code: string | null;
+  /** Photos / video of this article taken when it was received. */
+  receive_media?: MediaItem[] | null;
+  /** Weight of this article in kg, entered in Receiving (the invoice's shipping weight is the total of these). */
+  weight_kg?: number | null;
+  /** The customer's decision on the received article. */
+  review_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  review_note?: string | null;
+  review_media?: MediaItem[] | null;
+  /** none | requested (the customer wants it sent back) | sent_back | resubmitted */
+  return_status?: 'none' | 'requested' | 'sent_back' | 'resubmitted' | 'held' | 'returned';
+  /** The courier shipment of this returned article (CN, status, tracking events). */
+  return_shipment?: ReturnShipmentInfo | null;
+  /** The return order of this article once it was sent to the Warehouse (or to the admin). */
+  return_order?: { id: string; reference: string; status: string; status_label: string; destination: 'customer' | 'admin' | null } | null;
+  held_at?: string | null;
+  /** The partner confirmed the corrected article (a hold). */
+  hold_received_at?: string | null;
+  /** The customer approved the corrected article: the hold is resolved. */
+  hold_resolved_at?: string | null;
+  /** Where the customer wants the returned article posted to. */
+  return_shipping?: { name: string; phone: string; address: string; city: string; country: string } | null;
+  /** Where the rejected article goes back to. */
+  return_to?: 'brand' | 'customer' | null;
+  return_note?: string | null;
+  return_courier?: string | null;
+  return_tracking?: string | null;
+  resubmit_count?: number;
   line_no: number;
   unit_title: string;
   stitching_type: string | null;
@@ -90,8 +119,49 @@ export interface ReceivingUnit {
   created_at: string;
 }
 
+/** An order waiting for its parcel at ANOTHER partner (a parcel that reached the wrong place). */
+export interface ElsewhereOrder {
+  id: string;
+  reference: string;
+  customer_code: string | null;
+  customer_name: string | null;
+  tracking_number: string | null;
+  partner: {
+    id: string;
+    name: string;
+    short_code: string | null;
+    city: string | null;
+    receiving_name: string | null;
+    receiving_address: string | null;
+    receiving_city: string | null;
+    receiving_phone: string | null;
+  } | null;
+}
+
+/** One return parcel with the courier: booked (CN) > handed over (loadsheet) > in transit > delivered. */
+export interface ReturnShipmentInfo {
+  id: string;
+  courier_name: string;
+  cn_number: string;
+  status: 'booked' | 'handed_over' | 'in_transit' | 'delivered';
+  status_label: string;
+  booking_source: 'manual' | 'api';
+  booked_at: string;
+  handed_over_at: string | null;
+  delivered_at: string | null;
+  events: { status: string; note: string | null; source: 'manual' | 'webhook' | 'system'; occurred_at: string }[];
+}
+
 export interface ReceivingOrder {
   id: string;
+  /** The group this row shows: the normal order, or its hold / return / resolved articles. */
+  group?: 'main' | 'hold' | 'return' | 'resolved';
+  /** <reference>, <reference>-HOLD, <reference>-RETURN or <reference>-RESOLVED. */
+  group_reference?: string;
+  original_reference?: string;
+  row_key?: string;
+  /** The partner (and address) the customer was told to send the parcel to. */
+  partner?: { name: string; short_code: string | null; receiving_name: string | null; receiving_address: string | null; receiving_city: string | null } | null;
   reference: string;
   brand: string | null;
   brand_order_number: string | null;
@@ -103,11 +173,25 @@ export interface ReceivingOrder {
   customer_code: string | null;
   destination_city: string | null;
   destination_country: string | null;
+  /** The delivery address and phone the customer gave for this order. */
+  destination_address?: string | null;
+  destination_phone?: string | null;
   priority: 'normal' | 'rush';
+  express_stitching?: boolean;
+  express_days?: number | null;
   due_date: string | null;
   customer_notes: string | null;
   created_at: string;
   received_at: string | null;
+  /** 'email' = bought direct from a website (a draft made from the customer's inbox). */
+  import_source?: string | null;
+  /** Where the order came from: website, customer (their own parcel) or email. */
+  order_source?: 'website' | 'customer' | 'email';
+  details_completed_at?: string | null;
+  /** Photos / video of the whole parcel, shown to the customer. */
+  parcel_media?: MediaItem[] | null;
+  parcel_received_at?: string | null;
+  parcel_review?: 'none' | 'pending' | 'approved';
   units: ReceivingUnit[];
 }
 
@@ -144,7 +228,8 @@ export interface UnmatchedParcelInput {
 export interface TeamMember {
   id: string;
   name: string;
-  role: 'master' | 'tailor';
+  /** master / tailor take cutting and stitching; qa, pressing and packing receive their own stage. */
+  role: 'master' | 'tailor' | 'qa' | 'pressing' | 'packing';
   master_id: string | null;
   daily_capacity: number;
   is_active: boolean;
@@ -170,7 +255,8 @@ export interface TeamsResponse {
 
 /** Login created together with a team member (POST /partner/teams/members) or afterwards (POST .../:id/login). */
 export interface TeamLoginInput {
-  email: string;
+  /** Required when creating a login; when editing, leave it out to keep the current one. */
+  email?: string;
   password?: string;
   permissions: string[];
 }
@@ -183,7 +269,7 @@ export interface TeamLoginCredential {
 export interface TeamMemberInput {
   login?: TeamLoginInput;
   name?: string;
-  role?: 'master' | 'tailor';
+  role?: 'master' | 'tailor' | 'qa' | 'pressing' | 'packing';
   daily_capacity?: number;
   master_id?: string | null;
   is_active?: boolean;
@@ -191,7 +277,7 @@ export interface TeamMemberInput {
 
 // ───────────────────────────── Job cards (production / QC) ─────────────────────────────
 
-export type JobStage = 'to_assign' | 'cutting' | 'stitching' | 'qc' | 'packed';
+export type JobStage = 'to_assign' | 'cutting' | 'stitching' | 'qc' | 'pressing' | 'packed';
 
 export interface JobCard {
   id: string;
@@ -284,11 +370,35 @@ export interface QcMeta {
 
 // ───────────────────────────── Warehouse ─────────────────────────────
 
-export type WarehouseTab = 'to_invoice' | 'awaiting_payment' | 'paid' | 'dispatched';
+export type WarehouseTab = 'to_invoice' | 'awaiting_payment' | 'paid' | 'ready_dispatch' | 'dispatched' | 'delivered' | 'failed_delivery';
+
+/** The courier shipment of a dispatched order: CN, loadsheet, handover, tracking. */
+export interface DispatchShipment {
+  id: string;
+  status: 'needs_label' | 'booked' | 'labelled' | 'handed_to_courier' | 'in_transit' | 'delivered' | 'failed_delivery' | 'returning_to_partner' | 'returned_to_partner' | 'handed_over';
+  courier: string | null;
+  tracking_number: string | null;
+  shipped_from: string;
+  booking_source?: 'manual' | 'api';
+  booked_at?: string | null;
+  handed_at?: string | null;
+  delivered_at?: string | null;
+  failure_reason?: string | null;
+  failed_at?: string | null;
+  return_started_at?: string | null;
+  returned_at?: string | null;
+  proof?: { receiver?: string; note?: string; url?: string } | null;
+  loadsheet_id?: string | null;
+  events?: { status: string; note: string | null; source: 'manual' | 'webhook' | 'system'; occurred_at: string }[];
+}
 export type DispatchRoute = 'admin_warehouse' | 'direct_dispatch';
 
 export interface WarehouseOrder {
   id: string;
+  /** 'return' = the return of one rejected article, handled here like any parcel. */
+  order_kind?: 'order' | 'return';
+  return_destination?: 'customer' | 'admin' | null;
+  return_unit?: { id: string; unit_title: string; code: string | null } | null;
   reference: string;
   brand: string | null;
   status: OrderStatus;
@@ -298,6 +408,7 @@ export interface WarehouseOrder {
   destination_city: string | null;
   destination_country: string | null;
   destination_address: string | null;
+  destination_phone?: string | null;
   shipping_service: 'express' | 'standard' | null;
   weight_kg: number | null;
   partner_route: DispatchRoute | null;
@@ -317,7 +428,7 @@ export interface WarehouseOrder {
     lines?: { kind: string; label: string }[];
   } | null;
   transfer: { id: string; code: string; status: TransferStatus } | null;
-  shipment: { id: string; status: string; courier: string | null; tracking_number: string | null; shipped_from: string } | null;
+  shipment: DispatchShipment | null;
 }
 
 export interface WarehouseMeta {
@@ -355,6 +466,24 @@ export interface EarningsSummary {
   monthly: { key: string; month: string; amount: number; pct: number }[];
 }
 
+export interface PartnerOrderRow {
+  id: string;
+  reference: string;
+  brand: string | null;
+  created_at: string;
+  due_date: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+  order_kind?: 'order' | 'return';
+  /** Number of articles. */
+  articles: number;
+  /** Where the articles are now, e.g. "2 Stitching · 1 Packed". */
+  current_status: string;
+  /** The order's own status. */
+  parent_status: OrderStatus;
+  parent_status_label: string;
+}
+
 export interface EarningRow {
   id: string;
   number: string;
@@ -382,11 +511,81 @@ export class PartnerService {
     return this.api.list<ReceivingOrder, ReceivingMeta>(`${this.base}/receiving`, params as ListParams);
   }
 
-  receiveUnit(unitId: string) {
-    return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/receive`);
+  /** Orders waiting for their parcel at other partners that match what was typed (customer code, reference or tracking). */
+  findElsewhere(q: string): Observable<ElsewhereOrder[]> {
+    return this.api.get<ElsewhereOrder[]>(`${this.base}/receiving/elsewhere`, { q });
   }
 
-  reportIssue(unitId: string, body: { issue_type: IssueType; note?: string; notes_audio?: AudioRef; media?: UploadFile[] }) {
+  forwardParcel(orderId: string) {
+    return this.api.postWithMessage<{ id: string; reference: string; forwarded_to: string }>(`${this.base}/receiving/orders/${orderId}/forward`);
+  }
+
+  receiveUnit(unitId: string, media?: UploadFile[], weightKg?: number | null) {
+    const body = { ...(media?.length ? { media } : {}), ...(weightKg ? { weight_kg: weightKg } : {}) };
+    return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/receive`, Object.keys(body).length ? body : undefined);
+  }
+
+  /** Add or correct one article's weight (kg). */
+  setUnitWeight(unitId: string, weightKg: number) {
+    return this.api.postWithMessage<{ weight_kg: number; order_weight_kg: number | null }>(`${this.base}/receiving/units/${unitId}/weight`, { weight_kg: weightKg });
+  }
+
+  /** The rejected article was sent back to the customer. Receive the corrected one with "Receive parcel". */
+  /** Book the courier CN of a returned article (the courier's own consignment number). */
+  bookReturnCn(unitId: string, body: { courier_id: string; cn_number?: string; manual?: boolean }) {
+    return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/return/book`, body);
+  }
+
+  /** Couriers that can be booked through their API for returns (PostEx), and whether the server has it set up. */
+  returnApiCouriers() {
+    return this.api.get<{ name: string; configured: boolean; ok: boolean | null; message: string | null }[]>(`${this.base}/receiving/couriers/api`);
+  }
+
+  refreshReturnTracking(shipmentId: string) {
+    return this.api.postWithMessage<{ applied: number }>(`${this.base}/receiving/returns/${shipmentId}/refresh-tracking`);
+  }
+
+  /** Send to Admin or Return Directly to Customer: the returned article enters the Warehouse workflow. */
+  routeReturn(unitId: string, destination: 'customer' | 'admin') {
+    return this.api.postWithMessage<{ id: string; reference: string; status: string }>(`${this.base}/receiving/units/${unitId}/return/route`, { destination });
+  }
+
+  cancelReturnBooking(unitId: string) {
+    return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/return/cancel`);
+  }
+
+  /** Make the loadsheet of the selected booked parcels. Nothing is handed over until the file was downloaded and confirmed. */
+  createLoadsheet(shipmentIds: string[]) {
+    return this.api.postWithMessage<{ id: string; number: string; courier_name: string; count: number }>(`${this.base}/receiving/returns/loadsheet`, { shipment_ids: shipmentIds });
+  }
+
+  downloadLoadsheet(id: string) {
+    return this.api.getBlob(`${this.base}/receiving/returns/loadsheets/${id}/download`);
+  }
+
+  confirmLoadsheetHandover(id: string) {
+    return this.api.postWithMessage<{ count: number; number: string }>(`${this.base}/receiving/returns/loadsheets/${id}/handed-over`);
+  }
+
+  /** A person enters what the courier's tracking shows (for couriers that do not report to us). */
+  updateReturnTracking(shipmentId: string, body: { status: 'in_transit' | 'delivered'; note?: string }) {
+    return this.api.postWithMessage<unknown>(`${this.base}/receiving/returns/${shipmentId}/tracking`, body);
+  }
+
+  /** A hold: the corrected article arrived. The customer reviews it; the hold resolves once they approve. */
+  receiveCorrected(unitId: string, body: { note?: string; media?: UploadFile[] }) {
+    return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/receive-corrected`, body);
+  }
+
+  sendArticleBack(unitId: string, body: { courier?: string; tracking?: string }) {
+    return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/sent-back`, body);
+  }
+
+  addParcelMedia(orderId: string, media: UploadFile[]) {
+    return this.api.postWithMessage<{ parcel_media: MediaItem[] }>(`${this.base}/receiving/orders/${orderId}/parcel-media`, { media });
+  }
+
+  reportIssue(unitId: string, body: { issue_type: IssueType; note?: string; notes_audio?: AudioRef; media?: UploadFile[]; weight_kg?: number }) {
     return this.api.postWithMessage<unknown>(`${this.base}/receiving/units/${unitId}/issue`, body);
   }
 
@@ -445,8 +644,8 @@ export class PartnerService {
     return this.api.postWithMessage<{ photos?: MediaItem[] }>(`${this.base}/qc/cards/${cardId}/request-approval`, { photos });
   }
 
-  packOrder(orderId: string, weightKg: number) {
-    return this.api.postWithMessage<{ orderStatus: OrderStatus }>(`${this.base}/qc/orders/${orderId}/pack`, { weight_kg: weightKg });
+  packOrder(orderId: string, weightKg: number | null) {
+    return this.api.postWithMessage<{ orderStatus: OrderStatus }>(`${this.base}/qc/orders/${orderId}/pack`, weightKg == null ? {} : { weight_kg: weightKg });
   }
 
   // Warehouse
@@ -462,8 +661,54 @@ export class PartnerService {
     return this.api.postWithMessage<{ transfer: Transfer } | null>(`${this.base}/warehouse/orders/${orderId}/route`, { route });
   }
 
-  shipDirect(orderId: string, body: { courier_id: string; tracking_number: string }) {
-    return this.api.postWithMessage<null>(`${this.base}/warehouse/orders/${orderId}/ship`, body);
+  /** Book the courier of a paid parcel: the CN the courier gave (no courier API is connected). */
+  bookDispatch(orderId: string, body: { courier_id: string; cn_number?: string; manual?: boolean }) {
+    return this.api.postWithMessage<unknown>(`${this.base}/warehouse/orders/${orderId}/book`, body);
+  }
+
+  /** The CN slips of the given parcels: PostEx's own PDF for PostEx parcels, otherwise a printable slip. */
+  printCn(shipmentIds: string[]) {
+    return this.api.getBlob(`${this.base}/warehouse/cn/print?shipment_ids=${shipmentIds.map(encodeURIComponent).join(',')}`);
+  }
+
+  /** Couriers that can be booked through their API, and whether that connection is set up on the server. */
+  apiCouriers(check = false) {
+    return this.api.get<{ name: string; configured: boolean; ok: boolean | null; message: string | null }[]>(`${this.base}/warehouse/couriers/api`, check ? { check: 'true' } : undefined);
+  }
+
+  /** Read the courier's tracking now (PostEx parcels). */
+  refreshDispatchTracking(shipmentId: string) {
+    return this.api.postWithMessage<{ applied: number }>(`${this.base}/warehouse/shipments/${shipmentId}/refresh-tracking`);
+  }
+
+  cancelDispatchBooking(orderId: string) {
+    return this.api.postWithMessage<unknown>(`${this.base}/warehouse/orders/${orderId}/book/cancel`);
+  }
+
+  createDispatchLoadsheet(shipmentIds: string[]) {
+    return this.api.postWithMessage<{ id: string; number: string; courier_name: string; count: number }>(`${this.base}/warehouse/dispatch/loadsheet`, { shipment_ids: shipmentIds });
+  }
+
+  downloadDispatchLoadsheet(id: string) {
+    return this.api.getBlob(`${this.base}/warehouse/loadsheets/${id}/download`);
+  }
+
+  /** The file was saved: the parcels wait for the courier. */
+  markLoadsheetDownloaded(id: string) {
+    return this.api.postWithMessage<{ count: number; number: string }>(`${this.base}/warehouse/dispatch/loadsheets/${id}/downloaded`);
+  }
+
+  /** The courier really took the parcels: they are Dispatched. */
+  confirmDispatchHandover(id: string) {
+    return this.api.postWithMessage<{ count: number; number: string }>(`${this.base}/warehouse/dispatch/loadsheets/${id}/handed-over`);
+  }
+
+  updateDispatchTracking(shipmentId: string, body: { status: 'in_transit' | 'delivered' | 'failed_delivery' | 'returning_to_partner'; note?: string; reason?: string }) {
+    return this.api.postWithMessage<unknown>(`${this.base}/warehouse/shipments/${shipmentId}/tracking`, body);
+  }
+
+  confirmReturnedParcel(shipmentId: string) {
+    return this.api.postWithMessage<unknown>(`${this.base}/warehouse/shipments/${shipmentId}/received-back`);
   }
 
   transfers(params: { status?: TransferStatus; page?: number; limit?: number; search?: string } = {}): Observable<Paged<Transfer>> {
@@ -477,6 +722,10 @@ export class PartnerService {
   // Earnings
   earningsSummary(): Observable<EarningsSummary> {
     return this.api.get<EarningsSummary>(`${this.base}/earnings/summary`);
+  }
+
+  allOrders(params: { search?: string; page?: number; limit?: number }): Observable<Paged<PartnerOrderRow>> {
+    return this.api.list<PartnerOrderRow>(`${this.base}/orders`, params as ListParams);
   }
 
   earnings(params: { status?: 'paid' | 'issued' | ''; search?: string; page?: number; limit?: number }): Observable<Paged<EarningRow>> {

@@ -16,6 +16,7 @@ export const STAGE_META: Record<ProductionStage, StageMeta> = {
   cutting: { stage: 'cutting', en: 'Cutting', ur: 'کٹائی', subEn: 'With the master', subUr: 'ماسٹر کے پاس', color: 'var(--c-gold)' },
   stitching: { stage: 'stitching', en: 'Stitching', ur: 'سلائی', subEn: 'With a tailor', subUr: 'درزی کے پاس', color: '#B5733A' },
   qc: { stage: 'qc', en: 'Quality check', ur: 'کوالٹی چیک', subEn: 'Master or QC staff', subUr: 'ماسٹر یا کیو سی عملہ', color: 'var(--c-blue)' },
+  pressing: { stage: 'pressing', en: 'Pressing', ur: 'پریسنگ', subEn: 'Pressing staff', subUr: 'پریسنگ عملہ', color: 'var(--c-purple)' },
   packed: { stage: 'packed', en: 'Packed', ur: 'پیک شدہ', subEn: 'Handed to warehouse', subUr: 'گودام کے حوالے', color: 'var(--c-green)' },
 };
 

@@ -66,7 +66,7 @@ interface DesignBox {
 type ActionKey = 'primary' | 'pack' | 'fail' | 'ask' | 'patch' | 'send' | 'comment';
 
 
-const STEP_INDEX: Record<ProductionStage, number> = { to_assign: 0, cutting: 1, stitching: 2, qc: 3, packed: 4 };
+const STEP_INDEX: Record<ProductionStage, number> = { to_assign: 0, cutting: 1, stitching: 2, qc: 3, pressing: 3, packed: 4 };
 
 @Component({
   selector: 'app-partner-job-detail',
@@ -231,6 +231,8 @@ export class PartnerJobDetailPage implements OnInit {
                 : 'The customer approved this piece. Pack the order once every piece is ready.'
               : 'QC passed. Send finished photos of this piece so the customer can approve it.'
           : `QC is in progress. ${master} checks it against the measurements, then the customer approves photos.`;
+      case 'pressing':
+        return 'Pressing is in progress. Packing staff receive it next by scanning its QR code.';
       case 'packed': {
         const progress = cardDisplayLabel(c);
         return progress ? `Done at the workshop. The order is now: ${progress}.` : 'Packed and handed to the warehouse team.';

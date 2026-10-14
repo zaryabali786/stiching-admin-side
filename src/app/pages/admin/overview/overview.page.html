@@ -5,14 +5,43 @@
       <h1>Dashboard</h1>
       <p class="subtitle">
         @if (editing()) { Drag cards to rearrange them, resize or remove them, and add new numbers, charts and lists. }
-        @else { Your business at a glance for the last {{ periodText() }}. Make it yours with Customize. }
+        @else { Your business at a glance {{ custom() ? 'for' : 'for the last' }} {{ periodText() }}. Make it yours with Customize. }
       </p>
     </div>
     <div class="actions">
       @if (!editing()) {
         <div class="pill-toggle" role="group" aria-label="Period">
           @for (p of periods; track p.value) {
-            <button type="button" [class.active]="days() === p.value" [attr.aria-pressed]="days() === p.value" (click)="setDays(p.value)">{{ p.label }}</button>
+            <button type="button" [class.active]="!custom() && days() === p.value" [attr.aria-pressed]="!custom() && days() === p.value" (click)="setDays(p.value)">{{ p.label }}</button>
+          }
+        </div>
+        <div class="range-wrap">
+          <button type="button" class="range-btn" [class.active]="!!custom()" (click)="toggleRange()" [attr.aria-expanded]="rangeOpen()" aria-haspopup="dialog">
+            <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+            <span>{{ customLabel() }}</span>
+            <ion-icon name="chevron-down-outline" class="rb-chev" [class.open]="rangeOpen()" aria-hidden="true"></ion-icon>
+          </button>
+          @if (rangeOpen()) {
+            <div class="range-pop" role="dialog" aria-label="Choose a date range">
+              <div class="rp-quick">
+                @for (q of quick; track q.label) {
+                  <button type="button" class="rp-chip" (click)="pickQuick(q)">{{ q.label }}</button>
+                }
+              </div>
+              <div class="rp-dates">
+                <label><span>From</span><input type="date" class="input" [value]="draftFrom()" [max]="draftTo() || todayIso" (input)="draftFrom.set($any($event.target).value)" /></label>
+                <label><span>To</span><input type="date" class="input" [value]="draftTo()" [min]="draftFrom()" [max]="todayIso" (input)="draftTo.set($any($event.target).value)" /></label>
+              </div>
+              <p class="rp-sum" [class.bad]="!rangeValid() && draftDays() === 0">
+                @if (draftDays() > 366) { Choose at most one year. }
+                @else if (rangeValid()) { {{ draftDays() }} day{{ draftDays() === 1 ? '' : 's' }} selected }
+                @else { Pick a start date and an end date (not in the future). }
+              </p>
+              <div class="rp-foot">
+                <button type="button" class="btn btn-ghost btn-sm" (click)="rangeOpen.set(false)">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" [disabled]="!rangeValid()" (click)="applyRange()">Apply range</button>
+              </div>
+            </div>
           }
         </div>
         <button type="button" class="btn" (click)="startEdit()"><ion-icon name="options-outline" aria-hidden="true"></ion-icon> Customize</button>

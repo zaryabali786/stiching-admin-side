@@ -169,7 +169,6 @@ export class AuthService {
       ['teams.view', '/partner/teams'],
       ['earnings.view', '/partner/earnings'],
       ['catalogue.view', '/partner/articles'],
-      ['users.view', '/partner/users'],
     ];
     return pages.find(([permission]) => this.can(permission))?.[1] ?? '/forbidden';
   }

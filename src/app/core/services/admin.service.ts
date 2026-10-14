@@ -48,6 +48,9 @@ export interface AdminOverview {
 export interface DashPoint { label: string; value: number }
 export interface DashboardData {
   days: number;
+  custom?: boolean;
+  from?: string | null;
+  to?: string | null;
   kpis: Record<string, number | null> & { ordersChangePct: number | null; revenueChangePct: number | null };
   ordersTrend: DashPoint[];
   revenueTrend: DashPoint[];
@@ -66,7 +69,7 @@ export type DashSize = 's' | 'm' | 'l' | 'xl';
 export interface DashWidget { id: string; type: string; size: DashSize }
 
 // ── Orders ──
-export type OrderGroup = 'all' | 'awaiting_parcel' | 'production' | 'invoice' | 'payment' | 'warehouse' | 'shipped' | 'issues' | 'cancelled';
+export type OrderGroup = 'all' | 'draft' | 'awaiting_parcel' | 'production' | 'invoice' | 'payment' | 'warehouse' | 'shipped' | 'issues' | 'cancelled';
 export type OrderCounts = Partial<Record<OrderGroup, number>>;
 
 /** The partner an order is made by. */
@@ -93,7 +96,32 @@ export interface AdminOrderRow {
   units_count: number;
 }
 
-export type OrderAssignmentMode = 'auto' | 'manual';
+/** Express stitching: can customers ask for it, and how many days it takes (decided by the admin). */
+export interface ExpressStitchingSetting {
+  enabled: boolean;
+  days: number;
+}
+
+/** The PostEx connection as the admin sees it: the token itself is never returned, only its last 4 characters. */
+export interface PostexSettings {
+  configured: boolean;
+  source: 'settings' | 'env' | null;
+  tokenHint: string | null;
+  baseUrl: string;
+  pickupAddressCode: string;
+  storeAddressCode: string;
+  orderType: string;
+  pollMinutes: number;
+}
+
+export interface ShipToAddress {
+  name: string;
+  address: string;
+  city: string;
+  phone: string;
+}
+
+export type OrderAssignmentMode = 'default' | 'auto' | 'manual';
 
 export interface OrderAssignment {
   mode: OrderAssignmentMode;
@@ -289,6 +317,8 @@ export interface AdminOrderDetail {
   brand_ref?: { id: string; name: string } | null;
   courier_id?: string | null;
   courier?: { id: string; name: string; requires_tracking: boolean } | null;
+  /** Courier name an email gave that is not in the courier list. */
+  courier_name?: string | null;
   international_shipping?: boolean | null;
   status: OrderStatus;
   status_label: string;
@@ -298,6 +328,9 @@ export interface AdminOrderDetail {
   destination_country: string | null;
   destination_city: string | null;
   destination_address: string | null;
+  destination_phone?: string | null;
+  express_stitching?: boolean;
+  express_days?: number | null;
   shipping_service: string | null;
   priority: 'normal' | 'rush';
   due_date: string | null;
@@ -331,6 +364,9 @@ export interface OrderUpdate {
   due_date?: string | null;
   priority?: 'normal' | 'rush';
   has_issue?: boolean;
+  /** Express stitching and the days the admin decided for it (the due date follows). */
+  express_stitching?: boolean;
+  express_days?: number | null;
 }
 
 // ── Customers & users ──
@@ -569,6 +605,13 @@ export interface InvoiceBuilderData {
   suggestedLines: InvoiceLine[] | null;
   priceItems: PriceItem[];
   shippingOptions: ShippingOption[];
+  /** Shipment weight = total of the article weights entered in Receiving. `missing` lists articles that still need one. */
+  weight?: {
+    total_kg: number | null;
+    source: 'articles' | 'order' | 'none';
+    missing: { id: string; title: string; code: string | null }[];
+    articles: { id: string; title: string; code: string | null; weight_kg: number | null }[];
+  };
   currency: string;
   suggestedFxRate: number | null;
 }
@@ -715,8 +758,9 @@ export class AdminService {
     return this.api.get<AdminOverview>('/admin/overview', { period });
   }
 
-  getDashboard(days: number): Observable<DashboardData> {
-    return this.api.get<DashboardData>('/admin/dashboard', { days });
+  /** A preset number of days ending now, or an exact range (both days included). */
+  getDashboard(range: number | { from: string; to: string }): Observable<DashboardData> {
+    return this.api.get<DashboardData>('/admin/dashboard', typeof range === 'number' ? { days: range } : { from: range.from, to: range.to });
   }
 
   getDashboardLayout(): Observable<{ widgets: DashWidget[] | null }> {
@@ -755,6 +799,40 @@ export class AdminService {
   /** Move an order that has not started production to another partner. */
   assignOrderPartner(id: string, partnerId: string): Observable<ApiResult<unknown>> {
     return this.send<unknown>('POST', `/admin/orders/${id}/partner`, { partner_id: partnerId });
+  }
+
+  /** The central address customers ship parcels to (shown in the customer app). */
+  getPostex(): Observable<PostexSettings> {
+    return this.api.get<PostexSettings>('/admin/settings/postex');
+  }
+
+  setPostex(body: Partial<PostexSettings> & { token?: string; clearToken?: boolean }): Observable<ApiResult<PostexSettings>> {
+    return this.send<PostexSettings>('PUT', '/admin/settings/postex', body);
+  }
+
+  /** The pickup / return addresses of the PostEx account and the codes PostEx accepts. */
+  postexAddresses(): Observable<{ addressCode: string; type: string; city: string; address: string; contact: string; phone: string }[]> {
+    return this.api.get('/admin/settings/postex/addresses');
+  }
+
+  testPostex(): Observable<ApiResult<{ ok: boolean }>> {
+    return this.send<{ ok: boolean }>('POST', '/admin/settings/postex/test', {});
+  }
+
+  getExpressStitching(): Observable<ExpressStitchingSetting> {
+    return this.api.get<ExpressStitchingSetting>('/admin/settings/express-stitching');
+  }
+
+  setExpressStitching(value: ExpressStitchingSetting): Observable<ApiResult<ExpressStitchingSetting>> {
+    return this.send<ExpressStitchingSetting>('PUT', '/admin/settings/express-stitching', value);
+  }
+
+  getShipTo(): Observable<ShipToAddress> {
+    return this.api.get<ShipToAddress>('/admin/settings/ship-to');
+  }
+
+  setShipTo(address: ShipToAddress): Observable<ApiResult<ShipToAddress>> {
+    return this.send<ShipToAddress>('PUT', '/admin/settings/ship-to', address);
   }
 
   /** How new orders get their partner: 'auto' (least busy partner) or 'manual' (unassigned until the admin chooses). */

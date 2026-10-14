@@ -270,14 +270,15 @@ export class PartnerQualityCheckPage implements OnInit {
   submitPack(): void {
     const p = this.packing();
     if (!p) return;
-    const w = Number(p.weight);
-    if (!(w > 0 && w < 50)) {
+    // the parcel weighs what its articles weighed in Receiving; a weight is typed only for an older order that has none
+    const typed = p.weight === null || (p.weight as unknown) === '' ? null : Number(p.weight);
+    if (typed !== null && !(typed > 0 && typed < 50)) {
       this.packError.set('Enter the parcel weight in kg (for example 1.2).');
       return;
     }
     this.packError.set(null);
     this.packSaving.set(true);
-    this.partner.packOrder(p.group.orderId, w).subscribe({
+    this.partner.packOrder(p.group.orderId, typed).subscribe({
       next: (res) => {
         this.packSaving.set(false);
         this.packing.set(null);

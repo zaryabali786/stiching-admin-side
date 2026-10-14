@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -8,7 +8,7 @@ import {
   cubeOutline, cashOutline, trendingUpOutline, walletOutline, pricetagOutline, personAddOutline, peopleOutline, checkmarkDoneOutline,
   constructOutline, documentTextOutline, cardOutline, timeOutline, alertCircleOutline, speedometerOutline, earthOutline, analyticsOutline,
   statsChartOutline, barChartOutline, listOutline, pieChartOutline, storefrontOutline, globeOutline, colorFilterOutline, businessOutline,
-  flashOutline, addOutline, closeOutline, reorderTwoOutline, arrowUpOutline, arrowDownOutline, arrowForwardOutline, optionsOutline, refreshOutline, gridOutline,
+  flashOutline, addOutline, closeOutline, calendarOutline, chevronDownOutline, reorderTwoOutline, arrowUpOutline, arrowDownOutline, arrowForwardOutline, optionsOutline, refreshOutline, gridOutline,
 } from 'ionicons/icons';
 import { AdminService, DashSize, DashWidget, DashboardData } from '../../../core/services/admin.service';
 import { apiErrorMessage } from '../../../core/services/api.service';
@@ -18,6 +18,30 @@ import { ChartComponent, compact } from '../../../shared/components/chart.compon
 import { ChartDef, KpiDef, WIDGETS, WIDGET_MAP, WidgetCategory, WidgetDef, defaultLayout, newWidget, SIZE_LABEL } from './dashboard-widgets';
 
 const CACHE_KEY = 'admin-dashboard-layout';
+
+/** Local date as YYYY-MM-DD (what the date inputs and the API use). */
+function iso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function shortDate(value: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const daysBack = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+};
+
+const QUICK_RANGES: { label: string; range: () => { from: string; to: string } }[] = [
+  { label: 'Today', range: () => ({ from: iso(new Date()), to: iso(new Date()) }) },
+  { label: 'Yesterday', range: () => ({ from: iso(daysBack(1)), to: iso(daysBack(1)) }) },
+  { label: 'This week', range: () => { const d = new Date(); const diff = (d.getDay() + 6) % 7; return { from: iso(daysBack(diff)), to: iso(new Date()) }; } },
+  { label: 'This month', range: () => { const d = new Date(); return { from: iso(new Date(d.getFullYear(), d.getMonth(), 1)), to: iso(d) }; } },
+  { label: 'Last month', range: () => { const d = new Date(); return { from: iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), to: iso(new Date(d.getFullYear(), d.getMonth(), 0)) }; } },
+  { label: 'This year', range: () => { const d = new Date(); return { from: iso(new Date(d.getFullYear(), 0, 1)), to: iso(d) }; } },
+];
 const DAYS = [7, 30, 90, 180, 365];
 
 @Component({
@@ -39,6 +63,20 @@ export class AdminOverviewPage implements OnInit {
   readonly todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   readonly days = signal(30);
+  /** An exact date range chosen in the picker (null = one of the preset periods). */
+  readonly custom = signal<{ from: string; to: string } | null>(null);
+  readonly rangeOpen = signal(false);
+  readonly draftFrom = signal('');
+  readonly draftTo = signal('');
+  readonly todayIso = iso(new Date());
+  readonly quick = QUICK_RANGES;
+  readonly draftDays = computed(() => {
+    const f = this.draftFrom();
+    const t = this.draftTo();
+    if (!f || !t || t < f) return 0;
+    return Math.round((Date.parse(t) - Date.parse(f)) / 86_400_000) + 1;
+  });
+  readonly rangeValid = computed(() => this.draftDays() > 0 && this.draftDays() <= 366 && this.draftTo() <= this.todayIso);
   readonly data = signal<DashboardData | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
@@ -57,7 +95,7 @@ export class AdminOverviewPage implements OnInit {
       cubeOutline, cashOutline, trendingUpOutline, walletOutline, pricetagOutline, personAddOutline, peopleOutline, checkmarkDoneOutline,
       constructOutline, documentTextOutline, cardOutline, timeOutline, alertCircleOutline, speedometerOutline, earthOutline, analyticsOutline,
       statsChartOutline, barChartOutline, listOutline, pieChartOutline, storefrontOutline, globeOutline, colorFilterOutline, businessOutline,
-      flashOutline, addOutline, closeOutline, reorderTwoOutline, arrowUpOutline, arrowDownOutline, arrowForwardOutline, optionsOutline, refreshOutline, gridOutline,
+      flashOutline, addOutline, closeOutline, calendarOutline, chevronDownOutline, reorderTwoOutline, arrowUpOutline, arrowDownOutline, arrowForwardOutline, optionsOutline, refreshOutline, gridOutline,
     });
   }
 
@@ -85,7 +123,7 @@ export class AdminOverviewPage implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     this.admin
-      .getDashboard(this.days())
+      .getDashboard(this.custom() ?? this.days())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (d) => {
@@ -100,12 +138,57 @@ export class AdminOverviewPage implements OnInit {
   }
 
   setDays(d: number): void {
-    if (d === this.days()) return;
+    if (d === this.days() && !this.custom()) return;
     this.days.set(d);
+    this.custom.set(null);
+    this.rangeOpen.set(false);
     this.loadData();
   }
 
-  periodText = computed(() => this.periods.find((p) => p.value === this.days())?.label ?? '');
+  toggleRange(): void {
+    if (!this.rangeOpen()) {
+      const c = this.custom();
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 29);
+      this.draftFrom.set(c?.from ?? iso(start));
+      this.draftTo.set(c?.to ?? iso(end));
+    }
+    this.rangeOpen.set(!this.rangeOpen());
+  }
+
+  pickQuick(q: { label: string; range: () => { from: string; to: string } }): void {
+    const r = q.range();
+    this.draftFrom.set(r.from);
+    this.draftTo.set(r.to);
+  }
+
+  applyRange(): void {
+    if (!this.rangeValid()) return;
+    this.custom.set({ from: this.draftFrom(), to: this.draftTo() });
+    this.rangeOpen.set(false);
+    this.loadData();
+  }
+
+  customLabel = computed(() => {
+    const c = this.custom();
+    return c ? `${shortDate(c.from)} – ${shortDate(c.to)}` : 'Custom range';
+  });
+
+  @HostListener('document:click', ['$event'])
+  onDocClick(e: MouseEvent): void {
+    if (this.rangeOpen() && !(e.target as HTMLElement).closest('.range-wrap')) this.rangeOpen.set(false);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEsc(): void {
+    this.rangeOpen.set(false);
+  }
+
+  periodText = computed(() => {
+    const c = this.custom();
+    return c ? `${shortDate(c.from)} to ${shortDate(c.to)}` : this.periods.find((p) => p.value === this.days())?.label ?? '';
+  });
 
   // ───────── widget helpers ─────────
   def(type: string): WidgetDef | undefined {

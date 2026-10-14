@@ -1,5 +1,5 @@
 import { CanDirective } from '../../../shared/can.directive';
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { IonSpinner } from '@ionic/angular';
@@ -17,16 +17,38 @@ import { STAFF_PRESETS } from '../../../shared/components/partner-users-panel/pa
 import { UiService } from '../../../core/services/ui.service';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 
+type TeamRole = TeamMember['role'];
+
+/** The roles a team person can have, with the production stage each one receives. */
+const ROLE_OPTIONS: { value: TeamRole; label: string }[] = [
+  { value: 'master', label: 'Master (cutting)' },
+  { value: 'tailor', label: 'Tailor (stitching)' },
+  { value: 'qa', label: 'Quality check' },
+  { value: 'pressing', label: 'Pressing' },
+  { value: 'packing', label: 'Packing' },
+];
+const ROLE_NAMES: Record<TeamRole, string> = { master: 'Master', tailor: 'Tailor', qa: 'Quality check', pressing: 'Pressing', packing: 'Packing' };
+const DEFAULT_CAPACITY: Record<TeamRole, number> = { master: 8, tailor: 4, qa: 10, pressing: 10, packing: 10 };
+
+/** "Add master": a master only. "Add QA / pressing / packing": those three. From a master's card: a tailor only. */
+const STAGE_ROLES: TeamRole[] = ['qa', 'pressing', 'packing'];
+const ALL_ROLES: TeamRole[] = ['master', 'tailor', 'qa', 'pressing', 'packing'];
+
 interface MemberForm {
   id: string | null;
   name: string;
-  role: 'master' | 'tailor';
+  role: TeamRole;
+  /** The roles this form offers. */
+  roles: TeamRole[];
   daily_capacity: number | null;
   master_id: string | null;
   /** Give this person their own login (email + password + permissions). */
   withLogin: boolean;
+  /** The person already has a login: its email, password and permissions are edited here. */
+  hasLogin: boolean;
   email: string;
   password: string;
+  originalEmail: string;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,6 +85,8 @@ export class PartnerTeamsPage implements OnInit {
   readonly formPerms = signal<string[]>([]);
   readonly access = signal<PartnerAccess | null>(null);
   readonly canCreateLogin = computed(() => this.auth.can('users.create'));
+  /** Create a login, or change an existing one (email, password, permissions). */
+  readonly canManageLogin = computed(() => this.auth.can('users.create') || this.auth.can('users.update'));
   readonly credential = signal<{ name: string; email: string; password: string } | null>(null);
   readonly showPassword = signal(false);
 
@@ -97,8 +121,29 @@ export class PartnerTeamsPage implements OnInit {
     };
   });
 
+  readonly roleOptions = ROLE_OPTIONS;
+  /** The roles the open form offers. */
+  readonly formRoleOptions = computed(() => {
+    const f = this.form();
+    return f ? ROLE_OPTIONS.filter((r) => f.roles.includes(r.value)) : ROLE_OPTIONS;
+  });
+  roleName(role: TeamRole): string {
+    return ROLE_NAMES[role];
+  }
+  /** Quality check, pressing and packing people (masters and tailors have their own team cards). */
+  readonly stageStaff = computed(() => (this.data()?.members ?? []).filter((m) => m.role !== 'master' && m.role !== 'tailor'));
+
+  constructor() {
+    // The login fields need the permissions this person may hand out. They load as soon as the signed-in person / the chosen
+    // partner is known (not only once when the page opens, which missed the case of the partner still loading).
+    effect(() => {
+      this.activePartner.partnerId();
+      this.canManageLogin();
+      untracked(() => this.loadAccess());
+    });
+  }
+
   ngOnInit(): void {
-    this.loadAccess();
     this.reload$
       .pipe(
         startWith(undefined),
@@ -120,7 +165,7 @@ export class PartnerTeamsPage implements OnInit {
 
   /** What may be handed out to a new login: the caller's own modules, or (admin with a partner selected) the partner's. */
   private loadAccess(): void {
-    if (!this.canCreateLogin()) return;
+    if (!this.canManageLogin()) return;
     const partnerId = this.activePartner.partnerId();
     if (this.auth.isAdmin()) {
       if (!partnerId) return;
@@ -191,29 +236,34 @@ export class PartnerTeamsPage implements OnInit {
 
   // ───────────── Add / edit ─────────────
 
-  openAdd(role: 'master' | 'tailor', masterId: string | null = null): void {
+  /** `masterId` given = added from a master's card: a tailor under that master. Otherwise the roles of the other stages. */
+  openAdd(role: TeamRole, masterId: string | null = null): void {
     this.formTouched.set(false);
+    if (!this.access()) this.loadAccess();
     this.form.set({
       id: null,
       name: '',
       role,
-      daily_capacity: role === 'master' ? 8 : 4,
+      roles: role === 'tailor' ? ['tailor'] : role === 'master' ? ['master'] : STAGE_ROLES,
+      daily_capacity: DEFAULT_CAPACITY[role],
       master_id: role === 'tailor' ? masterId ?? this.suggestedId() ?? this.activeMasters()[0]?.id ?? null : null,
-      withLogin: this.canCreateLogin() && !!this.access(),
+      withLogin: this.canCreateLogin(),
+      hasLogin: false,
       email: '',
       password: '',
+      originalEmail: '',
     });
     this.presetFor(role);
   }
 
   /** Master / tailor start from their usual modules (only those the partner has); the partner can tick or untick any. */
-  private presetFor(role: 'master' | 'tailor'): void {
+  private presetFor(role: TeamRole): void {
     const have = new Set(this.access()?.delegable ?? []);
     this.formPerms.set(STAFF_PRESETS[role].filter((p) => have.has(p)));
   }
 
-  setRole(role: 'master' | 'tailor'): void {
-    this.patchForm({ role });
+  setRole(role: TeamRole): void {
+    this.patchForm({ role, daily_capacity: DEFAULT_CAPACITY[role] });
     if (!this.form()?.id) this.presetFor(role);
   }
 
@@ -226,8 +276,10 @@ export class PartnerTeamsPage implements OnInit {
 
   openEdit(m: TeamMember): void {
     this.formTouched.set(false);
-    this.form.set({ id: m.id, name: m.name, role: m.role, daily_capacity: m.daily_capacity, master_id: m.master_id, withLogin: false, email: '', password: '' });
-    this.formPerms.set([]);
+    if (!this.access()) this.loadAccess();
+    this.form.set({ id: m.id, name: m.name, role: m.role, roles: ALL_ROLES, daily_capacity: m.daily_capacity, master_id: m.master_id, withLogin: false, hasLogin: !!m.login, email: m.login?.email ?? '', password: '', originalEmail: m.login?.email ?? '' });
+    // the permissions the login has now, ticked: change them and save
+    this.formPerms.set(m.login?.permissions ?? []);
   }
 
   patchForm(patch: Partial<MemberForm>): void {
@@ -243,6 +295,10 @@ export class PartnerTeamsPage implements OnInit {
     const cap = Number(f.daily_capacity);
     if (!(cap >= 1 && cap <= 100)) return 'Daily capacity must be between 1 and 100 articles.';
     if (f.role === 'tailor' && !f.master_id) return 'Choose which master this tailor works under.';
+    if (f.hasLogin) {
+      if (!EMAIL.test(f.email.trim())) return 'Enter a valid email: they sign in with it.';
+      if (f.password && f.password.length < 8) return 'The new password needs at least 8 characters, or leave it empty to keep the current one.';
+    }
     if (f.withLogin) {
       if (!EMAIL.test(f.email.trim())) return 'Enter a valid email: they sign in with it.';
       if (f.password && f.password.length < 8) return 'The password needs at least 8 characters, or leave it empty to generate one.';
@@ -263,6 +319,10 @@ export class PartnerTeamsPage implements OnInit {
       master_id: f.role === 'tailor' ? f.master_id : null,
     };
     const login = f.withLogin ? { email: f.email.trim(), password: f.password || undefined, permissions: this.formPerms() } : undefined;
+    // an existing login: send only what changed (email, a new password) and the permissions as ticked
+    const loginChanges = f.hasLogin
+      ? { email: f.email.trim() !== f.originalEmail ? f.email.trim() : undefined, password: f.password || undefined, permissions: this.formPerms() }
+      : undefined;
     this.saving.set(true);
     const shown = (c: TeamLoginCredential | undefined) => {
       if (c) this.credential.set({ name: body.name, email: c.email, password: c.temporaryPassword });
@@ -278,7 +338,7 @@ export class PartnerTeamsPage implements OnInit {
         map((r) => { shown(r.data.credential); return r.message; })
       );
     } else {
-      req = this.partner.updateMember(f.id, body).pipe(map((m) => `${m.name} updated.`));
+      req = this.partner.updateMember(f.id, loginChanges ? { ...body, login: loginChanges } : body).pipe(map((m) => `${m.name} updated.`));
     }
     req.subscribe({
       next: (msg) => {

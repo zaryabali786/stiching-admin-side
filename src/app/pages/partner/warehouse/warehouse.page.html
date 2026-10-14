@@ -3,7 +3,7 @@
     <div>
       <span class="eyebrow">Packed parcels</span>
       <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Warehouse', 'گودام') }}</h1>
-      <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Packed parcels wait here until admin issues the invoice and the customer pays. Then choose how each parcel leaves.', 'پیک شدہ پارسل یہاں انوائس اور ادائیگی تک رہتے ہیں۔ پھر روانگی کا راستہ چنیں۔') }}</p>
+      <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Packed parcels wait here until admin issues the invoice and the customer pays. Then book the courier, download the loadsheet and confirm the handover.', 'پیک شدہ پارسل یہاں انوائس اور ادائیگی تک رہتے ہیں۔ پھر روانگی کا راستہ چنیں۔') }}</p>
     </div>
   </header>
 
@@ -34,11 +34,44 @@
           @switch (tab()) {
             @case ('to_invoice') { <app-empty-state title="No parcels waiting for an invoice" message="Packed orders appear here until admin issues the invoice." /> }
             @case ('awaiting_payment') { <app-empty-state title="No parcels awaiting payment" message="Invoiced orders wait here until the customer pays." /> }
-            @case ('paid') { <app-empty-state title="No paid parcels to route" message="Once a customer pays, choose how the parcel leaves the warehouse." /> }
+            @case ('paid') { <app-empty-state title="No paid parcels to book" message="Once a customer pays, book the courier for the parcel here." /> }
+            @case ('ready_dispatch') { <app-empty-state title="Nothing is ready for dispatch" message="Parcels with a booked CN wait here for their loadsheet." /> }
+            @case ('delivered') { <app-empty-state title="No delivered parcels yet" /> }
+            @case ('failed_delivery') { <app-empty-state title="No failed deliveries" message="Parcels the courier confirms are coming back to you appear here." /> }
             @default { <app-empty-state title="Nothing dispatched yet" /> }
           }
         }
       } @else {
+        @if (tab() === 'ready_dispatch') {
+          <div class="sheet-bar" role="region" aria-label="Loadsheet">
+            <div class="sheet-text">
+              <b>Loadsheet</b>
+              <span class="muted small">Tick the parcels you are handing to one courier and download the loadsheet. They are Dispatched only after you confirm the courier took them.</span>
+            </div>
+            <div class="sheet-actions">
+              @for (c of readyCouriers(); track c) { <button type="button" class="btn btn-ghost btn-xs" (click)="pickAllOf(c)">All {{ c }}</button> }
+              @if (picked().size) { <button type="button" class="btn btn-ghost btn-xs" (click)="clearPicked()">Clear</button> }
+              <button type="button" class="btn" [disabled]="!picked().size || printing()" (click)="printCn([...picked()])">
+                @if (printing()) { <ion-spinner name="crescent" /> } Print CN@if (picked().size) { ({{ picked().size }}) }
+              </button>
+              @if (canEdit()) {
+                <button type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy()" (click)="downloadLoadsheet()">
+                  @if (sheetBusy()) { <ion-spinner name="crescent" /> } Download Loadsheet@if (picked().size) { ({{ picked().size }}) }
+                </button>
+              }
+            </div>
+          </div>
+          @if (canEdit()) {
+            @for (h of awaitingHandover(); track h.id) {
+              <div class="handover-bar" role="status">
+                <span><b>{{ h.count }} parcel{{ h.count === 1 ? '' : 's' }}</b> on a downloaded loadsheet are waiting for the courier.</span>
+                <button type="button" class="btn btn-green" [disabled]="handoverBusy()" (click)="confirmHandover(h.id)">
+                  @if (handoverBusy()) { <ion-spinner name="crescent" /> } Confirm handed over to courier
+                </button>
+              </div>
+            }
+          }
+        }
         <div class="table-scroll">
           <table class="data-table">
             <thead>
@@ -51,7 +84,7 @@
                 <th class="num">Amount</th>
                 <th>Status</th>
                 @if (tab() === 'paid') { <th class="num"><span class="sr-only">Route</span></th> }
-                @if (tab() === 'dispatched') { <th class="num"><span class="sr-only">Action</span></th> }
+                @if (tab() === 'ready_dispatch' || tab() === 'dispatched' || tab() === 'failed_delivery') { <th class="num"><span class="sr-only">Action</span></th> }
               </tr>
             </thead>
             <tbody>
@@ -59,8 +92,15 @@
                 <tr [class.clickable]="tab() === 'paid' && canEdit()" [class.selected]="o.id === selectedId()" (click)="onRowClick(o)"
                   [attr.tabindex]="tab() === 'paid' && canEdit() ? 0 : null" (keydown.enter)="onRowClick(o)" [attr.aria-selected]="tab() === 'paid' && canEdit() ? o.id === selectedId() : null">
                   <td>
-                    <span class="cell-main">{{ o.reference }}</span>
-                    <span class="cell-sub">{{ o.units_count }} unit{{ o.units_count === 1 ? '' : 's' }}@if (o.brand) { · {{ o.brand }} }</span>
+                    @if (tab() === 'ready_dispatch' && o.shipment; as pick) {
+                      <input type="checkbox" class="pick" [checked]="isPicked(pick.id)" [disabled]="!canEdit() || (!canPick(pick) && !isPicked(pick.id))" (change)="togglePick(pick.id)" (click)="$event.stopPropagation()" [attr.aria-label]="'Select ' + o.reference + ' for the loadsheet'" />
+                    }
+                    <span class="cell-main">{{ o.reference }}@if (o.order_kind === 'return') { <span class="return-tag">Return</span> }</span>
+                    @if (o.order_kind === 'return') {
+                      <span class="cell-sub">Return of {{ o.return_unit?.unit_title || 'an article' }}@if (o.return_destination === 'admin') { · to the admin warehouse }</span>
+                    } @else {
+                      <span class="cell-sub">{{ o.units_count }} unit{{ o.units_count === 1 ? '' : 's' }}@if (o.brand) { · {{ o.brand }} }</span>
+                    }
                   </td>
                   <td>
                     <span class="cell-main">{{ o.customer_name || '—' }}</span>
@@ -69,6 +109,8 @@
                   <td>
                     {{ destination(o) }}
                     @if (o.shipping_service) { <span class="cell-sub">{{ o.shipping_service | humanize }}</span> }
+                    @if (o.destination_address) { <span class="cell-sub">{{ o.destination_address }}</span> }
+                    @if (o.destination_phone) { <span class="cell-sub">{{ o.destination_phone }}</span> }
                   </td>
                   <td class="weight-cell" (click)="$event.stopPropagation()">
                     @if (weightEdit()?.id === o.id) {
@@ -104,7 +146,18 @@
                     <app-status-badge [status]="o.status" [label]="o.status_label" />
                     @if (o.transfer; as tr) { <span class="cell-sub">{{ tr.code }} · {{ tr.status | humanize }}</span> }
                     @if (o.shipment; as sh) {
-                      @if (sh.tracking_number) { <span class="cell-sub">{{ sh.courier }} · {{ sh.tracking_number }}</span> }
+                      @if (sh.tracking_number) { <span class="cell-sub"><b>{{ sh.courier }}</b> · CN <b class="mono">{{ sh.tracking_number }}</b></span> }
+                      @if (sh.status !== 'needs_label') { <span class="ship-chip" [attr.data-s]="sh.status">{{ shipLabel(sh) }}</span> }
+                      @if (sh.booked_at && (tab() === 'ready_dispatch')) { <span class="cell-sub">Booked {{ sh.booked_at | day }}@if (sh.booking_source === 'api') { · through the {{ sh.courier }} API } @else { · CN entered by hand }</span> }
+                      @if (sh.handed_at && tab() === 'dispatched') { <span class="cell-sub">Dispatched {{ sh.handed_at | day }}</span> }
+                      @if (sh.delivered_at) { <span class="cell-sub">Delivered {{ sh.delivered_at | day }}@if (sh.proof?.receiver) { · received by {{ sh.proof!.receiver }} }</span> }
+                      @if (sh.failure_reason && (tab() === 'dispatched' || tab() === 'failed_delivery')) { <span class="cell-sub warn">Reason: {{ sh.failure_reason }}</span> }
+                      @if (sh.return_started_at && tab() === 'failed_delivery') { <span class="cell-sub">Return started {{ sh.return_started_at | day }}@if (sh.returned_at) { · received back {{ sh.returned_at | day }} }</span> }
+                      @if (sh.events?.length && (tab() === 'dispatched' || tab() === 'failed_delivery' || tab() === 'delivered')) {
+                        <ul class="ship-events">
+                          @for (ev of sh.events!; track $index) { <li><b>{{ ev.status === 'handed_to_courier' ? 'Handed over' : (ev.status | humanize) }}</b> <span class="muted">{{ ev.occurred_at | day }} · {{ ev.source === 'webhook' ? 'courier' : ev.source === 'manual' ? 'staff' : 'system' }}@if (ev.note) { · {{ ev.note }} }</span></li> }
+                        </ul>
+                      }
                     }
                   </td>
                   @if (tab() === 'paid') {
@@ -118,11 +171,37 @@
                       }
                     </td>
                   }
+                  @if (tab() === 'ready_dispatch') {
+                    <td class="num" (click)="$event.stopPropagation()">
+                      @if (o.shipment?.tracking_number) { <button type="button" class="btn btn-xs" [disabled]="printing()" (click)="printCn([o.shipment!.id])" [attr.aria-label]="'Print CN of ' + o.reference">Print CN</button> }
+                      @if (o.shipment?.status === 'booked' && canEdit()) {
+                        <button type="button" class="btn btn-ghost btn-xs" [disabled]="isBusy('cb:' + o.id)" (click)="cancelBooking(o)">Cancel booking</button>
+                      }
+                    </td>
+                  }
                   @if (tab() === 'dispatched') {
                     <td class="num" (click)="$event.stopPropagation()">
-                      @if (o.status === 'partner_dispatch' && canEdit()) {
-                        <button type="button" class="btn btn-primary btn-floor" (click)="openShip(o)" [attr.aria-label]="'Mark ' + o.reference + ' shipped'">
-                          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Mark shipped', 'روانہ کریں') }}</span>
+                      @if (o.shipment && o.partner_route === 'direct_dispatch' && canEdit()) {
+                        <div class="track-actions">
+                          <button type="button" class="btn btn-xs" [disabled]="printing()" (click)="printCn([o.shipment!.id])">Print CN</button>
+                          @if (isPostex(o)) {
+                            <button type="button" class="btn btn-xs" [disabled]="isBusy('rt:' + o.id)" (click)="refreshTracking(o)">
+                              @if (isBusy('rt:' + o.id)) { <ion-spinner name="crescent" /> } Refresh PostEx tracking
+                            </button>
+                          }
+                          <button type="button" class="btn btn-xs" (click)="openTrack(o, 'in_transit')">In transit</button>
+                          <button type="button" class="btn btn-xs btn-primary" (click)="openTrack(o, 'delivered')">Delivered</button>
+                          <button type="button" class="btn btn-xs" (click)="openTrack(o, 'failed_delivery')">Attempt failed</button>
+                          <button type="button" class="btn btn-xs" (click)="openTrack(o, 'returning_to_partner')">Courier is returning it</button>
+                        </div>
+                      }
+                    </td>
+                  }
+                  @if (tab() === 'failed_delivery') {
+                    <td class="num" (click)="$event.stopPropagation()">
+                      @if (o.shipment?.status === 'returning_to_partner' && canEdit()) {
+                        <button type="button" class="btn btn-primary btn-xs" [disabled]="isBusy('rb:' + o.id)" (click)="receivedBack(o)">
+                          @if (isBusy('rb:' + o.id)) { <ion-spinner name="crescent" /> } Received back
                         </button>
                       }
                     </td>
@@ -163,14 +242,14 @@
           <span class="radio"></span>
           <span class="route-text">
             <strong [class.urdu]="lang.isUrdu()">{{ lang.t('Dispatch directly to customer', 'براہ راست گاہک کو بھیجیں') }}</strong>
-            <span class="muted small">Book the courier here and hand it over. Enter the tracking number afterwards in “Dispatched”.</span>
+            <span class="muted small">Book the courier and enter its CN. The parcel then waits in “Ready for dispatch” for its loadsheet.</span>
           </span>
         </button>
         </div>
 
         <button type="button" class="btn btn-primary btn-block btn-floor" [disabled]="isBusy('r:' + o.id)" (click)="confirmRoute()">
           @if (isBusy('r:' + o.id)) { <ion-spinner name="crescent" /> }
-          <span [class.urdu]="lang.isUrdu()">{{ lang.t('Confirm route', 'راستہ کی تصدیق کریں') }}</span>
+          <span [class.urdu]="lang.isUrdu()">{{ routeChoice() === 'direct_dispatch' ? lang.t('Book courier', 'کوریئر بک کریں') : lang.t('Confirm route', 'راستہ کی تصدیق کریں') }}</span>
         </button>
         <p class="muted tiny center">The customer and admin see the update immediately.</p>
       </aside>
@@ -232,28 +311,93 @@
       <div class="modal-head">
         <div>
           <span class="eyebrow">{{ f.order.reference }} · {{ f.order.customer_code }}</span>
-          <h3 id="ship-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Mark shipped', 'روانہ کریں') }}</h3>
+          <h3 id="ship-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Book courier', 'کوریئر بک کریں') }}</h3>
         </div>
         <button type="button" class="close-btn" (click)="closeShip()" aria-label="Close">×</button>
       </div>
       <div class="modal-body">
-        <p class="muted small">Ships to {{ destination(f.order) }}. The customer gets the tracking number by notification.</p>
+        <p class="muted small">Ships to {{ destination(f.order) }}. Book the parcel with the courier (their app, branch or portal) and enter the CN they give you. This system does not place the booking with the courier for you.</p>
+        @if (f.order.destination_address || f.order.destination_phone) {
+          <p class="deliver-box">
+            @if (f.order.destination_address) { <span><b>Deliver to:</b> {{ f.order.destination_address }}</span> }
+            @if (f.order.destination_phone) { <span><b>Phone:</b> {{ f.order.destination_phone }}</span> }
+          </p>
+        }
         <div class="form-grid">
           <div class="field">
             <span class="label" id="ship-courier-label">Courier *</span>
             <app-courier-select [selected]="f.courier" (selectedChange)="patchShip({ courier: $event })" label="Courier" />
           </div>
-          <div class="field">
-            <label for="ship-track">Tracking number *</label>
-            <input id="ship-track" class="input" [ngModel]="f.tracking" (ngModelChange)="patchShip({ tracking: $event })" (keydown.enter)="submitShip()" />
-          </div>
+          @if (apiBookable(f) && !f.manual) {
+            <div class="field api-note">
+              <span class="label">Booking</span>
+              <p class="muted small"><b>{{ f.courier?.name }}</b> is booked through its API from here: the customer, phone, address and items are sent and the CN comes back from {{ f.courier?.name }}. Nothing is saved unless {{ f.courier?.name }} confirms the booking.</p>
+              <button type="button" class="link-btn" (click)="patchShip({ manual: true })">I booked it myself, enter the CN instead</button>
+            </div>
+          } @else {
+            <div class="field">
+              <label for="ship-track">CN number *</label>
+              <input id="ship-track" class="input" [ngModel]="f.tracking" (ngModelChange)="patchShip({ tracking: $event })" (keydown.enter)="submitShip()" />
+              @if (apiBookable(f) && f.manual) { <button type="button" class="link-btn" (click)="patchShip({ manual: false })">Book through {{ f.courier?.name }} instead</button> }
+              @if (apiMissing(f); as miss) { <span class="hint">{{ miss.message }}</span> }
+            </div>
+          }
         </div>
       </div>
       <div class="modal-foot">
         <button type="button" class="btn" (click)="closeShip()" [disabled]="shipSaving()">Cancel</button>
-        <button type="button" class="btn btn-primary" (click)="submitShip()" [disabled]="shipSaving() || !f.courier || !f.tracking.trim()">
+        <button type="button" class="btn btn-primary" (click)="submitShip()" [disabled]="shipSaving() || !f.courier || (!(apiBookable(f) && !f.manual) && !f.tracking.trim())">
           @if (shipSaving()) { <ion-spinner name="crescent" /> }
-          Mark shipped
+          {{ apiBookable(f) && !f.manual ? 'Book with ' + f.courier?.name : 'Save CN' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- A person enters what the courier's own tracking shows -->
+@if (track(); as f) {
+  <div class="modal-backdrop" (click)="track.set(null)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="wt-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ f.order.reference }} · {{ f.order.shipment?.courier }} · CN {{ f.order.shipment?.tracking_number }}</span>
+          <h3 id="wt-title">
+            @switch (f.status) {
+              @case ('in_transit') { Mark in transit }
+              @case ('delivered') { Courier delivered it }
+              @case ('failed_delivery') { Delivery attempt failed }
+              @default { Courier is returning it to us }
+            }
+          </h3>
+        </div>
+        <button type="button" class="close-btn" (click)="track.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        @if (f.status === 'failed_delivery' || f.status === 'returning_to_partner') {
+          <div class="field">
+            <label for="wt-reason">Reason <span class="muted">(from the courier's tracking)</span></label>
+            <input id="wt-reason" class="input" maxlength="200" placeholder="e.g. Customer not available" [ngModel]="f.reason" (ngModelChange)="track.set({ order: f.order, status: f.status, note: f.note, reason: $event })" />
+          </div>
+        }
+        <div class="field">
+          <label for="wt-note">Note <span class="muted">(optional)</span></label>
+          <input id="wt-note" class="input" maxlength="200" [ngModel]="f.note" (ngModelChange)="track.set({ order: f.order, status: f.status, note: $event, reason: f.reason })" />
+        </div>
+        <p class="muted small">
+          @switch (f.status) {
+            @case ('delivered') { Confirm only when the courier's tracking shows the parcel was <b>delivered to the customer</b>. The order then becomes Delivered and the customer is told. }
+            @case ('failed_delivery') { A failed attempt does <b>not</b> send the parcel back: it stays in Dispatched while the courier tries again. }
+            @case ('returning_to_partner') { Use this only when the courier <b>confirms the parcel is being returned to you</b>. It then moves to “Failed delivery” until you confirm it is back. }
+            @default { Enter this when the courier's tracking shows the parcel is on its way. }
+          }
+          If the courier sends tracking to us automatically you do not need to do this.
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="track.set(null)" [disabled]="trackSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="confirmTrack()" [disabled]="trackSaving()">
+          @if (trackSaving()) { <ion-spinner name="crescent" /> } Confirm
         </button>
       </div>
     </div>

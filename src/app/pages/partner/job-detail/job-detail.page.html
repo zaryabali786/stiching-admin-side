@@ -309,7 +309,7 @@
             @if (c.order?.customer_notes; as orderNotes) { <p class="note-text order-note"><span class="muted">Order note:</span> {{ orderNotes }}</p> }
           }
 
-          @if (c.unit?.product_link; as productLink) {
+          @if (c.order?.import_source !== 'email' && c.unit?.product_link; as productLink) {
             <a class="product-link no-print" [href]="productLink" target="_blank" rel="noopener noreferrer">
               View product page ↗
             </a>

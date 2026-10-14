@@ -762,10 +762,12 @@
 
     .actions {
       width: 100%;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
-    .scan-btn { flex: 1; min-height: 48px; }
+    .seg { order: 3; width: 100%; button { flex: 1; } }
+    .scan-btn { flex: 1 1 40%; min-height: 48px; justify-content: center; }
   }
 
   .board-toolbar app-search-input { max-width: none; }
@@ -806,3 +808,11 @@
     max-height: calc(100dvh - 240px);
   }
 }
+
+
+/* Board / By order switch */
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--c-neutral-soft); gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; color: var(--c-muted); cursor: pointer; }
+.seg button.on { background: var(--c-surface); color: var(--c-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+
+.scan-modal form { margin-top: 12px; }

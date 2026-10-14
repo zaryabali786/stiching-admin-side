@@ -33,7 +33,7 @@
                   <span class="cell-main">{{ u.full_name || '—' }}</span>
                   @if (u.is_owner) { <span class="badge gold tag">Owner</span> }
                   @if (u.is_me) { <span class="badge blue tag">You</span> }
-                  @if (!u.is_owner && u.staff_type && u.staff_type !== 'staff') { <span class="badge tag">{{ u.staff_type === 'master' ? 'Master' : 'Tailor' }}</span> }
+                  @if (!u.is_owner && u.staff_type && u.staff_type !== 'staff') { <span class="badge tag">{{ staffTypeLabel(u.staff_type) }}</span> }
                   @if (u.job_title) { <span class="cell-sub">{{ u.job_title }}</span> }
                 </td>
                 <td class="c-email">{{ u.email }}</td>

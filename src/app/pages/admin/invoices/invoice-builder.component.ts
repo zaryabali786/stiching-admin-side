@@ -91,6 +91,9 @@ export class InvoiceBuilderComponent {
   readonly invoice = computed(() => this.data()?.invoice ?? null);
   readonly order = computed(() => this.data()?.order ?? null);
   readonly status = computed(() => this.invoice()?.status ?? 'new');
+  /** Articles with no weight yet: the invoice cannot be made until they are weighed in Receiving. */
+  readonly missingWeights = computed(() => this.data()?.weight?.missing ?? []);
+
   readonly canEdit = computed(() => {
     const d = this.data();
     if (!d) return false;

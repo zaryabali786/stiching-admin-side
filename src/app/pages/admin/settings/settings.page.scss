@@ -55,3 +55,20 @@ tr.inactive .cell-main { color: var(--c-muted); }
   &.active { border-color: var(--c-green); box-shadow: var(--focus-ring); }
 }
 .notice { padding: 10px 14px; border-radius: 10px; background: #fff7e0; border: 1px solid #f0d58a; }
+
+.address-card {
+  max-width: 560px;
+
+  .hint {
+    margin: 0 0 14px;
+  }
+}
+
+.px-state { margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; background: #fdeede; color: #9a4a06; &.on { background: #e3f6ea; color: #17703d; } }
+.px-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; @media (max-width: 640px) { grid-template-columns: 1fr; } }
+.px-test { margin: 8px 0; padding: 10px 14px; border-radius: 12px; background: #fdeede; color: #9a4a06; &.ok { background: #e3f6ea; color: #17703d; } }
+.px-actions { gap: 8px; flex-wrap: wrap; }
+
+.px-addresses { margin: 4px 0 14px; .px-addr-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; } }
+.px-addr-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.px-addr { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 1.5px solid var(--c-line); border-radius: 12px; background: var(--c-surface); font: inherit; text-align: left; cursor: pointer; color: inherit; small { color: var(--c-muted); font-size: 12px; line-height: 1.35; } &.on { border-color: var(--c-green); background: var(--c-green-soft); } }

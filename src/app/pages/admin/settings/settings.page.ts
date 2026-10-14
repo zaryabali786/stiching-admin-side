@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { distinctUntilChanged, filter, map } from 'rxjs';
-import { AdminService, AdminUser, OrderAssignment, OrderAssignmentMode, UserRoleFilter } from '../../../core/services/admin.service';
+import { AdminService, AdminUser, ExpressStitchingSetting, PostexSettings, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { UiService } from '../../../core/services/ui.service';
 import { Role } from '../../../core/models/api.models';
@@ -13,9 +13,9 @@ import { PaginationComponent } from '../../../shared/components/pagination.compo
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 
-type SettingsTab = 'team' | 'orders' | 'account';
+type SettingsTab = 'team' | 'address' | 'express' | 'postex' | 'account';
 type TeamRole = UserRoleFilter;
-const TABS: readonly SettingsTab[] = ['team', 'orders', 'account'];
+const TABS: readonly SettingsTab[] = ['team', 'address', 'express', 'postex', 'account'];
 const TEAM_ROLES: readonly TeamRole[] = ['staff', 'admin', 'partner_staff', 'customer'];
 
 interface SettingsQuery {
@@ -59,10 +59,136 @@ export class AdminSettingsPage implements OnInit {
   readonly list = new PagedList<AdminUser>();
   readonly busyId = signal<string | null>(null);
 
+  // ── Ship-to address: where customers send parcels ──
+  readonly shipTo = signal<ShipToAddress>({ name: '', address: '', city: '', phone: '' });
+  private readonly shipToSaved = signal<ShipToAddress>({ name: '', address: '', city: '', phone: '' });
+  readonly shipToLoaded = signal(false);
+  readonly savingShipTo = signal(false);
+  readonly shipToDirty = computed(() => JSON.stringify(this.shipTo()) !== JSON.stringify(this.shipToSaved()));
+  readonly shipToValid = computed(() => !!this.shipTo().address.trim() && !!this.shipTo().city.trim());
+
+  // ── PostEx courier connection: the token is entered here and stays on the server (only its last 4 characters come back) ──
+  readonly postex = signal<PostexSettings | null>(null);
+  /** The form: the token field is empty unless the admin types a new one. */
+  readonly pxForm = signal({ token: '', baseUrl: '', pickupAddressCode: '', storeAddressCode: '', orderType: 'Normal', pollMinutes: 15 });
+  readonly showToken = signal(false);
+  readonly savingPostex = signal(false);
+  readonly testingPostex = signal(false);
+  readonly postexTest = signal<{ ok: boolean; message: string } | null>(null);
+  /** The addresses of the PostEx account, loaded on request: the codes PostEx really accepts. */
+  readonly pxAddresses = signal<{ addressCode: string; type: string; city: string; address: string; contact: string; phone: string }[] | null>(null);
+  readonly loadingPxAddresses = signal(false);
+
+  loadPostexAddresses(): void {
+    if (this.loadingPxAddresses()) return;
+    this.loadingPxAddresses.set(true);
+    this.admin.postexAddresses().subscribe({
+      next: (list) => {
+        this.loadingPxAddresses.set(false);
+        this.pxAddresses.set(list);
+      },
+      error: (err) => {
+        this.loadingPxAddresses.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
+  setPx(patch: Partial<{ token: string; baseUrl: string; pickupAddressCode: string; storeAddressCode: string; orderType: string; pollMinutes: number }>): void {
+    this.pxForm.update((f) => ({ ...f, ...patch }));
+  }
+
+  private fillPostex(p: PostexSettings): void {
+    this.postex.set(p);
+    this.pxForm.set({ token: '', baseUrl: p.baseUrl, pickupAddressCode: p.pickupAddressCode, storeAddressCode: p.storeAddressCode, orderType: p.orderType, pollMinutes: p.pollMinutes });
+  }
+
+  savePostex(clearToken = false): void {
+    if (this.savingPostex()) return;
+    const f = this.pxForm();
+    this.savingPostex.set(true);
+    this.postexTest.set(null);
+    this.admin.setPostex({ token: f.token.trim() || undefined, clearToken: clearToken || undefined, baseUrl: f.baseUrl.trim(), pickupAddressCode: f.pickupAddressCode.trim(), storeAddressCode: f.storeAddressCode.trim(), orderType: f.orderType.trim(), pollMinutes: Number(f.pollMinutes) }).subscribe({
+      next: (res) => {
+        this.savingPostex.set(false);
+        this.fillPostex(res.data);
+        this.showToken.set(false);
+        this.ui.success(res.message || 'PostEx saved.');
+      },
+      error: (err) => {
+        this.savingPostex.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
+  testPostexConnection(): void {
+    if (this.testingPostex()) return;
+    this.testingPostex.set(true);
+    this.postexTest.set(null);
+    this.admin.testPostex().subscribe({
+      next: (res) => {
+        this.testingPostex.set(false);
+        this.postexTest.set({ ok: true, message: res.message || 'PostEx answered. The token works.' });
+      },
+      error: (err) => {
+        this.testingPostex.set(false);
+        this.postexTest.set({ ok: false, message: err?.error?.message || err?.message || 'PostEx did not accept the connection.' });
+      },
+    });
+  }
+
+  // ── Express stitching: the days are decided here and shown to customers when they create an order ──
+  readonly express = signal<ExpressStitchingSetting>({ enabled: true, days: 5 });
+  private readonly expressSaved = signal<ExpressStitchingSetting>({ enabled: true, days: 5 });
+  readonly expressLoaded = signal(false);
+  readonly savingExpress = signal(false);
+  readonly expressDirty = computed(() => JSON.stringify(this.express()) !== JSON.stringify(this.expressSaved()));
+  readonly expressValid = computed(() => Number.isInteger(this.express().days) && this.express().days >= 1 && this.express().days <= 90);
+
+  setExpress(patch: Partial<ExpressStitchingSetting>): void {
+    this.express.update((e) => ({ ...e, ...patch }));
+  }
+
+  saveExpress(): void {
+    if (!this.expressValid() || this.savingExpress()) return;
+    this.savingExpress.set(true);
+    this.admin.setExpressStitching(this.express()).subscribe({
+      next: (res) => {
+        this.savingExpress.set(false);
+        this.express.set(res.data);
+        this.expressSaved.set(res.data);
+        this.ui.success(res.message || 'Express stitching saved.');
+      },
+      error: (err) => {
+        this.savingExpress.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
+  setShipToField(key: keyof ShipToAddress, value: string): void {
+    this.shipTo.update((a) => ({ ...a, [key]: value }));
+  }
+
+  saveShipTo(): void {
+    if (!this.shipToValid() || this.savingShipTo()) return;
+    this.savingShipTo.set(true);
+    this.admin.setShipTo(this.shipTo()).subscribe({
+      next: (res) => {
+        this.savingShipTo.set(false);
+        this.shipTo.set(res.data);
+        this.shipToSaved.set(res.data);
+        this.ui.success(res.message || 'Address saved.');
+      },
+      error: (err) => {
+        this.savingShipTo.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
   // ── Orders: who receives a new order ──
-  readonly assignment = signal<OrderAssignment | null>(null);
-  readonly assignmentError = signal<string | null>(null);
-  readonly assignmentSaving = signal(false);
   readonly me = computed(() => this.auth.user()?.id ?? null);
 
   // Account
@@ -86,7 +212,6 @@ export class AdminSettingsPage implements OnInit {
   readonly pwValid = computed(() => !!this.currentPw() && this.newPw().length >= 8 && this.newPw() === this.confirmPw());
 
   ngOnInit(): void {
-    this.loadAssignment();
     const q$ = this.route.queryParamMap.pipe(
       map((p): SettingsQuery => ({
         tab: oneOf(p.get('tab'), TABS, 'team'),
@@ -99,38 +224,37 @@ export class AdminSettingsPage implements OnInit {
     q$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((q) => this.query.set(q));
 
     this.list.connect(
-      q$.pipe(filter((q) => q.tab !== 'account')),
+      q$.pipe(filter((q) => q.tab === 'team')),
       (q) => this.admin.listUsers({ role: q.role, search: q.search, page: q.page, limit: 15 }),
       this.destroyRef
     );
 
+    this.admin.getPostex().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (p) => this.fillPostex(p),
+      error: () => undefined,
+    });
+
+    this.admin.getExpressStitching().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (e) => {
+        this.express.set(e);
+        this.expressSaved.set(e);
+        this.expressLoaded.set(true);
+      },
+      error: (err) => this.ui.error(err),
+    });
+
+    this.admin.getShipTo().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (a) => {
+        this.shipTo.set(a);
+        this.shipToSaved.set(a);
+        this.shipToLoaded.set(true);
+      },
+      error: (err) => this.ui.error(err),
+    });
+
     const u = this.auth.user();
     this.fullName.set(u?.full_name || '');
     this.phone.set(u?.phone || '');
-  }
-
-  loadAssignment(): void {
-    this.assignmentError.set(null);
-    this.admin.getOrderAssignment().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (a) => this.assignment.set(a),
-      error: () => this.assignmentError.set('Could not load this setting.'),
-    });
-  }
-
-  setAssignmentMode(mode: OrderAssignmentMode): void {
-    if (this.assignmentSaving() || this.assignment()?.mode === mode) return;
-    this.assignmentSaving.set(true);
-    this.admin.setOrderAssignment(mode).subscribe({
-      next: (r) => {
-        this.assignmentSaving.set(false);
-        this.assignment.set(r.data);
-        this.ui.success(r.message);
-      },
-      error: (e) => {
-        this.assignmentSaving.set(false);
-        this.ui.error(e);
-      },
-    });
   }
 
   setTab(tab: SettingsTab): void {
