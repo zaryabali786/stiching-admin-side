@@ -295,12 +295,13 @@
 }
 
 .topbar {
-  height: var(--topbar-h);
+  height: calc(var(--topbar-h) + var(--sat));
+  padding-top: var(--sat);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 0 24px;
+  padding: var(--sat) 24px 0;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-line);
   z-index: 40;
@@ -511,6 +512,7 @@
     left: 0;
     bottom: 0;
     width: var(--sidebar-w) !important;
+    padding-top: var(--sat);
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     box-shadow: var(--shadow-lg);
@@ -539,7 +541,7 @@
   }
 
   .hamburger { display: inline-flex; }
-  .topbar { padding: 0 12px; gap: 10px; }
+  .topbar { padding: var(--sat) 12px 0; gap: 10px; }
   .quick-search { width: auto; flex: 1; kbd { display: none; } }
   .title-block .crumb, .title-block .crumb-sep { display: none; }
 }
@@ -551,8 +553,8 @@
 /* ---- Floating Messages shortcut (every page except the messages pages) ---- */
 .messages-fab {
   position: fixed;
-  right: calc(18px + env(safe-area-inset-right, 0px));
-  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  right: calc(18px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+  bottom: calc(18px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   z-index: 800;
   display: inline-flex;
   align-items: center;
@@ -592,7 +594,7 @@
 }
 
 @media (max-width: 560px) {
-  .messages-fab { width: 52px; height: 52px; padding: 0; justify-content: center; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); .fab-text { display: none; } }
+  .messages-fab { width: 52px; height: 52px; padding: 0; justify-content: center; right: calc(14px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px))); bottom: calc(14px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); .fab-text { display: none; } }
 }
 
 .partner-switch {
@@ -661,5 +663,5 @@
   .pm-ico { width: 28px; height: 28px; border-radius: 9px; }
   .pm-text small { display: none; }
   .pm-text b { font-size: 12px; max-width: 54px; }
-  .pm-list { position: fixed; left: 12px; right: 12px; top: calc(var(--topbar-h, 60px) + 8px); min-width: 0; }
+  .pm-list { position: fixed; left: 12px; right: 12px; top: calc(var(--topbar-h, 60px) + var(--sat) + 8px); min-width: 0; }
 }

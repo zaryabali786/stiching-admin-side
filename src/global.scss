@@ -72,6 +72,8 @@
   --sidebar-w: 248px;
   --sidebar-w-collapsed: 72px;
   --topbar-h: 60px;
+  /* the phone's status bar / notch height (0 in a browser): Capacitor injects --safe-area-inset-top in the app */
+  --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
 
   --ion-font-family: var(--font-sans);
   --ion-background-color: var(--c-bg);
@@ -535,7 +537,7 @@ table.data-table {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: calc(20px + var(--sat)) 20px 20px;
   z-index: 1000;
   animation: fadeIn 0.15s ease both;
 }
@@ -546,7 +548,8 @@ table.data-table {
   box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 520px;
-  max-height: calc(100vh - 40px);
+  max-height: calc(100vh - 40px - var(--sat));
+  max-height: calc(100dvh - 40px - var(--sat));
   display: flex;
   flex-direction: column;
   animation: popIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -592,6 +595,7 @@ table.data-table {
   background: var(--c-surface);
   box-shadow: var(--shadow-lg);
   z-index: 1001;
+  padding-top: var(--sat);
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -732,7 +736,7 @@ table.data-table {
     width: 100%;
     max-height: 94vh;
     border-radius: 20px 20px 0 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
     .modal-head { padding: 18px 16px 10px; }
     .modal-body { padding: 4px 16px 16px; -webkit-overflow-scrolling: touch; }
     .modal-foot { padding: 12px 16px; flex-wrap: wrap; .btn { flex: 1 1 auto; justify-content: center; min-height: 46px; } }

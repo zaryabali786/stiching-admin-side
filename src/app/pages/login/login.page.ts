@@ -5,11 +5,12 @@ import { IonSpinner } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService, apiErrorMessage } from '../../core/services/api.service';
+import { GoogleSignInCancelled, isNativeApp, nativeGoogleIdToken } from '../../core/services/native-oauth';
 
 const GOOGLE_STATE_KEY = 'v360_google_oauth';
 
 interface PublicConfig {
-  google?: { enabled?: boolean; clientId?: string | null };
+  google?: { enabled?: boolean; clientId?: string | null; iosClientId?: string | null };
 }
 
 @Component({
@@ -159,6 +160,7 @@ export class LoginPage implements OnInit {
   readonly googleEnabled = signal(false);
   readonly googleBusy = signal(false);
   private googleClientId: string | null = null;
+  private googleIosClientId: string | null = null;
   private googleHandled = false;
 
   ngOnInit(): void {
@@ -175,13 +177,19 @@ export class LoginPage implements OnInit {
   }
 
   private async loadConfig(): Promise<void> {
-    try {
-      const cfg = await firstValueFrom(this.api.get<PublicConfig>('/config'));
-      this.googleClientId = cfg?.google?.clientId || null;
-      this.googleEnabled.set(!!cfg?.google?.enabled && !!this.googleClientId);
-    } catch {
-      this.googleEnabled.set(false);
+    // a slow or dropped answer must not hide the Google button for good: try a few times
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const cfg = await firstValueFrom(this.api.get<PublicConfig>('/config'));
+        this.googleClientId = cfg?.google?.clientId || null;
+        this.googleIosClientId = cfg?.google?.iosClientId || null;
+        this.googleEnabled.set(!!cfg?.google?.enabled && !!this.googleClientId);
+        return;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      }
     }
+    this.googleEnabled.set(false);
   }
 
   private googleRedirectUri(): string {
@@ -189,8 +197,13 @@ export class LoginPage implements OnInit {
   }
 
   startGoogle(): void {
-    if (!this.googleClientId) return;
+    if (!this.googleClientId || this.googleBusy()) return; // a second tap must not start a second sign-in
     this.error.set(null);
+    // phone app: the phone's own Google account picker, no browser
+    if (isNativeApp()) {
+      void this.nativeGoogle(this.googleClientId, this.googleIosClientId);
+      return;
+    }
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
     const state = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -208,7 +221,27 @@ export class LoginPage implements OnInit {
       state,
       prompt: 'select_account',
     });
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${q.toString().replace(/\+/g, '%20')}`;
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?${q.toString().replace(/\+/g, '%20')}`;
+    window.location.href = url;
+  }
+
+  private async nativeGoogle(clientId: string, iosClientId: string | null): Promise<void> {
+    this.googleBusy.set(true);
+    this.notice.set(null);
+    try {
+      const idToken = await nativeGoogleIdToken(clientId, iosClientId);
+      const user = await this.auth.googleLoginWithIdToken(idToken);
+      if (user.role === 'customer') {
+        this.auth.logout({ redirect: false });
+        this.error.set('This is a customer account. Please use the customer app to log in.');
+        return;
+      }
+      await this.router.navigateByUrl(this.auth.homeUrl());
+    } catch (err) {
+      if (!(err instanceof GoogleSignInCancelled)) this.error.set(apiErrorMessage(err, 'Google sign-in failed. Please try again.'));
+    } finally {
+      this.googleBusy.set(false);
+    }
   }
 
   private async finishGoogle(code: string | null, state: string | null, oauthError: string | null): Promise<void> {
@@ -220,7 +253,7 @@ export class LoginPage implements OnInit {
       saved = null;
     }
     // Remove the single-use code / state from the address bar before doing anything else.
-    void this.router.navigate([], { replaceUrl: true, queryParams: {} });
+    history.replaceState(history.state, '', location.pathname);
 
     if (oauthError) {
       this.error.set('Google sign-in was cancelled.');

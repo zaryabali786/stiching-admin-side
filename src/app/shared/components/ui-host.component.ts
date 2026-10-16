@@ -47,7 +47,7 @@ import { VoiceNoteFieldComponent } from './voice-note-field/voice-note-field.com
     }
   `,
   styles: [`
-    .toast-stack { position: fixed; top: 16px; right: 16px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; max-width: min(420px, calc(100vw - 32px)); }
+    .toast-stack { position: fixed; top: calc(16px + var(--sat, 0px)); right: 16px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; max-width: min(420px, calc(100vw - 32px)); }
     .toast { display: flex; align-items: flex-start; gap: 10px; background: var(--c-dark); color: #fff; padding: 12px 14px; border-radius: 12px; box-shadow: var(--shadow-lg); font-size: 13px; animation: popIn .2s ease both; }
     .toast .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; background: #7FD3A8; }
     .toast.error .dot { background: #F08A78; }

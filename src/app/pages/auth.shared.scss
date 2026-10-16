@@ -17,7 +17,7 @@
   position: relative;
   background: var(--c-dark);
   color: #fff;
-  padding: 44px 48px;
+  padding: calc(44px + var(--sat, 0px)) 48px 44px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -264,7 +264,7 @@
 @media (max-width: 860px) {
   .auth { grid-template-columns: 1fr; }
   .brand-panel {
-    padding: 28px 24px;
+    padding: calc(28px + var(--sat, 0px)) 24px 28px;
     h1 { font-size: 28px; }
     .points, .foot { display: none; }
   }

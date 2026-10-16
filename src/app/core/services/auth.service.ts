@@ -107,6 +107,15 @@ export class AuthService {
     return res.data.user;
   }
 
+  /** Phone app: native Google sign-in gives a signed id_token; the API verifies it and answers like a normal login. */
+  async googleLoginWithIdToken(idToken: string): Promise<Profile> {
+    const res = await firstValueFrom(
+      this.http.post<ApiEnvelope<Session>>(`${this.api}/auth/google`, { idToken, portal: 'staff' })
+    );
+    this.store(res.data);
+    return res.data.user;
+  }
+
   async forgotPassword(email: string): Promise<string> {
     const res = await firstValueFrom(
       this.http.post<ApiEnvelope<null>>(`${this.api}/auth/forgot-password`, { email, portal: 'staff' })

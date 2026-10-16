@@ -70,7 +70,7 @@ tr.clickable:hover .manage { color: var(--c-ink); }
 .avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--c-bg-soft, #eceef1); color: var(--c-ink-2, #374151); &.lg { width: 52px; height: 52px; font-size: 17px; background: var(--c-dark-2, #1f2937); color: #fff; } }
 
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(15, 18, 24, 0.35); z-index: 1000; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); z-index: 1001; display: flex; flex-direction: column; background: var(--c-surface, #fff); box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; padding-top: var(--sat); width: min(460px, 100vw); z-index: 1001; display: flex; flex-direction: column; background: var(--c-surface, #fff); box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18); }
 .drawer-head { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px 14px; border-bottom: 1px solid var(--c-line-soft);
   .dh-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
   h3 { margin: 0; font-size: 19px; overflow-wrap: anywhere; }

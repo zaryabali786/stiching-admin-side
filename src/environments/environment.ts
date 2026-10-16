@@ -1,6 +1,10 @@
 export const environment = {
   production: false,
   apiUrl: 'http://localhost:5000/api',
+  // switch on ONLY after android/app/google-services.json (Firebase) is in the project: without it the app crashes on push
+  nativePush: true,
+  // this app's iOS OAuth client for Google sign-in (Google Cloud Console -> Credentials -> iOS client of its bundle id)
+  googleIosClientId: '1054380947096-k2q4q95um9lk92f03n50fpprc34i2r08.apps.googleusercontent.com',
   firebase: {
     apiKey: 'AIzaSyBZFEC5meXq78BXTmY2v3tC-Fz0r_Fypuk',
     projectId: 'stiching-98483',

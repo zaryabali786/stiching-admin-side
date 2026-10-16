@@ -43,7 +43,7 @@ import { SheetMode, buildArticleSheets } from './article-sheet';
   styles: [`
     :host { display: contents; }
     .apd-backdrop { position: fixed; inset: 0; background: rgba(15, 18, 24, 0.5); z-index: 1100; }
-    .apd { position: fixed; inset: 16px; z-index: 1101; display: flex; flex-direction: column; max-width: 980px; margin: 0 auto; background: var(--c-surface, #fff); border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3); overflow: hidden; }
+    .apd { position: fixed; inset: calc(16px + var(--sat, 0px)) 16px 16px; z-index: 1101; display: flex; flex-direction: column; max-width: 980px; margin: 0 auto; background: var(--c-surface, #fff); border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3); overflow: hidden; }
     .apd-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--c-line-soft, #e5e7eb); }
     .apd-title { flex: 1; min-width: 160px; }
     .apd-eyebrow { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-muted, #6b7280); }

@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
+import { NotificationService } from './notification.service';
 
 const TOKEN_KEY = 'v360_push_token';
 
@@ -19,6 +20,7 @@ export class PushService {
   private http = inject(HttpClient);
   private auth = inject(AuthService);
   private router = inject(Router);
+  private notifications = inject(NotificationService);
   private api = environment.apiUrl;
 
   private token: string | null = readToken();
@@ -45,7 +47,10 @@ export class PushService {
     if (this.starting) return;
     this.starting = true;
     try {
-      if (Capacitor.isNativePlatform()) await this.startNative();
+      if (Capacitor.isNativePlatform()) {
+        // without google-services.json the Firebase plugin crashes the app, so it stays off until the flag is set
+        if (environment.nativePush) await this.startNative();
+      }
       else await this.startWeb();
     } catch (err) {
       console.warn('[Push] not started:', err);
@@ -60,7 +65,10 @@ export class PushService {
       this.nativeListening = true;
       await PushNotifications.addListener('registration', (t) => void this.send(t.value, Capacitor.getPlatform()));
       await PushNotifications.addListener('registrationError', (e) => console.warn('[Push] registration error', e));
-      await PushNotifications.addListener('pushNotificationActionPerformed', (a) => this.open(a.notification?.data?.link));
+      // app open: the phone shows no tray notification, the in-app alert comes from the live socket event;
+      // this only refreshes the bell if the socket was down (no alert here, so nothing is ever shown twice)
+      await PushNotifications.addListener('pushNotificationReceived', () => this.notifications.refresh());
+      await PushNotifications.addListener('pushNotificationActionPerformed', (a) => this.open(a.notification?.data));
     }
     let perm = await PushNotifications.checkPermissions();
     if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') perm = await PushNotifications.requestPermissions();
@@ -89,12 +97,24 @@ export class PushService {
     if (!this.auth.isAuthenticated()) return;
     // sent every time (not only when it changed): it also moves the token to whoever is signed in on this device now
     await firstValueFrom(this.http.post(`${this.api}/notifications/devices`, { token, platform, app: 'admin' }));
+    // Firebase rotated this device's token: the old one is dropped so it is not left behind on this account
+    const previous = this.token;
     this.token = token;
     writeToken(token);
+    if (previous && previous !== token) {
+      this.http.post(`${this.api}/notifications/devices/remove`, { token: previous }).subscribe({ error: () => undefined });
+    }
   }
 
-  /** Tapping a notification opens its page, but only inside the portal. */
-  private open(link: unknown): void {
+  /**
+   * Tapping a notification opens its page, but only inside the portal, and only when it was meant for the person who is
+   * signed in now (a device that switched accounts ignores the previous account's notifications). The route guards and
+   * the API still decide what that person may see.
+   */
+  private open(data: Record<string, unknown> | undefined): void {
+    const link = data?.['link'];
+    const forUser = data?.['userId'];
+    if (typeof forUser === 'string' && forUser && forUser !== this.auth.user()?.id) return;
     if (typeof link === 'string' && /^\/(admin|partner)(\/|$|\?)/.test(link)) void this.router.navigateByUrl(link);
   }
 }
