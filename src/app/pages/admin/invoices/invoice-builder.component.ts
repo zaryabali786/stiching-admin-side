@@ -5,6 +5,7 @@ import { IonSpinner } from '@ionic/angular';
 import { Subject, catchError, firstValueFrom, map, merge, of, switchMap, tap } from 'rxjs';
 import {
   AdminService,
+  FxRate,
   INVOICE_CURRENCIES,
   InvoiceBuilderData,
   InvoiceLineKind,
@@ -77,6 +78,13 @@ export class InvoiceBuilderComponent {
   readonly lines = signal<EditLine[]>([]);
   readonly currency = signal('PKR');
   readonly fxRate = signal('1');
+  /** The live rate behind the field: its day, source and whether it is today's. */
+  readonly fxInfo = signal<FxRate | null>(null);
+  readonly fxLoading = signal(false);
+  readonly fxError = signal<string | null>(null);
+  /** The rate was typed over by hand: it is saved as a manual rate, with no live rate date. */
+  readonly fxManual = signal(false);
+  private fxToken = 0;
   readonly notes = signal('');
   readonly dirty = signal(false);
   readonly busy = signal<'save' | 'issue' | 'reopen' | 'paid' | null>(null);
@@ -131,6 +139,8 @@ export class InvoiceBuilderComponent {
   });
 
   readonly fxMissing = computed(() => this.currency() !== 'PKR' && !(num(this.fxRate()) > 0));
+  /** The day label of the rate: live rates carry the day they are for, a typed one says so. */
+  readonly fxDay = computed(() => (this.fxManual() ? null : this.fxInfo()?.rate_date ?? this.invoice()?.fx?.rate_date ?? null));
 
   readonly priceGroups = computed(() => {
     const items = this.data()?.priceItems || [];
@@ -285,13 +295,49 @@ export class InvoiceBuilderComponent {
   /** What the "Shipping" field currently shows when the saved rate is no longer offered (e.g. switched off). */
   readonly shippingLine = computed(() => this.lines().find((l) => l.kind === 'shipping') ?? null);
 
+  /** A new currency: the rate field is emptied (an old rate is never reused for another currency) and today's rate is fetched. */
   setCurrency(cur: string): void {
     this.currency.set(cur);
-    const d = this.data();
-    if (cur === 'PKR') this.fxRate.set('1');
-    else if (d && cur === d.currency && d.suggestedFxRate) this.fxRate.set(String(d.suggestedFxRate));
-    else if (this.invoice()?.currency === cur) this.fxRate.set(String(this.invoice()!.fx_rate));
-    else this.fxRate.set('');
+    this.fxManual.set(false);
+    this.fxInfo.set(null);
+    this.fxError.set(null);
+    if (cur === 'PKR') {
+      this.fxToken++;
+      this.fxLoading.set(false);
+      this.fxRate.set('1');
+    } else {
+      this.fxRate.set('');
+      this.loadRate(cur);
+    }
+    this.dirty.set(true);
+  }
+
+  /** Fetch the latest available rate of the currency (the field and every amount follow it). A failure is shown with a retry, nothing is guessed. */
+  loadRate(cur: string = this.currency(), refresh = false): void {
+    if (cur === 'PKR') return;
+    const token = ++this.fxToken;
+    this.fxLoading.set(true);
+    this.fxError.set(null);
+    this.admin.getFxRate(cur, refresh).subscribe({
+      next: (r) => {
+        if (token !== this.fxToken || this.currency() !== cur) return;
+        this.fxLoading.set(false);
+        this.fxInfo.set(r);
+        this.fxManual.set(false);
+        this.fxRate.set(String(r.rate));
+        this.dirty.set(true);
+      },
+      error: (err) => {
+        if (token !== this.fxToken || this.currency() !== cur) return;
+        this.fxLoading.set(false);
+        this.fxError.set(apiErrorMessage(err, 'The exchange rate could not be loaded.'));
+      },
+    });
+  }
+
+  onFxInput(value: string): void {
+    this.fxRate.set(value);
+    this.fxManual.set(true);
     this.dirty.set(true);
   }
 
@@ -400,8 +446,12 @@ export class InvoiceBuilderComponent {
       this.ui.error(`Line ${blank + 1}: enter a description for the charge.`);
       return false;
     }
+    if (this.fxLoading()) {
+      this.ui.error('The exchange rate is still loading. One moment.');
+      return false;
+    }
     if (this.fxMissing()) {
-      this.ui.error(`Enter the exchange rate (PKR per 1 ${this.currency()}).`);
+      this.ui.error(this.fxError() ? `The ${this.currency()} rate could not be loaded: press Retry, or type the rate.` : `Enter the exchange rate (PKR per 1 ${this.currency()}).`);
       return false;
     }
     return true;
@@ -416,6 +466,8 @@ export class InvoiceBuilderComponent {
         this.admin.saveInvoiceDraft(this.orderId(), {
           currency: this.currency(),
           fx_rate: this.currency() === 'PKR' ? 1 : num(this.fxRate()),
+          fx_source: this.currency() === 'PKR' || !this.fxManual() ? 'live' : 'manual',
+          fx_rate_date: this.currency() === 'PKR' || this.fxManual() ? null : this.fxDay(),
           notes: this.notes().trim() || null,
           shipping_rate_id: this.shippingRateId() || (this.invoice()?.shipping_rate_id ? null : undefined),
           lines: this.lines().map((l) => ({
@@ -529,7 +581,20 @@ export class InvoiceBuilderComponent {
     );
     const cur = d.invoice?.currency || d.currency || 'PKR';
     this.currency.set(cur);
-    this.fxRate.set(cur === 'PKR' ? '1' : d.invoice?.fx_rate ? String(d.invoice.fx_rate) : d.suggestedFxRate ? String(d.suggestedFxRate) : '');
+    this.fxToken++;
+    this.fxLoading.set(false);
+    this.fxError.set(null);
+    this.fxInfo.set(null);
+    this.fxManual.set(d.invoice?.fx?.source === 'manual');
+    if (cur === 'PKR') this.fxRate.set('1');
+    else if (d.invoice?.fx_rate) {
+      // a saved invoice keeps its own rate (and its day); "Refresh" asks for today's
+      this.fxRate.set(String(d.invoice.fx_rate));
+    } else {
+      // a new invoice: the rate of the day appears by itself
+      this.fxRate.set('');
+      this.loadRate(cur);
+    }
     this.notes.set(d.invoice?.notes || '');
     // saved choice, or (new invoice) the recommended rate the suggested lines were built from
     this.shippingRateId.set(d.invoice ? d.invoice.shipping_rate_id ?? '' : d.shippingOptions.find((s) => s.recommended)?.id ?? '');

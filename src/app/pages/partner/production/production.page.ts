@@ -1,22 +1,11 @@
 import { AuthService } from '../../../core/services/auth.service';
 import { CanDirective } from '../../../shared/can.directive';
 import { ApprovalChipComponent } from '../../../shared/components/approval-chip.component';
-import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
-import {
-  CdkDrag,
-  CdkDragDrop,
-  CdkDragPlaceholder,
-  CdkDropList,
-  CdkDropListGroup,
-  DragStartDelay,
-  moveItemInArray,
-  transferArrayItem,
-} from '@angular/cdk/drag-drop';
-import { CdkScrollable } from '@angular/cdk/scrolling';
 import { IonSpinner } from '@ionic/angular';
-import { Subject, Subscription, catchError, debounceTime, map, of, switchMap, tap } from 'rxjs';
+import { Observable, Subject, Subscription, catchError, debounceTime, firstValueFrom, map, of, switchMap, tap } from 'rxjs';
 
 import {
   BoardColumn,
@@ -28,6 +17,7 @@ import {
   ProductionStage,
   Suggestions,
 } from '../../../core/services/production.service';
+import { PartnerService } from '../../../core/services/partner.service';
 import { UiService } from '../../../core/services/ui.service';
 import { LanguageService } from '../../../core/services/language.service';
 import { BadgeService } from '../../../core/services/badge.service';
@@ -35,10 +25,10 @@ import { apiErrorMessage } from '../../../core/services/api.service';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
 import { ScanReceiveComponent } from '../../../shared/components/scan-receive/scan-receive.component';
 import { QrScannerComponent } from '../../../shared/components/qr-scanner.component';
+import { ArticlePrintDialogComponent } from '../../../shared/components/article-print/article-print-dialog.component';
 import { ProductionOrdersComponent } from './production-orders.component';
 import { ChatSocketService } from '../../../core/services/chat-socket.service';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
-import { InViewDirective } from './in-view.directive';
 import { STAGE_META, cardDisplayLabel, cardDisplayTone, StageMeta, initial, masterLabel, shortDate, swatchBackground } from './production.utils';
 
 interface ColumnState extends BoardColumn {
@@ -58,19 +48,14 @@ const PAGE_SIZE = 15;
 @Component({
   selector: 'app-partner-production',
   standalone: true,
-  imports: [CanDirective, 
-    CdkDropListGroup,
-    CdkDropList,
-    CdkDrag,
-    CdkDragPlaceholder,
-    CdkScrollable,
+  imports: [CanDirective,
     IonSpinner,
     SearchInputComponent,
     ScanReceiveComponent,
     QrScannerComponent,
+    ArticlePrintDialogComponent,
     ProductionOrdersComponent,
     EmptyStateComponent,
-    InViewDirective,
     ApprovalChipComponent,
   ],
   templateUrl: './production.page.html',
@@ -86,7 +71,13 @@ export class PartnerProductionPage implements OnInit {
   readonly lang = inject(LanguageService);
   private auth = inject(AuthService);
   /** May this person change things here? View-only people see the data but no working buttons (the server re-checks every request). */
-  readonly canEdit = computed(() => this.auth.can('production.update'));
+  /** May this person do the stage's button? Assign needs "Assign", moving on needs "Move", packing needs "Pressing and packing". */
+  canAct(stage: ProductionStage): boolean {
+    if (stage === 'to_assign') return this.auth.can('production.assign');
+    if (stage === 'pressing') return this.auth.can('quality.pack');
+    return this.auth.can('production.move');
+  }
+  readonly canScan = computed(() => this.auth.canAny('production.scan', 'quality.scan'));
 
   // ───────── Board state ─────────
   readonly columns = signal<ColumnState[]>([]);
@@ -98,11 +89,29 @@ export class PartnerProductionPage implements OnInit {
   readonly masters = signal<MasterTeam[]>([]);
   readonly suggestion = signal<Suggestions | null>(null);
 
-  /** Cards with a request in flight (drag disabled, buttons spinning). */
+  /** Cards with a request in flight (their buttons spin). */
   readonly busy = signal<ReadonlySet<string>>(new Set());
-  readonly dragging = signal(false);
-  /** Dragging cards between columns is switched off for now (set to false to bring it back). */
-  readonly dragDisabled = true;
+
+  // ───────── Stage tabs, selection, bulk actions ─────────
+  /** The stage whose table is open (kept in the URL as ?stage=). */
+  readonly activeStage = signal<ProductionStage>('to_assign');
+  /** On a phone the tab bar scrolls: the open tab is brought into view (also when the page opens on ?stage=…). */
+  private readonly keepTabInView = effect(() => {
+    this.activeStage();
+    setTimeout(() => document.querySelector('.stage-tab.on')?.scrollIntoView({ block: 'nearest', inline: 'center' }), 60);
+  });
+  readonly activeColumn = computed(() => this.columns().find((c) => c.stage === this.activeStage()) ?? null);
+  /** The articles ticked in the open table. */
+  readonly selected = signal<ReadonlySet<string>>(new Set());
+  readonly selectedCards = computed(() => (this.activeColumn()?.items ?? []).filter((c) => this.selected().has(c.id)));
+  readonly allSelected = computed(() => {
+    const items = this.activeColumn()?.items ?? [];
+    return items.length > 0 && items.every((c) => this.selected().has(c.id));
+  });
+  /** A bulk action running: "Moving 3 of 8…". */
+  readonly bulk = signal<{ label: string; done: number; total: number } | null>(null);
+  /** The master a bulk "Assign" gives the articles to (null = the least busy master for each one). */
+  readonly bulkMaster = signal<string | null>(null);
 
   readonly totalArticles = computed(() => this.columns().reduce((sum, c) => sum + (c.total || 0), 0));
   readonly hasFilters = computed(() => {
@@ -117,7 +126,6 @@ export class PartnerProductionPage implements OnInit {
   readonly todayLabel = formatToday();
   readonly cardLabel = cardDisplayLabel;
   readonly cardTone = cardDisplayTone;
-  readonly dragDelay: DragStartDelay = { touch: 220, mouse: 0 };
   readonly stages = PRODUCTION_STAGES;
   readonly skeletonCards = [0, 1, 2];
 
@@ -125,10 +133,25 @@ export class PartnerProductionPage implements OnInit {
   readonly searchKey = signal(0);
   private lastSearch = '';
 
+  /** The article whose sheet is open for printing (always the one card it was opened from). */
+  readonly printCards = signal<Card[] | null>(null);
+
+  openPrint(card: Card, event?: Event): void {
+    event?.stopPropagation();
+    this.printCards.set([card]);
+  }
+
+  /** Print the sheets of every ticked article (one page or label each). */
+  printSelected(): void {
+    const cards = this.selectedCards();
+    if (cards.length) this.printCards.set(cards);
+  }
+
   // ───────── Board / by-order view and the QR receive screen ─────────
   readonly view = signal<'board' | 'orders'>('board');
   readonly receiveOpen = signal(false);
   private socket = inject(ChatSocketService);
+  private partnerApi = inject(PartnerService);
 
   // ───────── Scan modal ─────────
   readonly scanOpen = signal(false);
@@ -139,7 +162,7 @@ export class PartnerProductionPage implements OnInit {
 
   private load$ = new Subject<Filters>();
   private columnSubs = new Map<ProductionStage, Subscription>();
-  private dragEndTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastFilterKey = '';
 
   readonly masterLabel = masterLabel;
   readonly initial = initial;
@@ -151,7 +174,7 @@ export class PartnerProductionPage implements OnInit {
       .on('unit:update')
       .pipe(debounceTime(600), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        if (this.view() === 'board' && !this.dragging()) this.reload();
+        if (this.view() === 'board' && !this.bulk()) this.reload();
       });
     // Whole-board loads: every filter change goes through the URL, stale requests are cancelled.
     this.load$
@@ -190,16 +213,29 @@ export class PartnerProductionPage implements OnInit {
             };
           })
         );
+        const here = new Set((this.activeColumn()?.items ?? []).map((i) => i.id));
+        this.selected.update((sel) => new Set([...sel].filter((id) => here.has(id))));
       });
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const stage = params.get('stage') as ProductionStage | null;
+      const next = stage && PRODUCTION_STAGES.includes(stage) ? stage : 'to_assign';
+      if (next !== this.activeStage()) {
+        this.activeStage.set(next);
+        this.selected.set(new Set());
+      }
       const f = parseFilters(params);
       if (f.search !== this.lastSearch) {
         this.lastSearch = f.search;
         this.searchKey.update((k) => k + 1);
       }
       this.filters.set(f);
-      this.load$.next(f);
+      const key = JSON.stringify(f);
+      if (key !== this.lastFilterKey) {
+        this.lastFilterKey = key;
+        this.selected.set(new Set());
+        this.load$.next(f);
+      }
     });
 
     this.production
@@ -213,7 +249,6 @@ export class PartnerProductionPage implements OnInit {
 
     this.destroyRef.onDestroy(() => {
       this.cancelColumnLoads();
-      if (this.dragEndTimer) clearTimeout(this.dragEndTimer);
     });
   }
 
@@ -255,7 +290,8 @@ export class PartnerProductionPage implements OnInit {
   clearFilters(): void {
     this.lastSearch = '';
     this.searchKey.update((k) => k + 1);
-    this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+    const stage = this.activeStage();
+    this.router.navigate([], { relativeTo: this.route, queryParams: stage === 'to_assign' ? {} : { stage }, replaceUrl: true });
   }
 
   private setQuery(patch: Record<string, string | null>): void {
@@ -300,105 +336,155 @@ export class PartnerProductionPage implements OnInit {
     this.columns.update((cols) => cols.map((c) => (c.stage === stage ? { ...c, ...patch } : c)));
   }
 
-  // ───────── Drag & drop ─────────
+  // ───────── Stage tabs ─────────
 
-  onDragStart(): void {
-    if (this.dragEndTimer) clearTimeout(this.dragEndTimer);
-    this.dragging.set(true);
+  columnTotal(stage: ProductionStage): number {
+    return this.columns().find((c) => c.stage === stage)?.total ?? 0;
   }
 
-  onDragEnd(): void {
-    // The click that follows a drop must not open the card.
-    this.dragEndTimer = setTimeout(() => this.dragging.set(false), 80);
+  setStage(stage: ProductionStage): void {
+    if (stage === this.activeStage()) return;
+    this.setQuery({ stage: stage === 'to_assign' ? null : stage });
   }
 
-  drop(event: CdkDragDrop<ProductionStage, ProductionStage, Card>): void {
-    if (!this.canEdit()) return;
-    const from = event.previousContainer.data;
-    const to = event.container.data;
-    const card = event.item.data;
-    if (!card || (from === to && event.previousIndex === event.currentIndex)) return;
-    if (this.isBusy(card.id)) return;
+  // ───────── Ticking articles ─────────
 
-    const cols = this.columns();
-    const source = cols.find((c) => c.stage === from);
-    const target = cols.find((c) => c.stage === to);
-    if (!source || !target) return;
+  isSelected(id: string): boolean {
+    return this.selected().has(id);
+  }
 
-    const fromIndex = source.items.findIndex((i) => i.id === card.id);
-    if (fromIndex < 0) return;
+  toggle(id: string): void {
+    this.selected.update((sel) => {
+      const next = new Set(sel);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
-    // Optimistic update on copies of the arrays.
-    const sourceItems = [...source.items];
-    let targetItems: Card[];
-    if (from === to) {
-      moveItemInArray(sourceItems, fromIndex, event.currentIndex);
-      targetItems = sourceItems;
-    } else {
-      targetItems = [...target.items];
-      transferArrayItem(sourceItems, targetItems, fromIndex, event.currentIndex);
+  toggleAll(): void {
+    const items = this.activeColumn()?.items ?? [];
+    this.selected.set(this.allSelected() ? new Set() : new Set(items.map((c) => c.id)));
+  }
+
+  clearSelection(): void {
+    this.selected.set(new Set());
+  }
+
+  // ───────── What each stage's button does ─────────
+
+  /** The one action of a row: Assign (To assign), or "Send to <next stage>". Packed articles have none. */
+  stageAction(stage: ProductionStage): { label: string; short: string } | null {
+    switch (stage) {
+      case 'to_assign': return { label: 'Assign', short: 'Assign' };
+      case 'cutting': return { label: 'Send to stitching', short: 'To stitching' };
+      case 'stitching': return { label: 'Send to quality check', short: 'To QC' };
+      case 'qc': return { label: 'Move to pressing', short: 'To pressing' };
+      case 'pressing': return { label: 'Move to packed', short: 'To packed' };
+      default: return null;
     }
-    const index = targetItems.findIndex((i) => i.id === card.id);
-    targetItems[index] = { ...card, stage: to };
-    const prevId = targetItems[index - 1]?.id ?? null;
-    const nextId = targetItems[index + 1]?.id ?? null;
+  }
 
-    this.columns.update((list) =>
-      list.map((c) => {
-        if (c.stage === from && from === to) return { ...c, items: targetItems };
-        if (c.stage === from) return { ...c, items: sourceItems, total: Math.max(0, c.total - 1) };
-        if (c.stage === to) return { ...c, items: targetItems, total: c.total + 1 };
-        return c;
-      })
-    );
+  /** Why a row's button cannot be used yet (shown as its tooltip), or '' when it can. */
+  actionBlocked(card: Card): string {
+    if (card.stage === 'to_assign' && !this.suggestion()?.master) return 'No master available. Add one in Teams.';
+    if (card.stage === 'qc' && !card.qc_passed) return 'Pass the quality check first (open the job card).';
+    if (card.stage === 'qc' && card.approval_status !== 'approved') return 'The customer has not approved the photos yet.';
+    return '';
+  }
 
+  /** The request behind the action of a card in its stage. */
+  private stageRequest(card: Card, masterId: string | null = null): Observable<{ message?: string; data?: unknown }> | null {
+    switch (card.stage) {
+      case 'to_assign': return this.production.assign(card.id, masterId);
+      case 'cutting': return this.production.move(card.id, 'stitching', null, null);
+      case 'stitching': return this.production.move(card.id, 'qc', null, null);
+      case 'qc': return this.production.move(card.id, 'pressing', null, null);
+      case 'pressing': return this.partnerApi.packOrder(card.order_id);
+      default: return null;
+    }
+  }
+
+  /** One row's button. */
+  runRow(card: Card, event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canAct(card.stage) || this.isBusy(card.id)) return;
+    const blocked = this.actionBlocked(card);
+    if (blocked) {
+      this.ui.error(blocked);
+      return;
+    }
+    const request = this.stageRequest(card);
+    if (!request) return;
     this.setBusy(card.id, true);
-    this.production.move(card.id, to, prevId, nextId).subscribe({
-      next: ({ data, message }) => {
+    request.subscribe({
+      next: (res) => {
         this.setBusy(card.id, false);
-        this.replaceCard(data.card);
-        if (from !== to) {
-          this.ui.success(message || `Moved to ${STAGE_META[to].en}`);
-          this.badges.refresh();
-          if (to === 'cutting' || to === 'stitching') this.loadSuggestion();
-        }
+        this.afterMoves([card], res?.message || `${card.unit_title}: done`, [cardOf(res)]);
       },
       error: (err) => {
         this.setBusy(card.id, false);
-        this.revertMove(card, from, to, fromIndex);
         this.ui.error(err);
       },
     });
   }
 
-  /** Put the card back where it was before the failed move (other changes made meanwhile are kept). */
-  private revertMove(card: Card, from: ProductionStage, to: ProductionStage, fromIndex: number): void {
-    this.columns.update((list) =>
-      list.map((c) => {
-        let items = c.items.filter((i) => i.id !== card.id);
-        let total = c.total;
-        if (c.stage === from) {
-          items = [...items];
-          items.splice(Math.min(fromIndex, items.length), 0, card);
-          if (from !== to) total += 1;
-        } else if (c.stage === to && from !== to) {
-          total = Math.max(0, total - 1);
+  /** The bulk button: the stage's action for every ticked article, one after another; the ones that fail are listed and stay ticked. */
+  async runBulk(): Promise<void> {
+    if (!this.canAct(this.activeStage()) || this.bulk()) return;
+    const cards = this.selectedCards();
+    const action = this.stageAction(this.activeStage());
+    if (!cards.length || !action) return;
+    const ok: Card[] = [];
+    const updated: Card[] = [];
+    const failed: string[] = [];
+    // an order is packed once, however many of its articles are ticked
+    const packedOrders = new Set<string>();
+    this.bulk.set({ label: action.label, done: 0, total: cards.length });
+    for (const card of cards) {
+      const blocked = this.actionBlocked(card);
+      if (blocked) {
+        failed.push(`${card.unit_title}: ${blocked}`);
+      } else if (card.stage === 'pressing' && packedOrders.has(card.order_id)) {
+        ok.push(card);
+      } else {
+        try {
+          const res = await firstValueFrom(this.stageRequest(card, card.stage === 'to_assign' ? this.bulkMaster() : null)!);
+          ok.push(card);
+          updated.push(cardOf(res));
+          if (card.stage === 'pressing') packedOrders.add(card.order_id);
+        } catch (err) {
+          failed.push(`${card.unit_title}: ${apiErrorMessage(err)}`);
         }
-        return items === c.items && total === c.total ? c : { ...c, items, total };
-      })
-    );
+      }
+      this.bulk.update((b) => (b ? { ...b, done: b.done + 1 } : b));
+    }
+    this.bulk.set(null);
+    this.afterMoves(ok, null, updated);
+    this.selected.set(new Set(cards.filter((c) => !ok.includes(c)).map((c) => c.id)));
+    if (failed.length) this.ui.error(`${ok.length} done, ${failed.length} not moved:\n${failed.slice(0, 5).join('\n')}${failed.length > 5 ? `\n…and ${failed.length - 5} more` : ''}`);
+    else this.ui.success(`${ok.length} article${ok.length === 1 ? '' : 's'}: ${action.label.toLowerCase()} done.`);
   }
 
-  private replaceCard(updated: Card): void {
-    this.columns.update((list) =>
-      list.map((c) => {
-        const i = c.items.findIndex((x) => x.id === updated.id);
-        if (i < 0) return c;
-        const items = [...c.items];
-        items[i] = updated;
-        return { ...c, items };
-      })
-    );
+  /** Articles that moved leave the open tab at once; the board is then re-read so every tab's count and rows are right. */
+  private afterMoves(moved: Card[], message: string | null, updated: Card[] = []): void {
+    if (moved.length) {
+      const gone = new Set(moved.map((c) => c.id));
+      const arrived = updated.filter((u): u is Card => !!u && u.stage !== this.activeStage());
+      this.columns.update((list) =>
+        list.map((c) => {
+          if (c.stage === this.activeStage()) return { ...c, items: c.items.filter((i) => !gone.has(i.id)), total: Math.max(0, c.total - gone.size) };
+          // the article already shows in the tab it moved to (the board is re-read right after, so counts stay exact)
+          const here = arrived.filter((u) => u.stage === c.stage && !c.items.some((i) => i.id === u.id));
+          return here.length && !c.nextCursor ? { ...c, items: [...c.items, ...here], total: c.total + here.length } : c;
+        })
+      );
+      this.selected.update((sel) => new Set([...sel].filter((id) => !gone.has(id))));
+    }
+    if (message) this.ui.success(message);
+    this.badges.refresh();
+    this.loadSuggestion();
+    this.reload();
   }
 
   private setBusy(id: string, on: boolean): void {
@@ -419,45 +505,9 @@ export class PartnerProductionPage implements OnInit {
       .subscribe({ next: (s) => this.suggestion.set(s), error: () => this.suggestion.set(null) });
   }
 
-  assign(card: Card, event: Event): void {
-    if (!this.canEdit()) return;
-    event.stopPropagation();
-    if (this.isBusy(card.id)) return;
-    this.setBusy(card.id, true);
-    this.production.assign(card.id).subscribe({
-      next: ({ data, message }) => {
-        this.setBusy(card.id, false);
-        const updated = data.card;
-        const masterFilter = this.filters().masterId;
-        this.columns.update((list) =>
-          list.map((c) => {
-            if (c.stage === 'to_assign') {
-              return { ...c, items: c.items.filter((i) => i.id !== card.id), total: Math.max(0, c.total - 1) };
-            }
-            if (c.stage === updated.stage) {
-              if (masterFilter && updated.master_id !== masterFilter) return c;
-              // The server appends to the end of the column; only show it if that end is loaded.
-              const items = c.nextCursor ? c.items : [...c.items.filter((i) => i.id !== updated.id), updated];
-              return { ...c, items, total: c.total + 1 };
-            }
-            return c;
-          })
-        );
-        this.ui.success(message || 'Assigned');
-        this.badges.refresh();
-        this.loadSuggestion();
-      },
-      error: (err) => {
-        this.setBusy(card.id, false);
-        this.ui.error(err);
-      },
-    });
-  }
-
   // ───────── Navigation ─────────
 
   open(card: Card): void {
-    if (this.dragging()) return;
     this.router.navigate(['/partner/production/jobs', card.id]);
   }
 
@@ -546,4 +596,9 @@ function formatToday(): string {
   const weekday = d.toLocaleDateString('en-GB', { weekday: 'long' });
   const month = d.toLocaleDateString('en-GB', { month: 'short' });
   return `${weekday} ${d.getDate()} ${month}`;
+}
+
+/** The updated card in the answer of a move / assign (a pack answer has none). */
+function cardOf(res: { data?: unknown } | null | undefined): Card {
+  return (res?.data as { card?: Card } | undefined)?.card as Card;
 }

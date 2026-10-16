@@ -1,5 +1,6 @@
 import { AuthService } from '../../../core/services/auth.service';
 import { ExtraCostsPanelComponent } from '../../../shared/components/extra-costs-panel.component';
+import { ChatPanelComponent } from '../../../shared/components/chat-panel/chat-panel.component';
 import { CanDirective } from '../../../shared/can.directive';
 import { Component, DestroyRef, ElementRef, HostListener, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -72,7 +73,7 @@ const STEP_INDEX: Record<ProductionStage, number> = { to_assign: 0, cutting: 1, 
 @Component({
   selector: 'app-partner-job-detail',
   standalone: true,
-  imports: [ExtraCostsPanelComponent, CanDirective, RouterLink, IonSpinner, EmptyStateComponent, TimeAgoPipe, HumanizePipe, VoiceNoteFieldComponent, VoiceNotePlayComponent, ApprovalChipComponent],
+  imports: [ChatPanelComponent, ExtraCostsPanelComponent, CanDirective, RouterLink, IonSpinner, EmptyStateComponent, TimeAgoPipe, HumanizePipe, VoiceNoteFieldComponent, VoiceNotePlayComponent, ApprovalChipComponent],
   templateUrl: './job-detail.page.html',
   styleUrls: ['./job-detail.page.scss'],
 })
@@ -87,7 +88,20 @@ export class PartnerJobDetailPage implements OnInit {
   readonly lang = inject(LanguageService);
   private auth = inject(AuthService);
   /** May this person change things here? View-only people see the data but no working buttons (the server re-checks every request). */
-  readonly canEdit = computed(() => this.auth.can('production.update'));
+  /** Assign people, due date and priority (the job card's own fields). */
+  readonly canEdit = computed(() => this.auth.can('production.assign'));
+  readonly canChecklist = computed(() => this.auth.canAny('quality.pass', 'production.assign'));
+  /** May this person press the card's main button (assign / move on / pass quality check)? */
+  readonly canStep = computed(() => {
+    const c = this.card();
+    if (!c) return false;
+    if (c.stage === 'to_assign') return this.auth.can('production.assign');
+    if (c.stage === 'qc' && !c.qc_passed) return this.auth.can('quality.pass');
+    return this.auth.can('production.move');
+  });
+  /** The customer's messages about this article (and the reply box) are for people who may use Messages. */
+  readonly chatOpen = signal(true);
+  readonly canChat = computed(() => this.auth.can('messages.view'));
 
   readonly card = signal<CardDetail | null>(null);
   readonly loading = signal(true);
@@ -204,7 +218,7 @@ export class PartnerJobDetailPage implements OnInit {
   /** QC passed and not yet approved: staff can send (or resend) photos for this ticket. */
   readonly canSendPhotos = computed(() => {
     const c = this.card();
-    return !!c && this.canEdit() && c.stage === 'qc' && c.qc_passed && this.approvalStatus() !== 'approved';
+    return !!c && this.auth.can('quality.approval') && c.stage === 'qc' && c.qc_passed && this.approvalStatus() !== 'approved';
   });
 
   readonly nextText = computed(() => {
@@ -368,7 +382,7 @@ export class PartnerJobDetailPage implements OnInit {
   /** The piece finished Pressing: the order can be packed from here (no weight is asked: it comes from Receiving). */
   readonly canPack = computed(() => {
     const c = this.card();
-    return !!c && c.stage === 'pressing' && this.auth.can('production.update');
+    return !!c && c.stage === 'pressing' && this.auth.can('quality.pack');
   });
 
   packOrder(): void {

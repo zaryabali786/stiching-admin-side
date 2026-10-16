@@ -112,7 +112,7 @@
               <a class="link small" [routerLink]="['/partner/production/jobs', c.id]" [attr.aria-label]="'Open job card for ' + c.unit_title">Open job card</a>
               <a *can="'messages.view'" class="link small" [routerLink]="['/partner/messages', c.order_id]" [queryParams]="{ unit: c.unit_id }" [attr.aria-label]="'Message the customer about ' + c.unit_title">Message customer</a>
               <span class="spacer"></span>
-              <div *can="'quality.update'" class="qc-actions">
+              <div *can="'quality.pass'" class="qc-actions">
                 <button type="button" class="btn btn-floor btn-back" [disabled]="isBusy('card:' + c.id)" (click)="sendBack(c)" [attr.aria-label]="'Send ' + c.unit_title + ' back to the tailor'">
                   <span [class.urdu]="lang.isUrdu()">{{ lang.t('Send back', 'واپس بھیجیں') }}</span>
                 </button>
@@ -172,7 +172,7 @@
                     <a *can="'messages.view'" class="link small" [routerLink]="['/partner/messages', c.order_id]" [queryParams]="{ unit: c.unit_id }" [attr.aria-label]="'Message the customer about ' + c.unit_title">Message customer</a>
                     <span class="spacer"></span>
                     @if (c.approval_status !== 'approved') {
-                      <button *can="'quality.update'" type="button" class="btn btn-floor" (click)="openApproval(c)" [attr.aria-label]="(c.approval_status === 'pending' ? 'Resend photos for ' : 'Send photos to the customer for ') + c.unit_title">
+                      <button *can="'quality.approval'" type="button" class="btn btn-floor" (click)="openApproval(c)" [attr.aria-label]="(c.approval_status === 'pending' ? 'Resend photos for ' : 'Send photos to the customer for ') + c.unit_title">
                         <span [class.urdu]="lang.isUrdu()">{{ c.approval_status === 'pending' ? lang.t('Resend photos', 'تصاویر دوبارہ بھیجیں') : lang.t('Send photos to the customer', 'گاہک کو تصاویر بھیجیں') }}</span>
                       </button>
                     }
@@ -185,7 +185,7 @@
               @if (waiting(g).length) {
                 <p class="pack-reason" role="status">Waiting for the customer to approve: {{ waitingTitles(g) }}</p>
               }
-              <button *can="'quality.update'" type="button" class="btn btn-primary btn-floor" (click)="openPack(g)" [disabled]="waiting(g).length > 0"
+              <button *can="'quality.pack'" type="button" class="btn btn-primary btn-floor" (click)="openPack(g)" [disabled]="waiting(g).length > 0"
                 [attr.title]="waiting(g).length ? 'Waiting for the customer to approve: ' + waitingTitles(g) : null">
                 <span [class.urdu]="lang.isUrdu()">{{ lang.t('Send to Pressing', 'پریسنگ کو بھیجیں') }}</span>
               </button>

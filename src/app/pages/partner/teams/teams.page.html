@@ -1,5 +1,6 @@
-<div class="page">
-  <header class="page-header">
+<div class="page" [class.embedded]="embedded()">
+  <header class="page-header" [class.embedded]="embedded()">
+    @if (!embedded()) {
     <div>
       <span class="eyebrow">Masters, tailors, quality check, pressing and packing</span>
       <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Teams and capacity', 'ٹیمیں اور گنجائش') }}</h1>
@@ -7,6 +8,7 @@
         {{ lang.t('Each master cuts for their own tailors. New work goes to the least busy team and person.', 'ہر ماسٹر اپنے درزیوں کے لیے کٹنگ کرتا ہے۔ نیا کام سب سے کم مصروف ٹیم کے پاس جاتا ہے۔') }}
       </p>
     </div>
+    }
     <div *can="'teams.update'" class="actions">
       <button type="button" class="btn" (click)="openAdd('qa')">
         <span [class.urdu]="lang.isUrdu()">+ {{ lang.t('Add QA / pressing / packing', 'کیو اے / پریسنگ / پیکنگ شامل کریں') }}</span>
@@ -79,7 +81,7 @@
               <div class="team-title">
                 <h3>{{ team.name }}</h3>
                 @if (team.login) { <span class="muted tiny login-tag" [title]="'Login: ' + team.login.email">🔑 {{ team.login.email }}{{ team.login.is_active ? '' : ' (off)' }}</span> }
-                @else if (access() && team.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(team)">+ Create login</button> }
+                @else if (team.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(team)">+ Link user</button> }
                 <span class="muted small">Cutting · {{ activeTailors(team) }} tailor{{ activeTailors(team) === 1 ? '' : 's' }} · {{ team.daily_capacity }}/day</span>
               </div>
               @if (!team.is_active) {
@@ -107,7 +109,7 @@
                   <div class="t-info">
                     <span class="t-name">{{ t.name }}</span>
                     @if (t.login) { <span class="muted tiny login-tag" [title]="'Login: ' + t.login.email">🔑 {{ t.login.email }}{{ t.login.is_active ? '' : ' (off)' }}</span> }
-                    @else if (access() && t.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(t)">+ Create login</button> }
+                    @else if (t.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(t)">+ Link user</button> }
                     <span class="muted tiny">{{ t.assigned === 0 ? 'No jobs' : t.assigned + (t.assigned === 1 ? ' job' : ' jobs') }} · {{ t.daily_capacity }}/day</span>
                   </div>
                   <div class="t-track" aria-hidden="true"><div [class]="'fill ' + loadTone(t.load_pct)" [style.width.%]="t.load_pct > 100 ? 100 : t.load_pct"></div></div>
@@ -162,7 +164,7 @@
                 <div class="t-info">
                   <span class="t-name">{{ t.name }}</span>
                   @if (t.login) { <span class="muted tiny login-tag" [title]="'Login: ' + t.login.email">🔑 {{ t.login.email }}{{ t.login.is_active ? '' : ' (off)' }}</span> }
-                  @else if (canCreateLogin() && t.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(t)">+ Create login</button> }
+                  @else if (t.is_active) { <button *can="'teams.update'" type="button" class="link-btn tiny" (click)="addLoginTo(t)">+ Link user</button> }
                 </div>
                 <span class="badge blue">{{ roleName(t.role) }}</span>
                 <div class="row-actions">
@@ -230,6 +232,18 @@
       </div>
       <div class="modal-body">
         <div class="field">
+          <label for="tm-user">User *</label>
+          <select id="tm-user" class="select" [ngModel]="f.user_id" (ngModelChange)="pickUser($event)">
+            <option value="">{{ f.id ? 'No user linked' : 'Choose the user this person signs in with…' }}</option>
+            @for (u of users(); track u.id) { <option [value]="u.id">{{ u.full_name || u.email }} · {{ u.email }}</option> }
+          </select>
+          @if (!users().length) {
+            <span class="hint">There is no user left to link. First add the person on the <a class="link" routerLink="/partner/users">Users</a> page, then come back here.</span>
+          } @else {
+            <span class="hint">The person must already be added as a user. Their scans and work count for this team member.</span>
+          }
+        </div>
+        <div class="field">
           <label for="tm-name">Name *</label>
           <input id="tm-name" class="input" [ngModel]="f.name" (ngModelChange)="patchForm({ name: $event })" [placeholder]="f.role === 'master' ? 'e.g. Master Farooq' : f.role === 'tailor' ? 'e.g. Tariq' : 'e.g. Imran'" maxlength="80" />
         </div>
@@ -257,60 +271,6 @@
             </select>
           </div>
         }
-        @if (f.hasLogin && canManageLogin()) {
-          <div class="login-box">
-            <strong class="login-title">Login</strong>
-            <div class="form-grid">
-              <div class="field">
-                <label for="tm-email-e">Email (their login) *</label>
-                <input id="tm-email-e" class="input" type="email" autocomplete="off" maxlength="160" [ngModel]="f.email" (ngModelChange)="patchForm({ email: $event })" />
-              </div>
-              <div class="field">
-                <label for="tm-pw-e">New password <span class="muted">(optional)</span></label>
-                <span class="pw-wrap">
-                  <input id="tm-pw-e" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [ngModel]="f.password" (ngModelChange)="patchForm({ password: $event })" />
-                  <button type="button" class="btn btn-sm btn-ghost" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
-                </span>
-                <span class="hint">Leave empty to keep the current password. They choose their own at the next sign-in.</span>
-              </div>
-            </div>
-            @if (access(); as acc) {
-              <app-permission-matrix [modules]="acc.modules" [available]="acc.delegable" [(value)]="formPerms" [disabled]="saving()" />
-              @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so they will not be able to open any page.</p> }
-            } @else {
-              <p class="hint-line">Loading the permissions you can give. If you are an admin, choose a partner at the top first.</p>
-            }
-          </div>
-        } @else if (canCreateLogin() && !f.hasLogin) {
-          <div class="login-box">
-            <label class="login-toggle">
-              <input type="checkbox" [ngModel]="f.withLogin" (ngModelChange)="patchForm({ withLogin: $event })" />
-              <span>{{ f.id ? 'Create a login for this person' : 'Give them their own login' }}</span>
-            </label>
-            @if (f.withLogin) {
-              <div class="form-grid">
-                <div class="field">
-                  <label for="tm-email">Email (their login) *</label>
-                  <input id="tm-email" class="input" type="email" autocomplete="off" maxlength="160" [ngModel]="f.email" (ngModelChange)="patchForm({ email: $event })" />
-                </div>
-                <div class="field">
-                  <label for="tm-pw">Temporary password <span class="muted">(optional)</span></label>
-                  <span class="pw-wrap">
-                    <input id="tm-pw" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [ngModel]="f.password" (ngModelChange)="patchForm({ password: $event })" />
-                    <button type="button" class="btn btn-sm btn-ghost" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
-                  </span>
-                  <span class="hint">Leave empty to generate one. They choose their own at first sign-in.</span>
-                </div>
-              </div>
-              @if (access(); as acc) {
-                <app-permission-matrix [modules]="acc.modules" [available]="acc.delegable" [(value)]="formPerms" [disabled]="saving()" />
-                @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so they will not be able to open any page.</p> }
-              } @else {
-                <p class="hint-line">Loading the permissions you can give. If you are an admin, choose a partner at the top first.</p>
-              }
-            }
-          </div>
-        }
         @if (formTouched() && formError(f); as msg) {
           <p class="form-error" role="alert">{{ msg }}</p>
         }
@@ -324,8 +284,4 @@
       </div>
     </div>
   </div>
-}
-
-@if (credential(); as c) {
-  <app-temp-password-dialog title="Login created" [name]="c.name" [email]="c.email" [password]="c.password" (closed)="credential.set(null)" />
 }

@@ -17,6 +17,8 @@ export interface PermissionModule {
   label: string;
   description: string;
   actions: PermissionAction[];
+  /** The module's detailed actions (one tick per button); `<module id>.update` brings all of them. */
+  detail?: { id: string; label: string; description: string }[];
 }
 
 /** Which portal's endpoints the users panel talks to. */
@@ -86,6 +88,10 @@ export interface PartnerUser {
   created_at: string;
   is_owner: boolean;
   is_me: boolean;
+  /** The roles this person holds: their access is exactly what these roles give. */
+  role_ids?: string[];
+  /** The team member (master, tailor...) this login is tagged with. */
+  team_member?: { id: string; name: string; role: string } | null;
 }
 
 /** Create / reset results: the temporary password is returned this once and never again. */
@@ -165,9 +171,15 @@ export interface UserCreateInput {
   full_name: string;
   phone?: string;
   job_title?: string;
-  permissions: string[];
+  permissions?: string[];
+  /** The roles to give: everything the person may do comes from them. */
+  role_ids?: string[];
+  /** Tag the login with this team member (master, tailor...). */
+  team_member_id?: string | null;
   /** Leave out to let the server generate a temporary password. */
   password?: string;
+  /** false = they keep the password you set (default: they must choose their own at first sign-in). */
+  must_change_password?: boolean;
 }
 
 export interface UserPatch {
@@ -176,6 +188,8 @@ export interface UserPatch {
   phone?: string;
   job_title?: string;
   permissions?: string[];
+  role_ids?: string[];
+  team_member_id?: string | null;
   is_active?: boolean;
 }
 
@@ -231,6 +245,11 @@ export class PartnerAdminService {
 
   resetPassword(api: PartnerUsersApi, userId: string): Observable<UserCredential> {
     return this.api.post<UserCredential>(`${usersBase(api)}/${encodeURIComponent(userId)}/reset-password`);
+  }
+
+  /** Active team members a login can be tagged with (plus the one this user already has). */
+  taggableTeam(userId?: string | null): Observable<{ id: string; name: string; role: string }[]> {
+    return this.api.get<{ id: string; name: string; role: string }[]>('/partner/users/team-members', userId ? { user_id: userId } : undefined);
   }
 
   /** Switches the login off (history stays). */

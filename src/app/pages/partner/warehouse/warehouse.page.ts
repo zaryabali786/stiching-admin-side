@@ -6,15 +6,15 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
-import { Subject, debounceTime, catchError, combineLatest, forkJoin, map, of, startWith, switchMap, tap } from 'rxjs';
+import { Subject, firstValueFrom, debounceTime, catchError, combineLatest, forkJoin, map, of, startWith, switchMap, tap } from 'rxjs';
 import { PageMeta } from '../../../core/models/api.models';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { BadgeService } from '../../../core/services/badge.service';
 import { LanguageService } from '../../../core/services/language.service';
 import { CatalogueService } from '../../../core/services/catalogue.service';
-import { DispatchRoute, DispatchShipment, PartnerService, Transfer, WarehouseMeta, WarehouseOrder, WarehouseTab } from '../../../core/services/partner.service';
+import { BulkBookResult, DispatchRoute, DispatchShipment, PartnerService, Transfer, WarehouseMeta, WarehouseOrder, WarehouseTab } from '../../../core/services/partner.service';
 import { UiService } from '../../../core/services/ui.service';
-import { DayPipe, HumanizePipe, PkrPipe } from '../../../shared/pipes';
+import { DayPipe, HumanizePipe } from '../../../shared/pipes';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
@@ -35,7 +35,7 @@ const DOMESTIC = ['pakistan', 'pk'];
 @Component({
   selector: 'app-partner-warehouse',
   standalone: true,
-  imports: [CourierSelectComponent, FormsModule, IonSpinner, DayPipe, HumanizePipe, PkrPipe, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent],
+  imports: [CourierSelectComponent, FormsModule, IonSpinner, DayPipe, HumanizePipe, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent],
   templateUrl: './warehouse.page.html',
   styleUrls: ['./warehouse.page.scss'],
 })
@@ -43,7 +43,12 @@ export class PartnerWarehousePage implements OnInit {
   readonly lang = inject(LanguageService);
   private auth = inject(AuthService);
   /** May this person change things here? View-only people see the data but no working buttons (the server re-checks every request). */
-  readonly canEdit = computed(() => this.auth.can('warehouse.update'));
+  /** Any change in the Warehouse; the buttons below each need their own action. */
+  readonly canEdit = computed(() => this.auth.canAny('warehouse.book', 'warehouse.loadsheet', 'warehouse.tracking', 'warehouse.transfer'));
+  readonly canBook = computed(() => this.auth.can('warehouse.book'));
+  readonly canLoadsheet = computed(() => this.auth.can('warehouse.loadsheet'));
+  readonly canTrack = computed(() => this.auth.can('warehouse.tracking'));
+  readonly canTransfer = computed(() => this.auth.can('warehouse.transfer'));
   private partner = inject(PartnerService);
   private ui = inject(UiService);
   private catalogueApi = inject(CatalogueService);
@@ -73,6 +78,17 @@ export class PartnerWarehousePage implements OnInit {
   readonly routeChoice = signal<DispatchRoute>('admin_warehouse');
   readonly selected = computed(() => this.orders().find((o) => o.id === this.selectedId()) ?? null);
 
+  // Bulk booking (Paid tab): tick orders, then Bulk action
+  readonly bulkSel = signal<ReadonlySet<string>>(new Set());
+  readonly bulkMenuOpen = signal(false);
+  readonly bulkDlg = signal<{ mode: 'api' | 'manual'; courierName: string | null; courier: CourierRef | null; route: DispatchRoute; results: BulkBookResult['results'] | null } | null>(null);
+  readonly bulkBusy = signal(false);
+  /** The paid orders of this page that can still be booked (no booking yet). */
+  readonly bulkable = computed(() => (this.tab() === 'paid' ? this.orders().filter((o) => !o.shipment || o.shipment.status === 'needs_label') : []));
+  readonly allBulkSelected = computed(() => this.bulkable().length > 0 && this.bulkable().every((o) => this.bulkSel().has(o.id)));
+  /** Cn typed for parcels that were booked by hand without one, by shipment id. */
+  readonly cnDraft = signal<Record<string, string>>({});
+
   // Ship modal
   readonly shipForm = signal<{ order: WarehouseOrder; courier: CourierRef | null; tracking: string; manual: boolean } | null>(null);
   /** Couriers with an API connection (PostEx), and whether the server has it set up. */
@@ -87,6 +103,7 @@ export class PartnerWarehousePage implements OnInit {
   readonly openTransfer = computed(() => this.transfers().find((t) => t.status === 'open') ?? null);
 
   ngOnInit(): void {
+    this.partner.apiCouriers().subscribe({ next: (list) => this.apiCouriers.set(list), error: () => undefined });
     // a parcel moved (booked, downloaded, handed over, delivered, failed): the tabs follow without a refresh
     this.socket.on('shipment:update').pipe(debounceTime(400), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.refresh());
     combineLatest([this.route.queryParamMap, this.reload$.pipe(startWith(undefined))])
@@ -126,6 +143,9 @@ export class PartnerWarehousePage implements OnInit {
         }
         this.orders.set(r.items);
         this.meta.set(r.meta);
+        this.bulkSel.update((sel) => new Set([...sel].filter((id) => r.items.some((o) => o.id === id))));
+        this.bulkMenuOpen.set(false);
+        this.picked.update((p) => new Set([...p].filter((id) => r.items.some((o) => o.shipment?.id === id))));
         this.weightEdit.set(null);
         // Keep the route card on a visible order.
         if (this.tab() === 'paid') {
@@ -221,7 +241,7 @@ export class PartnerWarehousePage implements OnInit {
   }
 
   canEditWeight(o: WarehouseOrder): boolean {
-    return this.canEdit() && ['packed', 'invoice_issued', 'awaiting_payment', 'paid', 'partner_dispatch'].includes(o.status);
+    return this.canBook() && ['packed', 'invoice_issued', 'awaiting_payment', 'paid', 'partner_dispatch'].includes(o.status);
   }
 
   // ───────────── Weight ─────────────
@@ -274,7 +294,34 @@ export class PartnerWarehousePage implements OnInit {
   }
 
   onRowClick(o: WarehouseOrder): void {
-    if (this.tab() === 'paid' && this.canEdit() && !o.shipment) this.select(o);
+    if (this.tab() === 'paid') {
+      if (this.canBook() && !o.shipment) this.select(o);
+      return;
+    }
+    this.detailId.set(o.id);
+  }
+
+  // ───────────── Details drawer + courier status ─────────────
+
+  readonly detailId = signal<string | null>(null);
+  readonly detail = computed(() => this.orders().find((o) => o.id === this.detailId()) ?? null);
+  /** Tabs that show the courier's status of a parcel (and nothing else about its progress). */
+  courierTab(): boolean {
+    return ['dispatched', 'delivered', 'failed_delivery'].includes(this.tab());
+  }
+
+  courierStatus(s: DispatchShipment): string {
+    const map: Record<string, string> = {
+      handed_to_courier: 'Dispatched', in_transit: 'In transit', delivered: 'Delivered', failed_delivery: 'Attempt failed',
+      returning_to_partner: 'Returning to us', returned_to_partner: 'Received back',
+    };
+    return map[s.status] ?? this.shipLabel(s);
+  }
+
+  /** A courier whose tracking comes through its API (its status is read from the courier, not typed). */
+  isApiCourier(s: DispatchShipment | null | undefined): boolean {
+    const c = (s?.courier ?? '').trim().toLowerCase();
+    return !!c && this.apiCouriers().some((a) => a.name.toLowerCase() === c);
   }
 
   confirmRoute(): void {
@@ -294,6 +341,115 @@ export class PartnerWarehousePage implements OnInit {
         this.ui.success(res.message || 'Route saved.');
         this.selectedId.set(null);
         this.refresh(true);
+      },
+      error: (e) => {
+        this.setBusy(key, false);
+        this.ui.error(e);
+      },
+    });
+  }
+
+  // ───────────── Bulk booking ─────────────
+
+  toggleBulk(id: string): void {
+    this.bulkSel.update((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  toggleAllBulk(): void {
+    this.bulkSel.set(this.allBulkSelected() ? new Set() : new Set(this.bulkable().map((o) => o.id)));
+  }
+
+  clearBulk(): void {
+    this.bulkSel.set(new Set());
+    this.bulkMenuOpen.set(false);
+  }
+
+  toggleBulkMenu(): void {
+    if (!this.apiCouriers().length) this.partner.apiCouriers().subscribe({ next: (list) => this.apiCouriers.set(list), error: () => undefined });
+    this.bulkMenuOpen.update((v) => !v);
+  }
+
+  openBulk(mode: 'api' | 'manual', courierName: string | null = null): void {
+    this.bulkMenuOpen.set(false);
+    if (!this.bulkSel().size) return;
+    this.bulkDlg.set({ mode, courierName, courier: null, route: 'direct_dispatch', results: null });
+  }
+
+  patchBulk(patch: { courier?: CourierRef | null; route?: DispatchRoute }): void {
+    this.bulkDlg.update((d) => (d ? { ...d, ...patch } : d));
+  }
+
+  closeBulk(): void {
+    if (this.bulkBusy()) return;
+    this.bulkDlg.set(null);
+  }
+
+  /** The bulk action button is ready: the dialog needs a courier for a manual booking that goes directly to the customer. */
+  bulkReady(d: { mode: 'api' | 'manual'; courier: CourierRef | null; route: DispatchRoute }): boolean {
+    return d.route === 'admin_warehouse' || d.mode === 'api' || !!d.courier;
+  }
+
+  confirmBulk(): void {
+    const d = this.bulkDlg();
+    const ids = [...this.bulkSel()];
+    if (!d || !ids.length || this.bulkBusy() || !this.bulkReady(d)) return;
+    this.bulkBusy.set(true);
+    const body = d.route === 'admin_warehouse'
+      ? { order_ids: ids, route: d.route }
+      : d.mode === 'api'
+        ? { order_ids: ids, route: d.route, mode: 'api' as const, courier: d.courierName ?? '' }
+        : { order_ids: ids, route: d.route, mode: 'manual' as const, courier_id: d.courier!.id };
+    this.partner.bulkBook(body).subscribe({
+      next: (res) => {
+        this.bulkBusy.set(false);
+        this.bulkDlg.update((x) => (x ? { ...x, results: res.data.results } : x));
+        // only the orders that failed stay ticked, so they can be tried again
+        const failed = new Set(res.data.results.filter((r) => !r.ok).map((r) => r.order_id));
+        this.bulkSel.set(failed);
+        if (res.data.failed) this.ui.error(res.message);
+        else this.ui.success(res.message);
+        this.refresh(d.route === 'admin_warehouse');
+      },
+      error: (e) => {
+        this.bulkBusy.set(false);
+        this.ui.error(e);
+      },
+    });
+  }
+
+  // ───────────── CN added later (manual bookings) ─────────────
+
+  needsCn(o: WarehouseOrder): boolean {
+    return o.shipment?.status === 'booked' && !o.shipment.tracking_number;
+  }
+
+  setCnDraft(shipmentId: string, value: string): void {
+    this.cnDraft.update((m) => ({ ...m, [shipmentId]: value }));
+  }
+
+  saveCn(o: WarehouseOrder): void {
+    const sh = o.shipment;
+    const cn = (this.cnDraft()[sh?.id ?? ''] ?? '').trim();
+    if (!sh || cn.length < 4) {
+      this.ui.error('Enter the CN number the courier gave for this parcel.');
+      return;
+    }
+    const key = `cn:${o.id}`;
+    this.setBusy(key, true);
+    this.partner.addDispatchCn(sh.id, cn).subscribe({
+      next: (res) => {
+        this.setBusy(key, false);
+        this.cnDraft.update((m) => {
+          const { [sh.id]: _gone, ...rest } = m;
+          return rest;
+        });
+        this.ui.success(res.message || 'CN saved.');
+        this.refresh();
       },
       error: (e) => {
         this.setBusy(key, false);
@@ -383,8 +539,8 @@ export class PartnerWarehousePage implements OnInit {
   readonly trackSaving = signal(false);
 
   /** Parcels of this page whose CN is booked or whose loadsheet was downloaded. */
-  readyShipments(): { id: string; courier: string; status: string; sheet: string | null }[] {
-    return this.orders().filter((o) => o.shipment && ['booked', 'labelled'].includes(o.shipment.status)).map((o) => ({ id: o.shipment!.id, courier: o.shipment!.courier ?? '', status: o.shipment!.status, sheet: o.shipment!.loadsheet_id ?? null }));
+  readyShipments(): { id: string; courier: string; status: string; sheet: string | null; cn: boolean }[] {
+    return this.orders().filter((o) => o.shipment && ['booked', 'labelled'].includes(o.shipment.status)).map((o) => ({ id: o.shipment!.id, courier: o.shipment!.courier ?? '', status: o.shipment!.status, sheet: o.shipment!.loadsheet_id ?? null, cn: !!o.shipment!.tracking_number }));
   }
 
   readyCouriers(): string[] {
@@ -395,9 +551,186 @@ export class PartnerWarehousePage implements OnInit {
     return this.picked().has(id);
   }
 
+  /** A parcel can be ticked once it has its CN (a manual booking waits for it). One courier per loadsheet is checked when the loadsheet is made. */
   canPick(sh: DispatchShipment): boolean {
-    const first = this.readyShipments().find((s) => this.picked().has(s.id));
-    return !first || first.courier === (sh.courier ?? '');
+    return !!sh.tracking_number;
+  }
+
+  readonly readyMenuOpen = signal(false);
+
+  /** The parcels of this page that can be ticked. */
+  readonly pickable = computed(() => {
+    if (this.tab() === 'ready_dispatch') return this.orders().filter((o) => o.shipment && ['booked', 'labelled'].includes(o.shipment.status) && !!o.shipment.tracking_number);
+    if (this.tab() === 'dispatched') return this.orders().filter((o) => !!o.shipment);
+    return [];
+  });
+  readonly allPicked = computed(() => this.pickable().length > 0 && this.pickable().every((o) => this.picked().has(o.shipment!.id)));
+
+  toggleAllPicked(): void {
+    this.picked.set(this.allPicked() ? new Set() : new Set(this.pickable().map((o) => o.shipment!.id)));
+  }
+
+  /** Bulk action > Cancel booking: every ticked parcel that is booked and not on a downloaded loadsheet. */
+  async bulkCancelBookings(): Promise<void> {
+    this.readyMenuOpen.set(false);
+    const targets = this.orders().filter((o) => o.shipment && this.picked().has(o.shipment.id));
+    const cancellable = targets.filter((o) => o.shipment!.status === 'booked');
+    if (!cancellable.length) {
+      this.ui.error('None of the ticked parcels can be cancelled: their loadsheet was already downloaded.');
+      return;
+    }
+    const ok = await this.ui.confirm({
+      title: `Cancel ${cancellable.length} booking${cancellable.length === 1 ? '' : 's'}?`,
+      message: `${targets.length - cancellable.length ? `${targets.length - cancellable.length} ticked parcel(s) already have a downloaded loadsheet and are skipped. ` : ''}A booking made through a courier's API is cancelled at the courier too. The parcels go back to the Paid tab.`,
+      confirmText: 'Cancel bookings',
+    });
+    if (!ok) return;
+    this.sheetBusy.set(true);
+    let done = 0;
+    const failed: string[] = [];
+    const next = (i: number): void => {
+      if (i >= cancellable.length) {
+        this.sheetBusy.set(false);
+        this.picked.set(new Set());
+        if (failed.length) this.ui.error(`${done} cancelled. Could not cancel: ${failed.join(', ')}.`);
+        else this.ui.success(`${done} booking${done === 1 ? '' : 's'} cancelled.`);
+        this.refresh();
+        return;
+      }
+      this.partner.cancelDispatchBooking(cancellable[i].id).subscribe({
+        next: () => {
+          done++;
+          next(i + 1);
+        },
+        error: () => {
+          failed.push(cancellable[i].reference);
+          next(i + 1);
+        },
+      });
+    };
+    next(0);
+  }
+
+  readonly listBusy = signal(false);
+
+  /** Bulk action > Download order list: a printable page with every order's QR code and its articles (code, name, quantity, brand, QR). */
+  downloadOrderList(): void {
+    this.bulkMenuOpen.set(false);
+    this.readyMenuOpen.set(false);
+    const ids = this.tab() === 'paid' ? [...this.bulkSel()] : this.pickedOrders().map((o) => o.id);
+    if (!ids.length || this.listBusy()) return;
+    this.listBusy.set(true);
+    this.partner.orderList(ids).subscribe({
+      next: (blob) => {
+        this.listBusy.set(false);
+        if (!blob || !blob.size) {
+          this.ui.error('The order list was empty.');
+          return;
+        }
+        const url = URL.createObjectURL(new Blob([blob], { type: 'text/html' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `order-list-${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        this.ui.success(`Order list downloaded (${ids.length} order${ids.length === 1 ? '' : 's'}). Open it to print or save as PDF.`);
+      },
+      error: (e) => {
+        this.listBusy.set(false);
+        const body = (e as { error?: unknown })?.error;
+        if (body instanceof Blob) {
+          body.text().then((t) => {
+            try { this.ui.error(JSON.parse(t).message || 'Could not make the order list.'); } catch { this.ui.error('Could not make the order list.'); }
+          });
+        } else this.ui.error(e);
+      },
+    });
+  }
+
+  /** The ticked parcels of this page, with their orders. */
+  private pickedOrders(): WarehouseOrder[] {
+    return this.orders().filter((o) => o.shipment && this.picked().has(o.shipment.id));
+  }
+
+  /** Bulk action > Refresh courier tracking: only parcels of a courier with an API (PostEx); manual couriers are skipped. */
+  async bulkRefreshTracking(): Promise<void> {
+    this.readyMenuOpen.set(false);
+    const api = this.pickedOrders().filter((o) => this.isPostex(o));
+    const skipped = this.picked().size - api.length;
+    if (!api.length) {
+      this.ui.error('Refresh works for couriers connected through their API. The ticked parcels use manual couriers: use the status options instead.');
+      return;
+    }
+    this.sheetBusy.set(true);
+    let applied = 0;
+    const failed: string[] = [];
+    for (const o of api) {
+      try {
+        const res = await firstValueFrom(this.partner.refreshDispatchTracking(o.shipment!.id));
+        applied += res.data?.applied ?? 0;
+      } catch {
+        failed.push(o.reference);
+      }
+    }
+    this.sheetBusy.set(false);
+    const text = `${api.length - failed.length} refreshed${applied ? `, ${applied} new update${applied === 1 ? '' : 's'}` : ', no new updates'}${skipped ? `. ${skipped} manual-courier parcel(s) skipped` : ''}${failed.length ? `. Failed: ${failed.join(', ')}` : ''}.`;
+    if (failed.length) this.ui.error(text);
+    else this.ui.success(text);
+    this.refresh();
+  }
+
+  readonly bulkTrack = signal<{ status: 'in_transit' | 'delivered' | 'failed_delivery' | 'returning_to_partner'; note: string; reason: string } | null>(null);
+
+  /** Bulk action > a courier status (manual couriers). */
+  openBulkTrack(status: 'in_transit' | 'delivered' | 'failed_delivery' | 'returning_to_partner'): void {
+    this.readyMenuOpen.set(false);
+    if (!this.pickedOrders().some((o) => !this.isApiCourier(o.shipment))) {
+      this.ui.error('The ticked parcels use a courier connected through its API: their status comes from the courier. Use Refresh courier tracking.');
+      return;
+    }
+    this.bulkTrack.set({ status, note: '', reason: '' });
+  }
+
+  async confirmBulkTrack(): Promise<void> {
+    const f = this.bulkTrack();
+    if (!f || this.trackSaving()) return;
+    const manual = this.pickedOrders().filter((o) => !this.isApiCourier(o.shipment));
+    const skipped = this.picked().size - manual.length;
+    this.trackSaving.set(true);
+    const failed: string[] = [];
+    for (const o of manual) {
+      try {
+        await firstValueFrom(this.partner.updateDispatchTracking(o.shipment!.id, { status: f.status, note: f.note.trim() || undefined, reason: f.reason.trim() || undefined }));
+      } catch (e) {
+        failed.push(`${o.reference} (${apiErrorMessage(e)})`);
+      }
+    }
+    this.trackSaving.set(false);
+    this.bulkTrack.set(null);
+    this.picked.set(new Set());
+    const text = `${manual.length - failed.length} parcel${manual.length - failed.length === 1 ? '' : 's'} updated${skipped ? `. ${skipped} API-courier parcel(s) skipped` : ''}${failed.length ? `. Not updated: ${failed.join('; ')}` : ''}.`;
+    if (failed.length) this.ui.error(text);
+    else this.ui.success(text);
+    this.refresh();
+  }
+
+  /** Bulk action > Print CN. */
+  bulkPrintCn(): void {
+    this.readyMenuOpen.set(false);
+    this.printCn([...this.picked()]);
+  }
+
+  /** Bulk action > Generate loadsheet (one courier per loadsheet). */
+  bulkLoadsheet(): void {
+    this.readyMenuOpen.set(false);
+    const couriers = new Set(this.readyShipments().filter((s) => this.picked().has(s.id)).map((s) => s.courier));
+    if (couriers.size > 1) {
+      this.ui.error('A loadsheet is for one courier. Tick the parcels of one courier only.');
+      return;
+    }
+    this.downloadLoadsheet();
   }
 
   togglePick(id: string): void {
@@ -410,7 +743,7 @@ export class PartnerWarehousePage implements OnInit {
   }
 
   pickAllOf(courier: string): void {
-    this.picked.set(new Set(this.readyShipments().filter((s) => s.courier === courier).map((s) => s.id)));
+    this.picked.set(new Set(this.readyShipments().filter((s) => s.courier === courier && s.cn).map((s) => s.id)));
   }
 
   clearPicked(): void {
@@ -507,11 +840,22 @@ export class PartnerWarehousePage implements OnInit {
             setTimeout(() => URL.revokeObjectURL(url), 2000);
             this.partner.markLoadsheetDownloaded(sheet.id).subscribe({
               next: (res) => {
-                this.sheetBusy.set(false);
                 this.picked.set(new Set());
-                this.pendingHandover.set({ id: sheet.id, number: sheet.number, count: sheet.count });
-                this.ui.success(res.message || `${sheet.number} downloaded.`);
-                this.refresh();
+                // the loadsheet is saved: the parcels go straight to Dispatched (no separate "confirm handed over" step)
+                this.partner.confirmDispatchHandover(sheet.id).subscribe({
+                  next: (done) => {
+                    this.sheetBusy.set(false);
+                    this.ui.success(done.message || `${sheet.number} downloaded. Parcels dispatched.`);
+                    this.go({ tab: 'dispatched', page: null });
+                  },
+                  error: (e) => {
+                    // the file is saved but the dispatch failed: the handover bar stays so it can be confirmed again
+                    this.sheetBusy.set(false);
+                    this.pendingHandover.set({ id: sheet.id, number: sheet.number, count: sheet.count });
+                    this.ui.error(e);
+                    this.refresh();
+                  },
+                });
               },
               error: (e) => {
                 this.sheetBusy.set(false);
@@ -623,7 +967,7 @@ export class PartnerWarehousePage implements OnInit {
 
   shipLabel(s: DispatchShipment): string {
     const map: Record<string, string> = {
-      needs_label: 'No courier booked', booked: 'CN booked · ready for dispatch', labelled: 'Loadsheet downloaded · confirm handover', handed_to_courier: 'Dispatched', in_transit: 'In transit',
+      needs_label: 'No courier booked', booked: s.tracking_number ? 'CN booked · ready for dispatch' : 'Booked · CN to be added', labelled: 'Loadsheet downloaded · confirm handover', handed_to_courier: 'Dispatched', in_transit: 'In transit',
       delivered: 'Delivered', failed_delivery: 'Delivery attempt failed', returning_to_partner: 'Returning to the partner', returned_to_partner: 'Received back',
     };
     return map[s.status] ?? s.status;

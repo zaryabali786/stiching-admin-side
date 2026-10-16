@@ -50,6 +50,16 @@ export class AuthService {
     return 'Customer';
   });
 
+  /** Admin modules of a restricted admin; null for a full admin (and for everybody who is not an admin). */
+  readonly adminModules = computed(() => this.user()?.admin_modules ?? null);
+  /** An admin without restrictions: every module, and user management. */
+  readonly isFullAdmin = computed(() => this.isAdmin() && this.adminModules() === null);
+
+  /** May this admin open the admin module (e.g. 'invoices')? A full admin may open all of them. */
+  canAdminModule(id: string): boolean {
+    return this.isAdmin() && (this.adminModules() === null || this.adminModules()!.includes(id));
+  }
+
   /** May the signed-in person use this? e.g. can('production.update'). Admins can do everything. */
   can(permission: string): boolean {
     return this.isAdmin() || this.permissions().has(permission);
@@ -173,11 +183,22 @@ export class AuthService {
     return pages.find(([permission]) => this.can(permission))?.[1] ?? '/forbidden';
   }
 
+  /** The first page of the admin portal this admin may open (a restricted admin may not have Overview). */
+  private firstAdminPage(): string {
+    const pages: [string, string][] = [
+      ['overview', '/admin/overview'], ['orders', '/admin/orders'], ['messages', '/admin/messages'], ['support', '/admin/support'],
+      ['warehouse', '/admin/warehouse'], ['invoices', '/admin/invoices'], ['reports', '/admin/reports'], ['customers', '/admin/customers'],
+      ['partners', '/admin/partners'], ['price_list', '/admin/price-list'], ['shipping', '/admin/shipping'], ['settings', '/admin/settings'],
+      ['app_builder', '/admin/home-layout'], ['portal_theme', '/admin/portal-theme'],
+    ];
+    return pages.find(([id]) => this.canAdminModule(id))?.[1] ?? '/forbidden';
+  }
+
   /** Where this user should land after logging in. */
   homeUrl(): string {
     if (this.mustChangePassword()) return '/change-password';
     const role = this.role();
-    if (role === 'admin') return '/admin/overview';
+    if (role === 'admin') return this.firstAdminPage();
     if (role === 'partner_staff') return this.firstPartnerPage();
     return '/login';
   }

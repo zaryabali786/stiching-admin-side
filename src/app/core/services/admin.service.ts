@@ -96,7 +96,7 @@ export interface AdminOrderRow {
   units_count: number;
 }
 
-/** Express stitching: can customers ask for it, and how many days it takes (decided by the admin). */
+/** Priority stitching: can customers ask for it, how many days it takes, and its price (decided by the admin). */
 export interface ExpressStitchingSetting {
   enabled: boolean;
   days: number;
@@ -104,8 +104,8 @@ export interface ExpressStitchingSetting {
   price_pkr: number;
 }
 
-/** Express shipping: can customers ask for it, and how many days the delivery takes (decided by the admin). */
-export type ExpressShippingSetting = ExpressStitchingSetting;
+/** Fast shipping: can customers ask for it, and how many days the delivery takes (decided by the admin). It has no price. */
+export type ExpressShippingSetting = Omit<ExpressStitchingSetting, 'price_pkr'>;
 
 /** The PostEx connection as the admin sees it: the token itself is never returned, only its last 4 characters. */
 export interface PostexSettings {
@@ -259,6 +259,22 @@ export interface Invoice {
   paid_at: string | null;
   created_at?: string;
   lines?: InvoiceLine[];
+  /** Where the exchange rate came from: the day of the live rate it was taken on, or typed by hand. Saved with the invoice. */
+  fx?: { rate_date: string | null; source: 'live' | 'manual' } | null;
+}
+
+/** The latest available rate of a currency against PKR (PKR per 1 unit). */
+export interface FxRate {
+  currency: string;
+  base: string;
+  rate: number;
+  /** The day the rate is for (YYYY-MM-DD). */
+  rate_date: string;
+  is_today: boolean;
+  /** The live service could not be reached, so this is the newest rate saved earlier. */
+  stale: boolean;
+  source: string;
+  fetched_at: string;
 }
 
 export type ShipmentStatus = 'needs_label' | 'labelled' | 'handed_to_courier' | 'delivered';
@@ -394,7 +410,7 @@ export interface OrderUpdate {
   due_date?: string | null;
   priority?: 'normal' | 'rush';
   has_issue?: boolean;
-  /** Express stitching and the days the admin decided for it (the due date follows). */
+  /** Priority stitching and the days the admin decided for it (the due date follows). */
   express_stitching?: boolean;
   express_days?: number | null;
 }
@@ -426,7 +442,31 @@ export type UserRoleFilter = 'staff' | 'admin' | 'partner_staff' | 'customer';
 export type AdminUser = Pick<Profile, 'id' | 'full_name' | 'email' | 'phone' | 'role' | 'customer_code' | 'is_active' | 'created_at' | 'partner_role' | 'job_title'> & {
   /** Set for partner users (managed under Partners, not here). */
   partner?: PartnerChip | null;
+  /** Admins only: 'full' or 'restricted' (then `admin_modules` lists the modules they may open). */
+  admin_access?: 'full' | 'restricted';
+  admin_modules?: string[] | null;
+  /** The roles this admin user holds (their modules and actions come from these). */
+  role_ids?: string[];
 };
+
+export interface AdminModule {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface NewAdminUser {
+  full_name: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  job_title?: string;
+  full_access?: boolean;
+  modules?: string[];
+  /** The roles to give: the user may do exactly what they allow. */
+  role_ids?: string[];
+  must_change_password?: boolean;
+}
 
 // ── Partners ──
 export interface TeamMember {
@@ -651,6 +691,9 @@ export interface InvoiceBuilderData {
 export interface InvoiceDraft {
   currency: string;
   fx_rate: number;
+  /** The day of the live rate that was used (omitted for a rate typed by hand). */
+  fx_rate_date?: string | null;
+  fx_source?: 'live' | 'manual';
   notes: string | null;
   /** Shipping item from the price list; the server prices it. null clears a previous choice, undefined leaves it. */
   shipping_rate_id?: string | null;
@@ -764,8 +807,8 @@ export const LINE_KIND_OPTIONS: { value: InvoiceLineKind; label: string }[] = [
   { value: 'duties', label: 'Duties' },
   { value: 'discount', label: 'Discount' },
   { value: 'other', label: 'Other' },
-  { value: 'express_stitching', label: 'Express stitching' },
-  { value: 'express_shipping', label: 'Express shipping' },
+  { value: 'express_stitching', label: 'Priority stitching' },
+  { value: 'express_shipping', label: 'Fast shipping (older invoices only)' },
 ];
 
 export const PRICE_CATEGORY_OPTIONS: { value: PriceCategory; label: string }[] = [
@@ -922,6 +965,23 @@ export class AdminService {
     return this.send<Profile>('PATCH', `/admin/users/${id}/active`, { is_active: isActive });
   }
 
+  // ── Admin-side users and their modules (full admins only) ──
+  adminModules(): Observable<AdminModule[]> {
+    return this.api.get<AdminModule[]>('/admin/admin-modules');
+  }
+
+  createAdminUser(body: NewAdminUser): Observable<ApiResult<{ user: AdminUser; temporaryPassword: string }>> {
+    return this.send<{ user: AdminUser; temporaryPassword: string }>('POST', '/admin/users', body);
+  }
+
+  setAdminUserAccess(id: string, body: { modules?: string[]; role_ids?: string[]; full_access?: boolean; job_title?: string }): Observable<ApiResult<AdminUser>> {
+    return this.send<AdminUser>('PATCH', `/admin/users/${id}/access`, body);
+  }
+
+  resetAdminUserPassword(id: string): Observable<ApiResult<{ temporaryPassword: string }>> {
+    return this.send<{ temporaryPassword: string }>('POST', `/admin/users/${id}/reset-password`, {});
+  }
+
   // ── Partners & reports ──
   getPartners(): Observable<AdminPartners> {
     return this.api.get<AdminPartners>('/admin/partners');
@@ -1024,6 +1084,11 @@ export class AdminService {
 
   getInvoiceBuilder(orderId: string): Observable<InvoiceBuilderData> {
     return this.api.get<InvoiceBuilderData>(`/admin/invoices/builder/${orderId}`);
+  }
+
+  /** The latest available exchange rate of a currency (the server caches it; `refresh` skips the cache). */
+  getFxRate(currency: string, refresh = false): Observable<FxRate> {
+    return this.api.get<FxRate>('/admin/invoices/fx-rate', { currency, ...(refresh ? { refresh: '1' } : {}) });
   }
 
   saveInvoiceDraft(orderId: string, draft: InvoiceDraft): Observable<ApiResult<Invoice>> {

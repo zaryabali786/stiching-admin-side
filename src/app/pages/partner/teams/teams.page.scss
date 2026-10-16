@@ -106,3 +106,6 @@
 .pw-wrap { display: flex; gap: 6px; align-items: center; .input { flex: 1; } }
 .login-tag { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--c-green); font-weight: 600; cursor: pointer; text-align: left; }
+
+.page.embedded { padding: 0; max-width: none; margin: 0; }
+.page-header.embedded { margin-bottom: 14px; justify-content: flex-end; }

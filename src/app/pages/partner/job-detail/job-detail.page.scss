@@ -77,6 +77,8 @@
   flex-wrap: wrap;
 }
 
+.swatch-img { object-fit: cover; background: var(--c-bg-soft, #eee); }
+
 .swatch-lg {
   width: 68px;
   height: 68px;
@@ -163,7 +165,8 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 10px;
   position: relative;
 }
@@ -1070,7 +1073,7 @@
 
 @media (max-width: 1000px) {
   .stepper {
-    grid-template-columns: repeat(5, minmax(150px, 1fr));
+    grid-auto-columns: minmax(150px, 1fr);
     overflow-x: auto;
     padding-bottom: 6px;
   }
@@ -1161,7 +1164,7 @@
   }
 
   .detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .stepper { grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; }
+  .stepper { grid-auto-columns: minmax(0, 1fr); overflow: visible; }
   .step[data-state='now'] { box-shadow: none; }
   .thumb { width: 48px; height: 48px; }
 }
@@ -1178,3 +1181,12 @@
 
   .input { width: 130px; height: 40px; }
 }
+
+/* The article's chat: a fixed-height box, the thread scrolls inside it */
+.chat-card { padding-block: 12px; }
+.chat-toggle { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 2px 0; }
+.chat-toggle .head-meta { margin-left: auto; }
+.chat-toggle .chev { font-size: 18px; transition: transform .15s; } .chat-toggle .chev.open { transform: rotate(180deg); }
+.chat-box { margin-top: 10px; height: 300px; display: flex; flex-direction: column; border: 1px solid var(--c-line-soft); border-radius: 14px; overflow: hidden; background: var(--c-surface); }
+.chat-box app-chat-panel { flex: 1; min-height: 0; }
+@media (max-width: 640px) { .chat-box { height: 55vh; } }

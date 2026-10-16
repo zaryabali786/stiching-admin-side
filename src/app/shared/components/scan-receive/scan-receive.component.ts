@@ -41,9 +41,11 @@ const KIND_LABEL: Record<string, string> = {
           <div class="modal-head">
             <div>
               <span class="eyebrow">Production</span>
-              <h3 id="sr-title">Receive articles</h3>
+              <h3 id="sr-title">Scan QR</h3>
               <p class="muted small">
-                @if (screen(); as s) {
+                @if (mode() === 'complete') {
+                  Scan an article when your work on it is finished. It then waits for the next person to scan it to receive.
+                } @else if (screen(); as s) {
                   @if (s.stageLabel) { You receive for <b>{{ s.stageLabel }}</b>. Scan each article's QR code. }
                   @else { Each scan moves the article into the stage that follows its own. }
                 } @else { Scan an article's QR code. }
@@ -53,11 +55,15 @@ const KIND_LABEL: Record<string, string> = {
           </div>
 
           <div class="modal-body sr-body">
+            <div class="mode-tabs" role="group" aria-label="Scan mode">
+              <button type="button" [class.on]="mode() === 'receive'" [attr.aria-pressed]="mode() === 'receive'" (click)="mode.set('receive')">Scan to receive</button>
+              <button type="button" [class.on]="mode() === 'complete'" [attr.aria-pressed]="mode() === 'complete'" (click)="mode.set('complete')">Scan to complete</button>
+            </div>
             <app-qr-scanner [active]="open()" [busy]="busy()" (scanned)="receive($event)" />
 
             <form class="manual" (submit)="$event.preventDefault(); receive(manual())">
               <input class="input" placeholder="Or type the code, e.g. SA-1061-1" aria-label="Article code" autocomplete="off" autocapitalize="characters" [ngModel]="manual()" (ngModelChange)="manual.set($event)" name="code" />
-              <button type="submit" class="btn" [disabled]="busy() || !manual().trim()">Receive</button>
+              <button type="submit" class="btn" [disabled]="busy() || !manual().trim()">{{ mode() === 'receive' ? 'Receive' : 'Complete' }}</button>
             </form>
 
             @if (last(); as l) {
@@ -67,7 +73,7 @@ const KIND_LABEL: Record<string, string> = {
               </div>
             }
 
-            @if (current(); as p) {
+            @if (mode() === 'receive' && current(); as p) {
               <section class="order-card" aria-label="Order progress">
                 <header>
                   <div>
@@ -108,7 +114,7 @@ const KIND_LABEL: Record<string, string> = {
               </section>
             }
 
-            @if (others().length) {
+            @if (mode() === 'receive' && others().length) {
               <section class="waiting" aria-label="Orders waiting for you">
                 <h4>Orders for you <span class="muted small">({{ orders().length }})</span></h4>
                 <ul>
@@ -122,7 +128,7 @@ const KIND_LABEL: Record<string, string> = {
                   }
                 </ul>
               </section>
-            } @else if (!current() && screen()) {
+            } @else if (mode() === 'receive' && !current() && screen()) {
               <p class="muted small empty">Nothing is waiting for you right now. New articles appear here by themselves.</p>
             }
 
@@ -143,6 +149,7 @@ const KIND_LABEL: Record<string, string> = {
   `,
   styles: `
     .scan-recv { max-width: 620px; }
+    .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 14px; background: var(--c-neutral-soft); button { min-height: 44px; border: 0; border-radius: 10px; background: transparent; font: inherit; font-weight: 700; font-size: 14px; color: var(--c-muted); cursor: pointer; } button.on { background: var(--c-surface); color: var(--c-ink); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); } }
     .manual { display: flex; gap: 8px; margin-top: 12px; input { flex: 1; min-width: 0; } }
     .last { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 14px; border-radius: 14px; }
     .last div { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
@@ -204,6 +211,8 @@ export class ScanReceiveComponent {
   readonly log = signal<LogEntry[]>([]);
   readonly manual = signal('');
   readonly busy = signal(false);
+  /** Scan to receive (take the article in) or Scan to complete (my work on it is finished). */
+  readonly mode = signal<'receive' | 'complete'>('receive');
 
   readonly current = computed(() => {
     const list = this.orders();
@@ -269,10 +278,17 @@ export class ScanReceiveComponent {
     const value = code.trim();
     if (!value || this.busy()) return;
     this.busy.set(true);
-    this.production.scanReceive(value).subscribe({
+    const call = this.mode() === 'complete' ? this.production.scanComplete(value) : this.production.scanReceive(value);
+    call.subscribe({
       next: ({ data, message }) => {
         this.busy.set(false);
         this.manual.set('');
+        if (data.kind === 'complete') {
+          this.add(value, 'ok', message);
+          navigator.vibrate?.(60);
+          this.received.emit();
+          return;
+        }
         if (data.progress) this.applyProgress(data.progress);
         if (data.kind === 'order') {
           this.add(value, 'notice', message || 'Order scanned. Scan each article.');

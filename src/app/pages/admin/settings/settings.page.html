@@ -3,14 +3,16 @@
     <div>
       <span class="eyebrow">Setup</span>
       <h1>Settings</h1>
-      <p class="subtitle">Manage admin and customer accounts and update your own account. Partner users are managed under Partners.</p>
+      <p class="subtitle">@if (auth.isFullAdmin()) { Admin users and their roles now have their own pages (Users, Roles & permissions). Partner users are managed under Partners. } @else { Shop settings and your own account. }</p>
     </div>
   </header>
 
   <div class="tabs" role="tablist" aria-label="Settings sections">
+    @if (auth.isFullAdmin()) {
     <button type="button" role="tab" [class.active]="query().tab === 'team'" [attr.aria-selected]="query().tab === 'team'" (click)="setTab('team')">Team &amp; roles</button>
+    }
     <button type="button" role="tab" [class.active]="query().tab === 'address'" [attr.aria-selected]="query().tab === 'address'" (click)="setTab('address')">Ship-to address</button>
-    <button type="button" role="tab" [class.active]="query().tab === 'express'" [attr.aria-selected]="query().tab === 'express'" (click)="setTab('express')">Express</button>
+    <button type="button" role="tab" [class.active]="query().tab === 'express'" [attr.aria-selected]="query().tab === 'express'" (click)="setTab('express')">Priority &amp; fast</button>
     <button type="button" role="tab" [class.active]="query().tab === 'postex'" [attr.aria-selected]="query().tab === 'postex'" (click)="setTab('postex')">PostEx</button>
     <button type="button" role="tab" [class.active]="query().tab === 'account'" [attr.aria-selected]="query().tab === 'account'" (click)="setTab('account')">Account</button>
   </div>
@@ -45,28 +47,28 @@
       </form>
     </section>
   } @else if (query().tab === 'express') {
-    <!-- ═══ Express stitching ═══ -->
+    <!-- ═══ Priority stitching and Fast shipping ═══ -->
     <div class="express-grid">
     <section class="card address-card">
-      <h3 class="card-title">Express stitching</h3>
-      <p class="muted small">Customers can ask for express stitching when they create an order. You decide here how many days it takes; the number is shown to them and becomes the order's due date.</p>
+      <h3 class="card-title">Priority stitching</h3>
+      <p class="muted small">Customers can ask for priority stitching when they create an order. You decide here how many days it takes; the number is shown to them and becomes the order's due date.</p>
       <form (submit)="$event.preventDefault(); saveExpress()">
         <div class="field">
-          <label for="exEnabled">Offer express stitching to customers</label>
+          <label for="exEnabled">Offer priority stitching to customers</label>
           <select id="exEnabled" class="select" (change)="setExpress({ enabled: $any($event.target).value === 'yes' })">
             <option value="yes" [selected]="express().enabled">Yes</option>
             <option value="no" [selected]="!express().enabled">No</option>
           </select>
         </div>
         <div class="field">
-          <label for="exDays">Days to stitch an express order</label>
+          <label for="exDays">Days to stitch a priority order</label>
           <input id="exDays" type="number" min="1" max="90" step="1" class="input" [value]="express().days" (input)="setExpress({ days: +$any($event.target).value })" />
           <span class="hint">Whole days, 1 to 90. Counted from the day the order is created.</span>
         </div>
         <div class="field">
-          <label for="exPrice">Express stitching price (PKR)</label>
+          <label for="exPrice">Priority stitching price (PKR)</label>
           <input id="exPrice" type="number" min="0" step="1" class="input" [value]="express().price_pkr" (input)="setExpress({ price_pkr: +$any($event.target).value })" />
-          <span class="hint">Added to the customer's total when they choose express stitching. 0 = no extra charge.</span>
+          <span class="hint">Added to the customer's total when they choose priority stitching. 0 = no extra charge.</span>
         </div>
         <div class="row-end">
           <button type="submit" class="btn btn-primary" [disabled]="!expressLoaded() || !expressValid() || !expressDirty() || savingExpress()">
@@ -76,25 +78,20 @@
       </form>
     </section>
     <section class="card address-card">
-      <h3 class="card-title">Express shipping</h3>
-      <p class="muted small">Customers can ask for express shipping when they create an order. You decide here how many days the delivery takes; the number is shown to them and to the team on the order.</p>
+      <h3 class="card-title">Fast shipping</h3>
+      <p class="muted small">Customers can ask for fast shipping when they create an order. You decide here how many days the delivery takes; the number is shown to them and to the team on the order. Fast shipping has no price: it is never added to an order or an invoice.</p>
       <form (submit)="$event.preventDefault(); saveExpressShip()">
         <div class="field">
-          <label for="exShipEnabled">Offer express shipping to customers</label>
+          <label for="exShipEnabled">Offer fast shipping to customers</label>
           <select id="exShipEnabled" class="select" (change)="setExpressShip({ enabled: $any($event.target).value === 'yes' })">
             <option value="yes" [selected]="expressShip().enabled">Yes</option>
             <option value="no" [selected]="!expressShip().enabled">No</option>
           </select>
         </div>
         <div class="field">
-          <label for="exShipDays">Days to deliver an express shipping order</label>
+          <label for="exShipDays">Days to deliver a fast shipping order</label>
           <input id="exShipDays" type="number" min="1" max="90" step="1" class="input" [value]="expressShip().days" (input)="setExpressShip({ days: +$any($event.target).value })" />
           <span class="hint">Whole days, 1 to 90. Counted from the day the order is dispatched.</span>
-        </div>
-        <div class="field">
-          <label for="exShipPrice">Express shipping price (PKR)</label>
-          <input id="exShipPrice" type="number" min="0" step="1" class="input" [value]="expressShip().price_pkr" (input)="setExpressShip({ price_pkr: +$any($event.target).value })" />
-          <span class="hint">Added to the customer's total when they choose express shipping. 0 = no extra charge.</span>
         </div>
         <div class="row-end">
           <button type="submit" class="btn btn-primary" [disabled]="!expressShipLoaded() || !expressShipValid() || !expressShipDirty() || savingExpressShip()">
@@ -243,78 +240,200 @@
     }
   } @else {
     <!-- ═══ Team & roles ═══ -->
-    <div class="toolbar">
+    <section class="team-bar" aria-label="Find people">
       <div class="chips" role="group" aria-label="Filter by role">
         @for (r of roleFilters; track r.key) {
           <button type="button" class="chip" [class.active]="query().role === r.key" [attr.aria-pressed]="query().role === r.key" (click)="setRole(r.key)">{{ r.label }}</button>
         }
       </div>
-      <div class="toolbar-end">
-        <app-search-input placeholder="Search name, email, phone…" [value]="query().search" (search)="onSearch($event)" />
+      <div class="team-tools">
+        <app-search-input class="team-search" placeholder="Search name, email, phone, role…" [value]="query().search" (search)="onSearch($event)" />
+        <label class="page-size">
+          Rows
+          <select class="select" aria-label="Rows per page" (change)="setLimit($any($event.target).value)">
+            @for (s of pageSizes; track s) { <option [value]="s" [selected]="s === query().limit">{{ s }}</option> }
+          </select>
+        </label>
+        <a routerLink="/admin/users" class="btn btn-primary add-btn">Admin users and roles</a>
       </div>
-    </div>
+    </section>
 
     <div class="table-card" [class.refreshing]="list.refreshing()">
       @if (list.error()) {
         <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
       } @else {
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr><th>Person</th><th>Phone</th><th>Role</th><th>Joined</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr>
-            </thead>
-            <tbody>
-              @if (list.loading()) {
-                @for (i of skeleton; track i) {
-                  <tr>@for (c of [1, 2, 3, 4, 5, 6]; track c) { <td><span class="skeleton"></span></td> }</tr>
-                }
-              } @else {
-                @for (u of list.items(); track u.id) {
-                  <tr [class.inactive]="!u.is_active">
-                    <td>
-                      <span class="cell-main">{{ u.full_name || '—' }} @if (u.id === me()) { <span class="badge blue">You</span> }</span>
-                      <span class="cell-sub">{{ u.email }}@if (u.customer_code) { · {{ u.customer_code }} }</span>
-                    </td>
-                    <td class="nowrap">{{ u.phone || '—' }}</td>
-                    <td>
-                      @if (u.role === 'partner_staff') {
-                        <span class="badge">{{ u.partner_role === 'owner' ? 'Partner owner' : (u.job_title || 'Partner user') }}</span>
-                        <span class="cell-sub">
-                          @if (u.partner) { {{ u.partner.name }} · }
-                          Managed under <a class="link" routerLink="/admin/partners">Partners</a>
-                        </span>
-                        <button type="button" class="btn btn-sm" [disabled]="u.id === me() || busyId() === u.id" (click)="makeAdmin(u)">
-                          @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Make admin
-                        </button>
+        <div class="ul" role="list" aria-label="People">
+          <div class="ul-head" aria-hidden="true">
+            <span>Person</span><span>Role &amp; access</span><span class="c-joined">Joined</span><span>Status</span><span class="end">Actions</span>
+          </div>
+          @if (list.loading()) {
+            @for (i of skeleton; track i) {
+              <div class="ul-row sk" aria-hidden="true">
+                <div class="c-person"><span class="skeleton round"></span><span class="who-text"><span class="skeleton" style="width: 60%"></span><span class="skeleton" style="width: 80%"></span></span></div>
+                <div class="c-role"><span class="skeleton" style="width: 50%"></span></div>
+                <div class="c-joined"><span class="skeleton"></span></div>
+                <div class="c-status"><span class="skeleton"></span></div>
+                <div class="c-actions"></div>
+              </div>
+            }
+          } @else {
+            @for (u of list.items(); track u.id) {
+              <article class="ul-row" role="listitem" [class.inactive]="!u.is_active">
+                <div class="c-person">
+                  <span class="avatar" [class.admin]="u.role === 'admin'" aria-hidden="true">{{ initials(u) }}</span>
+                  <span class="who-text">
+                    <span class="cell-main">{{ u.full_name || '—' }} @if (u.id === me()) { <span class="badge blue">You</span> }</span>
+                    <span class="cell-sub">{{ u.email }}</span>
+                    @if (u.phone || u.customer_code) { <span class="cell-sub">@if (u.phone) { {{ u.phone }} }@if (u.phone && u.customer_code) { · }@if (u.customer_code) { {{ u.customer_code }} }</span> }
+                  </span>
+                </div>
+
+                <div class="c-role">
+                  <span class="mobile-label">Role</span>
+                  @if (u.role === 'partner_staff') {
+                    <span class="badge">{{ u.partner_role === 'owner' ? 'Partner owner' : (u.job_title || 'Partner user') }}</span>
+                    <span class="cell-sub">
+                      @if (u.partner) { {{ u.partner.name }} · }
+                      Managed under <a class="link" routerLink="/admin/partners">Partners</a>
+                    </span>
+                  } @else {
+                    <select #roleSel class="select sm" [disabled]="u.id === me() || busyId() === u.id" [attr.aria-label]="'Role for ' + (u.full_name || u.email)"
+                      [title]="u.id === me() ? 'You cannot change your own role' : ''" (change)="changeRole(u, roleSel)">
+                      @for (r of roles; track r.value) { <option [value]="r.value" [selected]="r.value === u.role">{{ r.label }}</option> }
+                    </select>
+                    @if (u.role === 'admin') {
+                      @if (u.job_title) { <span class="cell-sub">{{ u.job_title }}</span> }
+                      @if (u.admin_access === 'restricted') {
+                        <span class="access"><span class="badge amber">Restricted · {{ u.admin_modules?.length || 0 }} module{{ (u.admin_modules?.length || 0) === 1 ? '' : 's' }}</span></span>
+                        <span class="mods">@for (m of u.admin_modules || []; track m) { <span class="mod-chip">{{ moduleLabel(m) }}</span> }</span>
                       } @else {
-                        <select #roleSel class="select sm" [disabled]="u.id === me() || busyId() === u.id" [attr.aria-label]="'Role for ' + (u.full_name || u.email)"
-                          [title]="u.id === me() ? 'You cannot change your own role' : ''" (change)="changeRole(u, roleSel)">
-                          @for (r of roles; track r.value) { <option [value]="r.value" [selected]="r.value === u.role">{{ r.label }}</option> }
-                        </select>
+                        <span class="access"><span class="badge green">Full access</span></span>
                       }
-                    </td>
-                    <td class="nowrap">{{ u.created_at | day }}</td>
-                    <td>@if (u.is_active) { <span class="badge green">Active</span> } @else { <span class="badge">Inactive</span> }</td>
-                    <td class="actions-cell">
-                      @if (u.role !== 'partner_staff') {
-                        <button type="button" class="btn btn-sm" [class.btn-ghost]="u.is_active" [class.danger]="u.is_active"
-                          [attr.aria-label]="(u.is_active ? 'Deactivate ' : 'Activate ') + (u.full_name || u.email)" [disabled]="u.id === me() || busyId() === u.id" (click)="toggleActive(u)">
-                          @if (busyId() === u.id) { <ion-spinner name="crescent" /> } {{ u.is_active ? 'Deactivate' : 'Activate' }}
-                        </button>
-                      }
-                    </td>
-                  </tr>
-                } @empty {
-                  <tr><td colspan="6">
-                    <app-empty-state [title]="query().search ? 'No matching people' : 'Nobody here yet'" message="Try another filter or search." />
-                  </td></tr>
-                }
-              }
-            </tbody>
-          </table>
+                    }
+                  }
+                </div>
+
+                <div class="c-joined"><span class="mobile-label">Joined</span>{{ u.created_at | day }}</div>
+
+                <div class="c-status">@if (u.is_active) { <span class="badge green">Active</span> } @else { <span class="badge">Inactive</span> }</div>
+
+                <div class="c-actions">
+                  @if (u.role === 'admin' && u.id !== me()) {
+                    <a class="btn btn-sm" routerLink="/admin/users">Manage</a>
+                  }
+                  @if (u.role !== 'partner_staff') {
+                    <button type="button" class="btn btn-sm" [class.btn-ghost]="u.is_active" [class.danger]="u.is_active"
+                      [attr.aria-label]="(u.is_active ? 'Deactivate ' : 'Activate ') + (u.full_name || u.email)" [disabled]="u.id === me() || busyId() === u.id" (click)="toggleActive(u)">
+                      @if (busyId() === u.id) { <ion-spinner name="crescent" /> } {{ u.is_active ? 'Deactivate' : 'Activate' }}
+                    </button>
+                  }
+                </div>
+              </article>
+            } @empty {
+              <app-empty-state [title]="query().search ? 'No matching people' : 'Nobody here yet'" message="Try another filter or search." />
+            }
+          }
         </div>
+        @if (list.meta(); as m) { <p class="result-count team-count">{{ m.total }} {{ m.total === 1 ? 'person' : 'people' }}@if (query().search) { for “{{ query().search }}” }</p> }
         <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
       }
     </div>
   }
 </div>
+
+@if (dlg(); as d) {
+  <div class="modal-backdrop" (click)="closeDlg()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="au-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Admin portal</span>
+          <h3 id="au-title">{{ d.done ? 'Share these sign-in details' : d.mode === 'create' ? 'Add admin user' : d.mode === 'promote' ? 'Make ' + (d.name || d.email) + ' an admin' : 'Access of ' + (d.name || d.email) }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeDlg()" aria-label="Close">×</button>
+      </div>
+
+      @if (d.done; as done) {
+        <div class="modal-body">
+          <p class="muted small">{{ done.message }} Give them this one-time password now: it is not shown again. They are asked to choose their own at the next sign-in.</p>
+          <dl class="kv who">
+            <dt>Email</dt><dd>{{ done.email }}</dd>
+            <dt>Password</dt><dd class="mono">{{ done.password }}</dd>
+          </dl>
+          <div class="row-end"><button type="button" class="btn" (click)="copyText('Email: ' + done.email + '\nPassword: ' + done.password)">Copy details</button></div>
+        </div>
+        <div class="modal-foot"><button type="button" class="btn btn-primary" (click)="dlg.set(null)">Done</button></div>
+      } @else {
+        <form (submit)="$event.preventDefault(); submitDlg()">
+          <div class="modal-body">
+            @if (d.mode === 'create') {
+              <section class="au-section">
+                <h4>1 · Login</h4>
+                <div class="field">
+                  <label for="auName">Full name <span class="req">required</span></label>
+                  <input id="auName" class="input" autocomplete="off" [value]="d.name" (input)="patchDlg({ name: $any($event.target).value })" />
+                </div>
+                <div class="field">
+                  <label for="auEmail">Email address <span class="req">required</span></label>
+                  <input id="auEmail" class="input" type="email" autocomplete="off" [value]="d.email" (input)="patchDlg({ email: $any($event.target).value })" />
+                </div>
+                <div class="field">
+                  <label for="auPhone">Phone <span class="muted">(optional)</span></label>
+                  <input id="auPhone" class="input" autocomplete="off" inputmode="tel" [value]="d.phone" (input)="patchDlg({ phone: $any($event.target).value })" />
+                </div>
+                <div class="field">
+                  <label for="auPw">Password</label>
+                  <span class="pw-wrap">
+                    <input id="auPw" class="input" [type]="d.showPassword ? 'text' : 'password'" autocomplete="new-password" placeholder="Leave empty to generate one" [value]="d.password" (input)="patchDlg({ password: $any($event.target).value })" />
+                    <button type="button" class="btn btn-sm btn-ghost" (click)="patchDlg({ showPassword: !d.showPassword })">{{ d.showPassword ? 'Hide' : 'Show' }}</button>
+                    <button type="button" class="btn btn-sm" (click)="generatePassword()">Generate</button>
+                  </span>
+                  <span class="hint">At least 8 characters. You see it once after saving, to hand over.</span>
+                </div>
+                <label class="check"><input type="checkbox" [checked]="d.mustChange" (change)="patchDlg({ mustChange: $any($event.target).checked })" /> They must choose their own password at the first sign-in</label>
+              </section>
+            }
+            <section class="au-section">
+              <h4>{{ d.mode === 'create' ? '2 · ' : '' }}Role / designation</h4>
+              <div class="field">
+                <input id="auTitle" class="input" autocomplete="off" placeholder="e.g. Order manager, Accountant" aria-label="Role or designation" [value]="d.title" (input)="patchDlg({ title: $any($event.target).value })" />
+              </div>
+            </section>
+            <section class="au-section">
+              <h4>{{ d.mode === 'create' ? '3 · ' : '' }}What they may use</h4>
+              <div class="radio-row" role="radiogroup" aria-label="Access level">
+                <button type="button" role="radio" class="opt" [class.on]="!d.full" [attr.aria-checked]="!d.full" (click)="patchDlg({ full: false })">
+                  <strong>Only the modules I choose</strong><small>Recommended. They see just these parts of the admin portal.</small>
+                </button>
+                <button type="button" role="radio" class="opt" [class.on]="d.full" [attr.aria-checked]="d.full" (click)="patchDlg({ full: true })">
+                  <strong>Full admin access</strong><small>Everything, including creating users and changing roles.</small>
+                </button>
+              </div>
+              @if (!d.full) {
+                <div class="mod-head">
+                  <b>Modules</b>
+                  <span><button type="button" class="link-btn" (click)="setAllModules(true)">Select all</button> · <button type="button" class="link-btn" (click)="setAllModules(false)">Clear</button></span>
+                </div>
+                <div class="mod-grid">
+                  @for (m of moduleList(); track m.id) {
+                    <label class="mod" [class.on]="d.modules.includes(m.id)">
+                      <input type="checkbox" [checked]="d.modules.includes(m.id)" (change)="toggleModule(m.id)" />
+                      <span><strong>{{ m.label }}</strong><small>{{ m.description }}</small></span>
+                    </label>
+                  }
+                </div>
+              }
+            </section>
+            @if (d.error; as e) { <p class="form-error" role="alert">{{ e }}</p> }
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" (click)="closeDlg()" [disabled]="d.busy">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="d.busy">
+              @if (d.busy) { <ion-spinner name="crescent" /> }
+              {{ d.mode === 'create' ? 'Create user' : d.mode === 'promote' ? 'Make admin' : 'Save access' }}
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  </div>
+}

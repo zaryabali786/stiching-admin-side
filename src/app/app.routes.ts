@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { Routes, UrlMatchResult, UrlSegment } from '@angular/router';
-import { adminGuard, authGuard, guestGuard, partnerGuard, passwordChangeGuard, permissionGuard } from './core/guards/auth.guard';
+import { adminGuard, adminModuleGuard, authGuard, guestGuard, partnerGuard, passwordChangeGuard, permissionGuard } from './core/guards/auth.guard';
 import { AuthService } from './core/services/auth.service';
 import { PortalShellComponent } from './layout/portal-shell.component';
 
@@ -19,7 +19,7 @@ const messagesMatcher = (segments: UrlSegment[]): UrlMatchResult | null =>
 const messagesRoute = (portal: 'Admin' | 'Partner') => ({
   matcher: messagesMatcher,
   canActivate: [permissionGuard],
-  data: { title: 'Messages', permission: 'messages.view' },
+  data: { title: 'Messages', permission: 'messages.view', adminModule: 'messages' },
   title: `Messages · ${portal}`,
   loadComponent: () => import('./pages/partner/messages/messages.page').then((m) => m.MessagesPage),
 });
@@ -52,27 +52,29 @@ export const routes: Routes = [
     path: 'admin',
     component: PortalShellComponent,
     canActivate: [adminGuard],
-    canActivateChild: [adminGuard],
+    canActivateChild: [adminGuard, adminModuleGuard],
     data: { portal: 'admin' },
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'overview' },
-      { path: 'overview', data: { title: 'Overview' }, title: 'Overview · Admin', loadComponent: () => import('./pages/admin/overview/overview.page').then((m) => m.AdminOverviewPage) },
-      { path: 'orders', data: { title: 'Orders' }, title: 'Orders · Admin', loadComponent: () => import('./pages/admin/orders/orders.page').then((m) => m.AdminOrdersPage) },
-      { path: 'invoices', data: { title: 'Invoices' }, title: 'Invoices · Admin', loadComponent: () => import('./pages/admin/invoices/invoices.page').then((m) => m.AdminInvoicesPage) },
-      { path: 'warehouse', data: { title: 'Warehouse' }, title: 'Warehouse · Admin', loadComponent: () => import('./pages/admin/warehouse/warehouse.page').then((m) => m.AdminWarehousePage) },
-      { path: 'customers', data: { title: 'Customers' }, title: 'Customers · Admin', loadComponent: () => import('./pages/admin/customers/customers.page').then((m) => m.AdminCustomersPage) },
-      { path: 'partners', data: { title: 'Partners and teams' }, title: 'Partners · Admin', loadComponent: () => import('./pages/admin/partners/partners.page').then((m) => m.AdminPartnersPage) },
-      { path: 'price-list', data: { title: 'Price list' }, title: 'Price list · Admin', loadComponent: () => import('./pages/admin/price-list/price-list.page').then((m) => m.AdminPriceListPage) },
-      { path: 'shipping', data: { title: 'Shipping rates' }, title: 'Shipping rates · Admin', loadComponent: () => import('./pages/admin/shipping/shipping.page').then((m) => m.AdminShippingPage) },
-      { path: 'home-layout', data: { title: 'App builder', mode: 'layout' }, title: 'App builder · Admin', loadComponent: () => import('./pages/admin/home-layout/home-layout.page').then((m) => m.AdminHomeLayoutPage) },
+      { path: 'overview', data: { adminModule: 'overview', title: 'Overview' }, title: 'Overview · Admin', loadComponent: () => import('./pages/admin/overview/overview.page').then((m) => m.AdminOverviewPage) },
+      { path: 'orders', data: { adminModule: 'orders', title: 'Orders' }, title: 'Orders · Admin', loadComponent: () => import('./pages/admin/orders/orders.page').then((m) => m.AdminOrdersPage) },
+      { path: 'invoices', data: { adminModule: 'invoices', title: 'Invoices' }, title: 'Invoices · Admin', loadComponent: () => import('./pages/admin/invoices/invoices.page').then((m) => m.AdminInvoicesPage) },
+      { path: 'warehouse', data: { adminModule: 'warehouse', title: 'Warehouse' }, title: 'Warehouse · Admin', loadComponent: () => import('./pages/admin/warehouse/warehouse.page').then((m) => m.AdminWarehousePage) },
+      { path: 'customers', data: { adminModule: 'customers', title: 'Customers' }, title: 'Customers · Admin', loadComponent: () => import('./pages/admin/customers/customers.page').then((m) => m.AdminCustomersPage) },
+      { path: 'partners', data: { adminModule: 'partners', title: 'Partners and teams' }, title: 'Partners · Admin', loadComponent: () => import('./pages/admin/partners/partners.page').then((m) => m.AdminPartnersPage) },
+      { path: 'price-list', data: { adminModule: 'price_list', title: 'Price list' }, title: 'Price list · Admin', loadComponent: () => import('./pages/admin/price-list/price-list.page').then((m) => m.AdminPriceListPage) },
+      { path: 'shipping', data: { adminModule: 'shipping', title: 'Shipping rates' }, title: 'Shipping rates · Admin', loadComponent: () => import('./pages/admin/shipping/shipping.page').then((m) => m.AdminShippingPage) },
+      { path: 'home-layout', data: { adminModule: 'app_builder', title: 'App builder', mode: 'layout' }, title: 'App builder · Admin', loadComponent: () => import('./pages/admin/home-layout/home-layout.page').then((m) => m.AdminHomeLayoutPage) },
       { path: 'appearance', pathMatch: 'full', redirectTo: 'theme' },
-      { path: 'theme', data: { title: 'Customize', mode: 'appearance' }, title: 'Customize · Admin', loadComponent: () => import('./pages/admin/home-layout/home-layout.page').then((m) => m.AdminHomeLayoutPage) },
+      { path: 'theme', data: { adminModule: 'app_builder', title: 'Customize', mode: 'appearance' }, title: 'Customize · Admin', loadComponent: () => import('./pages/admin/home-layout/home-layout.page').then((m) => m.AdminHomeLayoutPage) },
       { path: 'banners', pathMatch: 'full', redirectTo: 'home-layout' },
-      { path: 'portal-theme', data: { title: 'Portal theme' }, title: 'Portal theme · Admin', loadComponent: () => import('./pages/admin/portal-theme/portal-theme.page').then((m) => m.AdminPortalThemePage) },
-      { path: 'reports', data: { title: 'Reports' }, title: 'Reports · Admin', loadComponent: () => import('./pages/admin/reports/reports.page').then((m) => m.AdminReportsPage) },
+      { path: 'portal-theme', data: { adminModule: 'portal_theme', title: 'Portal theme' }, title: 'Portal theme · Admin', loadComponent: () => import('./pages/admin/portal-theme/portal-theme.page').then((m) => m.AdminPortalThemePage) },
+      { path: 'reports', data: { adminModule: 'reports', title: 'Reports' }, title: 'Reports · Admin', loadComponent: () => import('./pages/admin/reports/reports.page').then((m) => m.AdminReportsPage) },
       messagesRoute('Admin'),
-      { path: 'support', data: { title: 'Support chat' }, title: 'Support chat · Admin', loadComponent: () => import('./pages/admin/support/support.page').then((m) => m.AdminSupportPage) },
-      { path: 'settings', data: { title: 'Settings' }, title: 'Settings · Admin', loadComponent: () => import('./pages/admin/settings/settings.page').then((m) => m.AdminSettingsPage) },
+      { path: 'support', data: { adminModule: 'support', title: 'Support chat' }, title: 'Support chat · Admin', loadComponent: () => import('./pages/admin/support/support.page').then((m) => m.AdminSupportPage) },
+      { path: 'users', data: { title: 'Users' }, title: 'Users · Admin', loadComponent: () => import('./pages/admin/users/users.page').then((m) => m.AdminUsersPage) },
+      { path: 'roles', data: { title: 'Roles and permissions' }, title: 'Roles · Admin', loadComponent: () => import('./pages/admin/roles/roles.page').then((m) => m.AdminRolesPage) },
+      { path: 'settings', data: { adminModule: 'settings', title: 'Settings' }, title: 'Settings · Admin', loadComponent: () => import('./pages/admin/settings/settings.page').then((m) => m.AdminSettingsPage) },
     ],
   },
 
@@ -98,7 +100,9 @@ export const routes: Routes = [
       messagesRoute('Partner'),
       { canActivate: [permissionGuard], path: 'brands', data: { permission: 'catalogue.view', title: 'Brands', kind: 'brands' }, title: 'Brands · Partner', loadComponent: () => import('./pages/partner/catalogue/lookup-list.page').then((m) => m.PartnerLookupListPage) },
       { canActivate: [permissionGuard], path: 'couriers', data: { permission: 'catalogue.view', title: 'Couriers', kind: 'couriers' }, title: 'Couriers · Partner', loadComponent: () => import('./pages/partner/catalogue/lookup-list.page').then((m) => m.PartnerLookupListPage) },
-      { path: 'users', pathMatch: 'full', redirectTo: 'overview' },
+      { canActivate: [permissionGuard], path: 'users', data: { permission: 'users.view', title: 'Users' }, title: 'Users · Partner', loadComponent: () => import('./pages/partner/users/users.page').then((m) => m.PartnerUsersPage) },
+      { canActivate: [permissionGuard], path: 'roles', data: { permission: 'users.view', title: 'Roles and permissions' }, title: 'Roles · Partner', loadComponent: () => import('./pages/partner/roles/roles.page').then((m) => m.PartnerRolesPage) },
+      { path: 'settings', pathMatch: 'full', redirectTo: 'users' },
       { canActivate: [permissionGuard], path: 'articles', data: { permission: 'catalogue.view', title: 'Articles' }, title: 'Articles · Partner', loadComponent: () => import('./pages/partner/catalogue/articles.page').then((m) => m.PartnerArticlesPage) },
     ],
   },

@@ -79,3 +79,104 @@ tr.inactive .cell-main { color: var(--c-muted); }
 .express-grid form { display: flex; flex-direction: column; flex: 1; }
 .express-grid .row-end { margin-top: auto; }
 @media (max-width: 860px) { .express-grid { grid-template-columns: 1fr; } }
+
+.mod-chip { padding: 1px 8px; border-radius: 999px; background: var(--c-bg-soft, #f1f2f4); font-size: 11px; font-weight: 600; }
+.badge.amber { background: #fff4e0; color: #8a4505; }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(15, 18, 24, 0.45); }
+.modal { width: min(640px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--c-surface, #fff); border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25); overflow: hidden; }
+.modal form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.modal-head { display: flex; justify-content: space-between; gap: 12px; padding: 18px 20px 12px; border-bottom: 1px solid var(--c-line-soft); h3 { margin: 2px 0 0; font-size: 20px; } }
+.modal-body { padding: 14px 20px; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--c-line-soft); }
+.close-btn { border: 0; background: transparent; font-size: 26px; line-height: 1; cursor: pointer; }
+.au-section { display: flex; flex-direction: column; gap: 10px; h4 { margin: 0; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-muted, #6b7280); } }
+.pw-wrap { display: flex; gap: 6px; align-items: center; .input { flex: 1; } }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.radio-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opt { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1.5px solid var(--c-line, #d9dce1); border-radius: 12px; background: transparent; font: inherit; cursor: pointer; small { color: var(--c-muted, #6b7280); } &.on { border-color: var(--c-brand, #4f46e5); background: rgba(79, 70, 229, 0.06); } }
+.mod-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.mod-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mod { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--c-line-soft, #e5e7eb); border-radius: 10px; cursor: pointer; strong { display: block; font-size: 13px; } small { display: block; color: var(--c-muted, #6b7280); font-size: 12px; } input { margin-top: 3px; } &.on { border-color: var(--c-brand, #4f46e5); background: rgba(79, 70, 229, 0.05); } }
+.form-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fdecea; color: #9a1f10; font-size: 13px; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-weight: 600; word-break: break-all; }
+@media (max-width: 560px) { .radio-row, .mod-grid { grid-template-columns: 1fr; } }
+
+/* ═══ Team & roles: one row per person; on a phone each person becomes a card ═══ */
+.team-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.team-bar .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-tools { display: flex; align-items: center; gap: 10px; flex: 1 1 340px; justify-content: flex-end; min-width: 0; }
+.team-search { flex: 1 1 220px; max-width: 380px; min-width: 0; }
+.team-count { margin: 10px 4px 0; font-size: 12.5px; color: var(--c-muted, #6b7280); }
+.add-btn { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+
+.ul { background: var(--c-surface, #fff); border: 1px solid var(--c-line-soft, #e5e7eb); border-radius: 16px; overflow: hidden; }
+.ul-head, .ul-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(220px, 1.6fr) 104px 90px minmax(170px, auto);
+  gap: 16px;
+  align-items: center;
+  padding: 14px 18px;
+}
+.ul-head { padding-block: 10px; background: var(--c-bg-soft, #f6f7f9); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-muted, #6b7280); .end { text-align: right; } }
+.ul-row { border-top: 1px solid var(--c-line-soft, #e5e7eb); &:first-of-type { border-top: 0; } &.inactive .cell-main { color: var(--c-muted); } &.inactive .avatar { opacity: 0.55; } }
+.ul-head + .ul-row { border-top: 0; }
+.c-person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.who-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.who-text .cell-sub, .who-text .cell-main { overflow-wrap: anywhere; }
+.avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: var(--c-bg-soft, #eceef1); color: var(--c-ink-2, #374151); &.admin { background: var(--c-dark-2, #1f2937); color: #fff; } }
+.c-role { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.c-role .select.sm { min-width: 130px; }
+.access { display: block; }
+.mods { display: flex; flex-wrap: wrap; gap: 4px; }
+.c-joined { font-size: 13px; color: var(--c-ink-2); white-space: nowrap; }
+.c-status { }
+.c-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.mobile-label { display: none; }
+.skeleton.round { width: 40px; height: 40px; border-radius: 50%; flex: none; }
+.ul-row.sk .who-text .skeleton { height: 12px; }
+
+/* tablet: the Joined column goes (it is still in the person's details on the phone card) */
+@media (max-width: 1080px) {
+  .ul-head, .ul-row { grid-template-columns: minmax(180px, 1.4fr) minmax(200px, 1.5fr) 84px minmax(150px, auto); gap: 12px; }
+  .ul-head .c-joined, .ul-row > .c-joined { display: none; }
+}
+
+/* phone: every person is a card */
+@media (max-width: 760px) {
+  .team-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .team-bar .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; &::-webkit-scrollbar { display: none; } .chip { flex: none; } }
+  .team-tools { flex: none; width: 100%; justify-content: stretch; }
+  .team-search { max-width: none; }
+  .ul { background: transparent; border: 0; border-radius: 0; display: flex; flex-direction: column; gap: 10px; }
+  .ul-head { display: none; }
+  .ul-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'person status' 'role role' 'joined joined' 'actions actions';
+    gap: 10px 12px; padding: 14px;
+    background: var(--c-surface, #fff); border: 1px solid var(--c-line-soft, #e5e7eb); border-radius: 14px;
+  }
+  .ul-row, .ul-head + .ul-row { border-top: 1px solid var(--c-line-soft, #e5e7eb); }
+  .ul-row.sk { grid-template-areas: 'person person' 'role role'; }
+  .ul-row > .c-person { grid-area: person; }
+  .ul-row > .c-role { grid-area: role; }
+  .ul-row > .c-joined { grid-area: joined; }
+  .ul-row > .c-status { grid-area: status; }
+  .ul-row > .c-actions { grid-area: actions; }
+  .ul-row > .c-joined { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--c-line-soft, #e5e7eb); }
+  .c-status { align-self: start; }
+  .mobile-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-muted, #6b7280); }
+  .c-joined .mobile-label { display: inline; }
+  .c-role { gap: 6px; }
+  .c-role .select.sm { width: 100%; min-height: 42px; }
+  .c-actions { justify-content: stretch; .btn { flex: 1 1 calc(50% - 6px); justify-content: center; min-height: 42px; } }
+}
+
+/* the Add user / Edit access dialog becomes a sheet from the bottom on a phone */
+@media (max-width: 640px) {
+  .modal-backdrop { align-items: end; padding: 0; }
+  .modal { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; }
+  .modal-head, .modal-body, .modal-foot { padding-inline: 16px; }
+  .modal-foot { position: sticky; bottom: 0; background: var(--c-surface, #fff); .btn { flex: 1 1 0; justify-content: center; min-height: 44px; } }
+  .pw-wrap { flex-wrap: wrap; .input { flex: 1 1 100%; } }
+}

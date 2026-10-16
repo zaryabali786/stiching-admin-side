@@ -113,7 +113,7 @@ export interface MasterTracking {
 }
 
 export interface ScanReceiveResult {
-  kind: 'article' | 'order';
+  kind: 'article' | 'order' | 'complete';
   card?: Card;
   receipt?: { stage: ProductionStage; role: string; user_name: string | null; received_at: string };
   orderStatus?: string;
@@ -206,12 +206,16 @@ export interface CardDesign {
 
 export interface CardUnit {
   id: string;
+  /** The article's own code (e.g. SA-1080-1): what its QR code carries. */
+  code?: string | null;
   line_no?: number | null;
   unit_title: string;
   stitching_type: string | null;
   notes: string | null;
   notes_audio?: VoiceNote | null;
   product_link: string | null;
+  /** The product's picture (from the brand's page or the email), when there is one. */
+  product_image_url?: string | null;
   quantity: number | null;
   design: CardDesign | null;
   reference_images: MediaRef[] | null;
@@ -250,6 +254,8 @@ export type QcChecklist = Record<string, boolean>;
 
 export interface Card {
   id: string;
+  /** Set by Scan to complete: the current stage is finished and waits for the next person to scan it to receive. */
+  stage_done?: { at: string; by_name: string | null } | null;
   order_id: string;
   unit_id: string;
   stage: ProductionStage;
@@ -436,6 +442,11 @@ export class ProductionService {
   /** `code` is what the article's QR holds. The stage is found from the signed-in person, never chosen. */
   scanReceive(code: string) {
     return this.api.postWithMessage<ScanReceiveResult>(`${this.base}/scan-receive`, { code });
+  }
+
+  /** The person who holds the article scans it again when their work is finished (it stays in its stage until the next person receives it). */
+  scanComplete(code: string) {
+    return this.api.postWithMessage<ScanReceiveResult>(`${this.base}/scan-complete`, { code });
   }
 
   /** The receiving screen: this person's stage and, per order, received / remaining and who received each article. */

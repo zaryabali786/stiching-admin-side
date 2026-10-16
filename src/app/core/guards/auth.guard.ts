@@ -47,6 +47,18 @@ export const permissionGuard: CanActivateFn = (route) => {
 };
 
 export const adminGuard = roleGuard('admin');
+
+/**
+ * Admin pages: route data `adminModule` names the module a restricted admin needs (a full admin always passes).
+ * A page without `adminModule` is for full admins only. The server checks every request again.
+ */
+export const adminModuleGuard: CanActivateFn = (route) => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  if (auth.isFullAdmin()) return true;
+  const needed = route.data['adminModule'] as string | undefined;
+  return needed && auth.canAdminModule(needed) ? true : router.createUrlTree(['/forbidden']);
+};
 export const partnerGuard = roleGuard('partner_staff', 'admin');
 
 /** Login page: send signed-in staff straight to their portal. */

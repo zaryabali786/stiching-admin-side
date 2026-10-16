@@ -48,7 +48,11 @@
     <section class="printable job-sheet">
       <!-- Header -->
       <header class="job-head">
-        <span class="swatch-lg" [style.background]="swatch()" aria-hidden="true"></span>
+        @if (card()?.unit?.product_image_url; as img) {
+          <img class="swatch-lg swatch-img" [src]="img" alt="" referrerpolicy="no-referrer" />
+        } @else {
+          <span class="swatch-lg" [style.background]="swatch()" aria-hidden="true"></span>
+        }
         <div class="grow">
           <span class="print-only print-code">Job card · {{ jobCode() }}</span>
           <h1 class="job-title">{{ c.unit_title }}</h1>
@@ -66,6 +70,7 @@
               <span class="stage-dot"></span>{{ cardLabel(c) }}
             </span>
             @if (c.stage === 'qc' && c.qc_passed || approvalStatus() !== 'none') { <app-approval-chip [status]="approvalStatus()" /> }
+            @if (c.stage_done; as sd) { <span class="badge green" [attr.title]="sd.by_name ? 'Completed by ' + sd.by_name : null">{{ stageLabel(c.stage) }} completed ✓</span> }
             @if (c.priority === 'rush') { <span class="badge red tag-rush">Rush</span> }
             @if (c.order?.paid_at) { <span class="badge green">Paid</span> }
             @if (c.due_date) {
@@ -80,7 +85,7 @@
           </div>
         </div>
         <div class="head-actions no-print">
-          <button *can="'production.update'" type="button" class="btn" (click)="askCustomer()" [disabled]="!!action()">
+          <button *can="'production.comment'" type="button" class="btn" (click)="askCustomer()" [disabled]="!!action()">
             @if (action() === 'ask') { <ion-spinner name="crescent" /> }
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2Zm7 9v2h2v-2h-2Zm1-7a3 3 0 0 0-3 3h2a1 1 0 1 1 1 1h-1v2h2v-.17A3 3 0 0 0 12 6Z"/></svg>
             <span [class.urdu]="lang.isUrdu()">{{ lang.t('Ask customer', 'گاہک سے پوچھیں') }}</span>
@@ -125,46 +130,6 @@
           }
         </ol>
 
-        <!-- The one thing to do next -->
-        <div class="next-panel" [class.is-done]="c.stage === 'packed'">
-          <div class="next-copy">
-            <span class="next-eyebrow" [class.urdu]="lang.isUrdu()">{{ c.stage === 'packed' ? lang.t('Done', 'مکمل') : lang.t('Next step', 'اگلا قدم') }}</span>
-            <p class="next-text">{{ nextText() }}</p>
-            @if (c.stage === 'qc' && !c.qc_passed && !allChecked()) {
-              <p class="hint-line no-print">
-                <b>{{ checkedCount() }} of {{ c.qc_items.length }}</b> checklist items ticked — tick all of them below to pass QC.
-              </p>
-            }
-          </div>
-          @if (canPack()) {
-            <div class="next-actions no-print">
-              <button type="button" class="btn btn-green primary-step" (click)="packOrder()" [disabled]="!!action()">
-                @if (action() === 'pack') { <ion-spinner name="crescent" /> }
-                Move to Packed
-              </button>
-            </div>
-          }
-          @if (c.stage !== 'packed' && c.stage !== 'pressing') {
-            <div *can="'production.update'" class="next-actions no-print">
-              @if (c.stage === 'qc' && !c.qc_passed) {
-                <button type="button" class="btn fix-btn" (click)="needsFixing()" [disabled]="!!action()">
-                  @if (action() === 'fail') { <ion-spinner name="crescent" /> }
-                  Needs fixing
-                </button>
-              }
-              <button
-                type="button"
-                class="btn btn-green primary-step"
-                (click)="primaryAction()"
-                [disabled]="!!action() || (c.stage === 'qc' && !c.qc_passed && !allChecked()) || (c.stage === 'to_assign' && suggestion() !== null && !suggestion()?.master)"
-                [title]="c.stage === 'qc' && !c.qc_passed && !allChecked() ? 'Tick every item of the QC checklist first' : ''">
-                @if (action() === 'primary') { <ion-spinner name="crescent" /> }
-                {{ primaryLabel(c) }}
-              </button>
-            </div>
-          }
-        </div>
-
         <div class="assign-grid no-print">
           <label class="field">
             <span class="label">Master</span>
@@ -205,11 +170,67 @@
         <p class="print-only print-assign">
           Master: {{ c.master ? masterLabel(c.master.name) : '—' }} · Tailor: {{ c.tailor?.name || '—' }} · Due: {{ c.due_date ? shortDate(c.due_date) : '—' }}
         </p>
+
+        <!-- The one thing to do next -->
+        <div class="next-panel" [class.is-done]="c.stage === 'packed'">
+          <div class="next-copy">
+            <span class="next-eyebrow" [class.urdu]="lang.isUrdu()">{{ c.stage === 'packed' ? lang.t('Done', 'مکمل') : lang.t('Next step', 'اگلا قدم') }}</span>
+            <p class="next-text">{{ nextText() }}</p>
+            @if (c.stage === 'qc' && !c.qc_passed && !allChecked()) {
+              <p class="hint-line no-print">
+                <b>{{ checkedCount() }} of {{ c.qc_items.length }}</b> checklist items ticked — tick all of them below to pass QC.
+              </p>
+            }
+          </div>
+          @if (canPack()) {
+            <div class="next-actions no-print">
+              <button type="button" class="btn btn-green primary-step" (click)="packOrder()" [disabled]="!!action()">
+                @if (action() === 'pack') { <ion-spinner name="crescent" /> }
+                Move to Packed
+              </button>
+            </div>
+          }
+          @if (c.stage !== 'packed' && c.stage !== 'pressing') {
+            @if (canStep()) {
+            <div class="next-actions no-print">
+              @if (c.stage === 'qc' && !c.qc_passed) {
+                <button type="button" class="btn fix-btn" (click)="needsFixing()" [disabled]="!!action()">
+                  @if (action() === 'fail') { <ion-spinner name="crescent" /> }
+                  Needs fixing
+                </button>
+              }
+              <button
+                type="button"
+                class="btn btn-green primary-step"
+                (click)="primaryAction()"
+                [disabled]="!!action() || (c.stage === 'qc' && !c.qc_passed && !allChecked()) || (c.stage === 'to_assign' && suggestion() !== null && !suggestion()?.master)"
+                [title]="c.stage === 'qc' && !c.qc_passed && !allChecked() ? 'Tick every item of the QC checklist first' : ''">
+                @if (action() === 'primary') { <ion-spinner name="crescent" /> }
+                {{ primaryLabel(c) }}
+              </button>
+            </div>
+            }
+          }
+        </div>
       </div>
 
       <!-- Extra materials bought while the article is cut or stitched -->
       @if (c.order_id || c.order?.id; as extraOrderId) {
         <app-extra-costs-panel [orderId]="extraOrderId" [canEdit]="canEdit()" [stage]="c.stage" />
+      }
+
+      <!-- What the customer wrote about THIS article, with the reply box (the same chat as Messages) -->
+      @if (canChat() && c.order_id) {
+        <section class="card chat-card no-print" aria-label="Customer messages about this article">
+          <button type="button" class="card-head chat-toggle" (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()">
+            <h2 class="card-title" [class.urdu]="lang.isUrdu()">{{ lang.t('Customer messages', 'کسٹمر کے پیغامات') }}</h2>
+            <span class="head-meta">about {{ c.unit_title }}</span>
+            <span class="chev" [class.open]="chatOpen()" aria-hidden="true">⌄</span>
+          </button>
+          @if (chatOpen()) {
+            <div class="chat-box"><app-chat-panel [orderId]="c.order_id" [unitId]="c.unit_id" /></div>
+          }
+        </section>
       }
 
       <!-- Measurements / Design / Quality check -->
@@ -252,7 +273,7 @@
             }
           } @else {
             <app-empty-state title="No size chart attached" message="Ask the customer for measurements before cutting." icon="↔">
-              <button *can="'production.update'" type="button" class="btn btn-sm no-print" (click)="askCustomer()" [disabled]="!!action()">Ask the customer</button>
+              <button *can="'production.comment'" type="button" class="btn btn-sm no-print" (click)="askCustomer()" [disabled]="!!action()">Ask the customer</button>
             </app-empty-state>
           }
         </div>
@@ -340,7 +361,7 @@
                     type="checkbox"
                     [checked]="!!checklist()[item.key]"
                     (change)="toggleItem(item.key, $any($event.target).checked)"
-                    [disabled]="savingItem() === item.key || c.qc_passed || !canEdit()" />
+                    [disabled]="savingItem() === item.key || c.qc_passed || !canChecklist()" />
                   <span class="box" aria-hidden="true">
                     <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="m9 16.2-3.5-3.6L4 14l5 5 11-11-1.4-1.4L9 16.2Z"/></svg>
                   </span>
@@ -393,7 +414,7 @@
           <span class="head-meta">{{ c.activity.length }} {{ c.activity.length === 1 ? 'entry' : 'entries' }}</span>
         </div>
 
-        <form *can="'production.update'" class="comment-form" (submit)="$event.preventDefault(); addComment()">
+        <form *can="'production.comment'" class="comment-form" (submit)="$event.preventDefault(); addComment()">
           <textarea
             class="textarea"
             rows="2"

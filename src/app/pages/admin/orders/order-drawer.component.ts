@@ -222,7 +222,7 @@ export class OrderDrawerComponent {
     const days = this.expressDraft() && this.expressDaysDraft().trim() ? Number(this.expressDaysDraft()) : null;
     if (this.expressDraft() && String(o.express_days ?? '') !== this.expressDaysDraft()) {
       if (days !== null && (!Number.isInteger(days) || days < 1 || days > 90)) {
-        this.ui.error('Express days must be a whole number from 1 to 90.');
+        this.ui.error('Priority days must be a whole number from 1 to 90.');
         return;
       }
       patch.express_days = days;

@@ -1,5 +1,7 @@
 import { Component, DestroyRef, HostListener, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs';
+import { DatePipe } from '@angular/common';
 import { IonSpinner } from '@ionic/angular';
 import { PagedList, SKELETON_ROWS } from '../../../pages/admin/admin-list';
 import { apiErrorMessage } from '../../../core/services/api.service';
@@ -12,11 +14,13 @@ import {
   UserCreateInput,
   UserPatch,
 } from '../../../core/services/partner-admin.service';
+import { RoleRecord, RolesApiService } from '../../../core/services/roles-api.service';
 import { UiService } from '../../../core/services/ui.service';
 import { EmptyStateComponent } from '../empty-state.component';
 import { PaginationComponent } from '../pagination.component';
 import { SearchInputComponent } from '../search-input.component';
 import { PermissionMatrixComponent } from '../permission-matrix/permission-matrix.component';
+import { MultiOption, MultiSelectComponent } from '../multi-select/multi-select.component';
 import { TempPasswordDialogComponent } from './temp-password-dialog.component';
 
 const PAGE_LIMIT = 20;
@@ -53,6 +57,8 @@ interface UserForm {
   job_title: string;
   staff_type: StaffType;
   password: string;
+  /** The person is asked for a password of their own at the first sign-in. */
+  mustChange: boolean;
 }
 
 interface Credential {
@@ -70,12 +76,13 @@ interface Credential {
 @Component({
   selector: 'app-partner-users-panel',
   standalone: true,
-  imports: [IonSpinner, EmptyStateComponent, PaginationComponent, SearchInputComponent, PermissionMatrixComponent, TempPasswordDialogComponent],
+  imports: [DatePipe, IonSpinner, EmptyStateComponent, PaginationComponent, SearchInputComponent, PermissionMatrixComponent, TempPasswordDialogComponent, MultiSelectComponent],
   templateUrl: './partner-users-panel.component.html',
   styleUrls: ['./partner-users-panel.component.scss'],
 })
 export class PartnerUsersPanelComponent {
   private svc = inject(PartnerAdminService);
+  private rolesApi = inject(RolesApiService);
   private ui = inject(UiService);
   private destroyRef = inject(DestroyRef);
 
@@ -87,8 +94,12 @@ export class PartnerUsersPanelComponent {
   readonly ceiling = input<readonly string[]>([]);
   readonly canCreate = input(false);
   readonly canUpdate = input(false);
+  /** Settings > Users are not team people: no Master / Tailor / QA type to choose and none shown. */
+  readonly hideType = input(false);
   /** Show the "Add user" button in the panel's toolbar (the page can host its own and call `openNew()`). */
   readonly showAddButton = input(true);
+  /** Access comes from roles (chosen in the form) and the login can be tagged with a team member, instead of ticking permissions one by one. */
+  readonly useRoles = input(false);
   /** Something changed (user added / edited / switched): lets a parent refresh its figures. */
   readonly changed = output<void>();
 
@@ -105,8 +116,19 @@ export class PartnerUsersPanelComponent {
   readonly page = signal(1);
   readonly busyId = signal<string | null>(null);
 
+  /** The person whose details are open in the side panel. */
+  readonly detailId = signal<string | null>(null);
+  readonly openUser = computed(() => this.list.items().find((u) => u.id === this.detailId()) ?? null);
+
   readonly form = signal<UserForm | null>(null);
   readonly formPerms = signal<string[]>([]);
+  readonly roleOptions = signal<RoleRecord[]>([]);
+  readonly teamOptions = signal<{ id: string; name: string; role: string }[]>([]);
+  readonly formRoleIds = signal<string[]>([]);
+  readonly formTeamId = signal('');
+  /** The roles were changed in this form (an older user without roles keeps their access until then). */
+  readonly rolesTouched = signal(false);
+  private readonly roleName = computed(() => new Map(this.roleOptions().map((r) => [r.id, r.name])));
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
   readonly showErrors = signal(false);
@@ -114,8 +136,14 @@ export class PartnerUsersPanelComponent {
   readonly credential = signal<Credential | null>(null);
 
   private readonly ceilingSet = computed(() => new Set(this.ceiling()));
+  /** Which partner's users these are. 'pending' until the parent has bound `api` (a required input cannot be read before that). */
   private readonly apiKey = computed(() => {
-    const a = this.api();
+    let a: PartnerUsersApi;
+    try {
+      a = this.api();
+    } catch {
+      return 'pending';
+    }
     return a.kind === 'admin' ? `admin:${a.partnerId}` : 'partner';
   });
 
@@ -135,10 +163,14 @@ export class PartnerUsersPanelComponent {
 
   constructor() {
     this.list.connect(
-      toObservable(computed(() => ({ key: this.apiKey(), search: this.search(), page: this.page() }))),
+      toObservable(computed(() => ({ key: this.apiKey(), search: this.search(), page: this.page() }))).pipe(filter((p) => p.key !== 'pending')),
       () => this.svc.listUsers(this.api(), { search: this.search(), page: this.page(), limit: PAGE_LIMIT }),
       this.destroyRef
     );
+    // the role names the table and the side panel show
+    effect(() => {
+      if (this.useRoles() && this.apiKey() !== 'pending') untracked(() => this.loadRoles());
+    });
     // another partner (or the other portal): start from the first page again
     let seen = this.apiKey();
     effect(() => {
@@ -154,7 +186,64 @@ export class PartnerUsersPanelComponent {
 
   @HostListener('document:keydown.escape')
   onEsc(): void {
-    if (!this.ui.confirmState() && !this.credential() && this.form() && !this.saving()) this.closeForm();
+    if (this.ui.confirmState() || this.credential() || this.saving()) return;
+    if (this.form()) this.closeForm();
+    else if (this.detailId()) this.detailId.set(null);
+  }
+
+  openDetail(u: PartnerUser): void {
+    this.detailId.set(u.id);
+  }
+
+  closeDetail(): void {
+    this.detailId.set(null);
+  }
+
+  /** Two letters for the round avatar. */
+  initials(u: { full_name: string | null; email: string }): string {
+    const parts = (u.full_name || u.email || '?').trim().split(/[\s@._-]+/).filter(Boolean);
+    return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
+  }
+
+  /** The names of the roles a user holds. */
+  rolesOf(u: PartnerUser): string[] {
+    return (u.role_ids ?? []).map((id) => this.roleName().get(id)).filter((n): n is string => !!n);
+  }
+
+  /** The roles the form can choose from (and a hint when there are none yet). */
+  loadRoles(): void {
+    this.rolesApi.list('partner').subscribe({ next: (r) => this.roleOptions.set(r.filter((x) => !x.locked)), error: () => this.roleOptions.set([]) });
+  }
+
+  private loadTeam(userId: string | null): void {
+    this.svc.taggableTeam(userId).subscribe({ next: (t) => this.teamOptions.set(t), error: () => this.teamOptions.set([]) });
+  }
+
+  readonly roleChoices = computed<MultiOption[]>(() => this.roleOptions().map((r) => ({ id: r.id, label: r.name, hint: r.description || `${r.permissions.length} permission${r.permissions.length === 1 ? '' : 's'}` })));
+
+  setRoles(ids: string[]): void {
+    this.rolesTouched.set(true);
+    this.formError.set(null);
+    this.formRoleIds.set(ids);
+  }
+
+  /** Every module with what the person may do in it: the readable form of their permissions. */
+  access(u: PartnerUser): { id: string; label: string; description: string; actions: string[] }[] {
+    const perms = new Set(u.is_owner ? this.ceiling() : u.permissions || []);
+    return this.modules()
+      .filter((m) => !u.is_owner || m.actions.some((a) => perms.has(`${m.id}.${a}`)))
+      .map((m) => {
+        const base = m.actions.filter((a) => perms.has(`${m.id}.${a}`)).map((a) => (a === 'update' ? (m.detail?.length ? 'Full control' : 'Change') : a === 'create' ? 'Create' : 'View'));
+        // with Full control every button is allowed: list single buttons only when it is not ticked
+        const detail = perms.has(`${m.id}.update`) ? [] : (m.detail ?? []).filter((d) => perms.has(`${m.id}.${d.id}`)).map((d) => d.label);
+        return { id: m.id, label: m.label, description: m.description, actions: [...base, ...detail] };
+      });
+  }
+
+  /** What the person is, in words: their job title, else the kind of staff. */
+  roleLabel(u: PartnerUser): string {
+    if (u.is_owner) return 'Owner';
+    return u.job_title || (u.staff_type && u.staff_type !== 'staff' ? this.staffTypeLabel(u.staff_type) : 'Staff');
   }
 
   // ── list ──
@@ -222,7 +311,11 @@ export class PartnerUsersPanelComponent {
     if (!this.canCreate()) return;
     this.reset();
     this.formPerms.set([]);
-    this.form.set({ id: null, isOwner: false, full_name: '', email: '', phone: '', job_title: '', staff_type: 'staff', password: '' });
+    this.formRoleIds.set([]);
+    this.formTeamId.set('');
+    this.rolesTouched.set(true);
+    if (this.useRoles()) { this.loadRoles(); this.loadTeam(null); }
+    this.form.set({ id: null, isOwner: false, full_name: '', email: '', phone: '', job_title: '', staff_type: 'staff', password: '', mustChange: true });
     this.focusFirst();
   }
 
@@ -230,7 +323,11 @@ export class PartnerUsersPanelComponent {
     this.reset();
     // permissions beyond the ceiling cannot be handed out any more, so they are not shown as ticked
     this.formPerms.set((u.permissions || []).filter((p) => this.ceilingSet().has(p)));
-    this.form.set({ id: u.id, isOwner: u.is_owner, full_name: u.full_name || '', email: u.email, phone: u.phone || '', job_title: u.job_title || '', staff_type: u.staff_type || 'staff', password: '' });
+    this.formRoleIds.set([...(u.role_ids ?? [])]);
+    this.formTeamId.set(u.team_member?.id ?? '');
+    this.rolesTouched.set(false);
+    if (this.useRoles()) { this.loadRoles(); this.loadTeam(u.id); }
+    this.form.set({ id: u.id, isOwner: u.is_owner, full_name: u.full_name || '', email: u.email, phone: u.phone || '', job_title: u.job_title || '', staff_type: u.staff_type || 'staff', password: '', mustChange: true });
     this.focusFirst();
   }
 
@@ -244,6 +341,14 @@ export class PartnerUsersPanelComponent {
     if (this.form()?.id) return;
     const preset = STAFF_PRESETS[type].filter((p) => this.ceilingSet().has(p));
     this.formPerms.set(preset);
+  }
+
+  /** A strong random password the partner can read out or send. */
+  generatePassword(): void {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = crypto.getRandomValues(new Uint32Array(12));
+    this.patchForm({ password: Array.from(bytes, (n) => chars[n % chars.length]).join('') });
+    this.showPassword.set(true);
   }
 
   patchForm(patch: Partial<UserForm>): void {
@@ -265,10 +370,16 @@ export class PartnerUsersPanelComponent {
         full_name: f.full_name.trim(),
         phone: f.phone.trim() || undefined,
         job_title: f.job_title.trim() || undefined,
-        staff_type: f.staff_type,
-        permissions: this.formPerms(),
       };
+      if (this.useRoles()) {
+        body.role_ids = this.formRoleIds();
+        if (this.formTeamId()) body.team_member_id = this.formTeamId();
+      } else {
+        body.staff_type = f.staff_type;
+        body.permissions = this.formPerms();
+      }
       if (f.password) body.password = f.password;
+      body.must_change_password = f.mustChange;
       this.svc.createUser(this.api(), body).subscribe({
         next: (res) => {
           this.saving.set(false);
@@ -283,8 +394,15 @@ export class PartnerUsersPanelComponent {
     }
 
     const patch: UserPatch = { full_name: f.full_name.trim(), phone: f.phone.trim(), job_title: f.job_title.trim() };
-    if (!f.isOwner) patch.staff_type = f.staff_type;
-    if (!f.isOwner) patch.permissions = this.formPerms();
+    if (this.useRoles()) {
+      if (!f.isOwner) {
+        if (this.rolesTouched()) patch.role_ids = this.formRoleIds();
+        patch.team_member_id = this.formTeamId() || null;
+      }
+    } else {
+      if (!f.isOwner) patch.staff_type = f.staff_type;
+      if (!f.isOwner) patch.permissions = this.formPerms();
+    }
     this.svc.updateUser(this.api(), f.id, patch).subscribe({
       next: (u) => {
         this.saving.set(false);

@@ -49,6 +49,8 @@ export interface Profile {
   partner_role: 'owner' | 'member' | null;
   /** EFFECTIVE permissions, e.g. 'production.view'. Admins hold all of them. */
   permissions: string[];
+  /** Admins only: null = full admin, otherwise the admin modules this person may open (the server checks every request). */
+  admin_modules?: string[] | null;
   job_title: string | null;
   staff_type?: 'master' | 'tailor' | 'qa' | 'pressing' | 'packing' | 'staff' | null;
   /** A temporary password was set for this login: the person must choose their own before anything else. */

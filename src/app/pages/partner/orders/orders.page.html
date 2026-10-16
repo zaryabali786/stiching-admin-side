@@ -97,8 +97,8 @@
           <div class="d-row">
             <app-status-badge [status]="d.status" [label]="d.status_label" />
             @if (d.express.rush) { <span class="badge red">Rush</span> }
-            @if (d.express.stitching) { <span class="badge amber">Express stitching · {{ d.express.stitching }} days</span> }
-            @if (d.express.shipping) { <span class="badge amber">Express shipping · {{ d.express.shipping }} days</span> }
+            @if (d.express.stitching) { <span class="badge amber">Priority stitching · {{ d.express.stitching }} days</span> }
+            @if (d.express.shipping) { <span class="badge amber">Fast shipping · {{ d.express.shipping }} days</span> }
           </div>
 
           <section class="d-card earnings" aria-label="Partner earnings">

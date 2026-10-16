@@ -42,9 +42,9 @@ import { ScanReceiveComponent } from '../../../shared/components/scan-receive/sc
               </select>
             </label>
           }
-          <button *can="'production.update'" type="button" class="btn btn-primary scan" (click)="scanOpen.set(true)">
+          <button *can="'production.scan'" type="button" class="btn btn-primary scan" (click)="scanOpen.set(true)">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 5a2 2 0 0 1 2-2h4v2H5v4H3V5Zm12-2h4a2 2 0 0 1 2 2v4h-2V5h-4V3ZM3 15h2v4h4v2H5a2 2 0 0 1-2-2v-4Zm16 0h2v4a2 2 0 0 1-2 2h-4v-2h4v-4ZM7 7h4v4H7V7Zm6 0h4v4h-4V7ZM7 13h4v4H7v-4Zm6 2h2v2h-2v-2Zm2-2h2v2h-2v-2Z"/></svg>
-            Scan to receive
+            Scan QR
           </button>
         </div>
       </header>

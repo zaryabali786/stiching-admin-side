@@ -5,7 +5,7 @@
       <h1 [class.urdu]="lang.isUrdu()">{{ lang.t('Receiving', 'وصولی') }}</h1>
       <p class="subtitle" [class.urdu]="lang.isUrdu()">{{ lang.t('Type the customer code from the parcel label, then mark each piece received. Photos are optional — only if something is wrong.', 'پارسل کے لیبل سے کسٹمر کوڈ لکھیں، پھر ہر پیس کو وصول کریں۔ تصاویر صرف مسئلے کی صورت میں، لازمی نہیں۔') }}</p>
     </div>
-    <div *can="'receiving.update'" class="actions">
+    <div *can="'receiving.unmatched'" class="actions">
       <button type="button" class="btn" (click)="openUnmatched()">
         <span [class.urdu]="lang.isUrdu()">{{ lang.t('Log unmatched parcel', 'نامعلوم پارسل درج کریں') }}</span>
       </button>
@@ -61,7 +61,7 @@
                   @if (ep.receiving_phone) { <span class="muted">{{ ep.receiving_phone }}</span> }
                 </div>
               }
-              <div class="el-actions" *can="'receiving.update'">
+              <div class="el-actions" *can="'receiving.returns'">
                 <button type="button" class="btn btn-primary" [disabled]="forwarding() === e.id" (click)="forward(e)">
                   @if (forwarding() === e.id) { <ion-spinner name="crescent" /> } I am sending it to {{ e.partner?.name || 'them' }}
                 </button>
@@ -72,7 +72,7 @@
         <div class="card">
           @if (search()) {
             <app-empty-state title="No parcels match your search" [message]="'Nothing found for “' + search() + '”. Check the customer code on the label, or log it as an unmatched parcel.'">
-              <button *can="'receiving.update'" type="button" class="btn btn-sm" (click)="openUnmatched()">Log unmatched parcel</button>
+              <button *can="'receiving.unmatched'" type="button" class="btn btn-sm" (click)="openUnmatched()">Log unmatched parcel</button>
             </app-empty-state>
           } @else if (tab() === 'expected') {
             <app-empty-state title="No parcels expected" message="New customer orders will appear here until their parcel arrives." />
@@ -92,7 +92,7 @@
             <div class="sheet-actions">
               @for (c of bookedCouriers(); track c) { <button type="button" class="btn btn-sm btn-ghost" (click)="pickAllOfCourier(c)">All {{ c }}</button> }
               @if (picked().size) { <button type="button" class="btn btn-sm btn-ghost" (click)="clearPicked()">Clear</button> }
-              <button *can="'receiving.update'" type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy()" (click)="downloadLoadsheet()">
+              <button *can="'receiving.returns'" type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy()" (click)="downloadLoadsheet()">
                 @if (sheetBusy()) { <ion-spinner name="crescent" /> } Download Loadsheet@if (picked().size) { ({{ picked().size }}) }
               </button>
             </div>
@@ -112,8 +112,8 @@
                 <div class="meta-line">
                   @if (o.tracking_number) { <span>Tracking <b>{{ o.tracking_number }}</b></span> } @else { <span>No tracking number</span> }
                   <span>Ordered {{ o.created_at | day }}</span>
-                  @if (o.express_shipping) { <span class="deliver-to"><b>Express shipping</b>@if (o.express_shipping_days) { · {{ o.express_shipping_days }} days }</span> }
-                  @if (o.express_stitching) { <span class="deliver-to"><b>Express stitching</b>@if (o.express_days) { · {{ o.express_days }} days }</span> }
+                  @if (o.express_shipping) { <span class="deliver-to"><b>Fast shipping</b>@if (o.express_shipping_days) { · {{ o.express_shipping_days }} days }</span> }
+                  @if (o.express_stitching) { <span class="deliver-to"><b>Priority stitching</b>@if (o.express_days) { · {{ o.express_days }} days }</span> }
                   @if (destination(o)) { <span>Ships to {{ destination(o) }}</span> }
                   @if (o.destination_address) { <span class="deliver-to"><b>Deliver to:</b> {{ o.destination_address }}</span> }
                   @if (o.destination_phone) { <span class="deliver-to"><b>Phone:</b> {{ o.destination_phone }}</span> }
@@ -153,9 +153,9 @@
                           <button type="button" class="btn btn-sm btn-ghost" (click)="weightEdit.set(null)">Cancel</button>
                         </span>
                       } @else if (u.weight_kg) {
-                        <span class="small unit-weight">Weight <b>{{ u.weight_kg }} kg</b>@if (canEditWeight(o)) { <button *can="'receiving.update'" type="button" class="link-btn" (click)="editWeight(u)">Edit</button> }</span>
+                        <span class="small unit-weight">Weight <b>{{ u.weight_kg }} kg</b>@if (canEditWeight(o)) { <button *can="'receiving.receive'" type="button" class="link-btn" (click)="editWeight(u)">Edit</button> }</span>
                       } @else if (u.status !== 'pending') {
-                        <span class="small unit-weight missing">No weight yet @if (canEditWeight(o)) { <button *can="'receiving.update'" type="button" class="link-btn" (click)="editWeight(u)">Add weight</button> }</span>
+                        <span class="small unit-weight missing">No weight yet @if (canEditWeight(o)) { <button *can="'receiving.receive'" type="button" class="link-btn" (click)="editWeight(u)">Add weight</button> }</span>
                       }
                       @if (u.notes) { <span class="small unit-note">Customer note: {{ u.notes }}</span> }
                       <app-voice-note-play [note]="u.notes_audio" label="Article note, voice" />
@@ -205,7 +205,7 @@
                               <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
                               <span class="ship-status">{{ sh.status_label }}</span>
                             </div>
-                            <button *can="'receiving.update'" type="button" class="btn btn-sm btn-ghost" (click)="cancelBooking(u)">Cancel booking</button>
+                            <button *can="'receiving.returns'" type="button" class="btn btn-sm btn-ghost" (click)="cancelBooking(u)">Cancel booking</button>
                           } @else if (u.return_order; as ro) {
                             <div class="ship-line booked">
                               <span><b>In the Warehouse</b> · {{ ro.reference }} · {{ ro.destination === 'admin' ? 'sent to the admin warehouse' : 'returning directly to the customer' }}</span>
@@ -214,7 +214,7 @@
                             <a class="btn btn-sm btn-ghost" [routerLink]="['/partner/warehouse']" [queryParams]="{ search: ro.reference }">Open in Warehouse</a>
                           } @else {
                             <span class="hint">Send this parcel to the Warehouse. It then leaves this tab and continues there.</span>
-                            <span *can="'receiving.update'" class="ship-actions">
+                            <span *can="'receiving.returns'" class="ship-actions">
                               @if (u.return_to === 'customer') {
                                 <button type="button" class="btn btn-sm btn-primary" [disabled]="routing() === u.id" (click)="routeReturn(u, 'customer')">Send to Warehouse</button>
                               } @else {
@@ -230,7 +230,7 @@
                             <span class="hint">✓ Corrected article received {{ u.hold_received_at | timeAgo }}. Waiting for the customer to approve it. The hold resolves after that.</span>
                           } @else {
                             <span class="hint">Keep the article safe until the corrected one arrives.</span>
-                            <button *can="'receiving.update'" type="button" class="btn btn-sm btn-primary" (click)="openCorrected(o, u)">Receive Corrected Article</button>
+                            <button *can="'receiving.returns'" type="button" class="btn btn-sm btn-primary" (click)="openCorrected(o, u)">Receive Corrected Article</button>
                           }
                         </div>
                       } @else if (u.return_status === 'sent_back' || u.return_status === 'returned') {
@@ -254,7 +254,7 @@
                               </ul>
                             }
                             @if (u.return_status === 'sent_back') {
-                              <span *can="'receiving.update'" class="ship-actions">
+                              <span *can="'receiving.returns'" class="ship-actions">
                                 @if (sh.courier_name.toLowerCase() === 'postex') { <button type="button" class="btn btn-sm" (click)="refreshTracking(u)">Refresh PostEx tracking</button> }
                                 @if (sh.status === 'handed_over') { <button type="button" class="btn btn-sm" (click)="openTrack(o, u, 'in_transit')">Mark in transit</button> }
                                 <button type="button" class="btn btn-sm btn-primary" (click)="openTrack(o, u, 'delivered')">Courier delivered it</button>
@@ -295,7 +295,7 @@
                           }
                         </div>
                       }
-                      <span *can="'receiving.update'" class="hint">Once sorted, use “Receive parcel”.</span>
+                      <span *can="'receiving.receive'" class="hint">Once sorted, use “Receive parcel”.</span>
                     </div>
                   }
                 </li>
@@ -321,7 +321,7 @@
               } @else if (returnWaiting(o)) {
                 <span class="muted small return-wait">Send the rejected article back first. Receiving opens again after that.</span>
               } @else if (pendingCount(o) > 0) {
-                <button *can="'receiving.update'" type="button" class="btn btn-primary btn-floor all-btn" (click)="openReceive(o)">
+                <button *can="'receiving.receive'" type="button" class="btn btn-primary btn-floor all-btn" (click)="openReceive(o)">
                   <span aria-hidden="true">📦</span>
                   <span [class.urdu]="lang.isUrdu()">{{ sentBackCount(o) ? 'Receive corrected article' : lang.t('Receive parcel', 'پارسل وصول کریں') }}</span>
                   @if (pendingCount(o) > 1) { <span class="all-count">{{ pendingCount(o) }}</span> }
@@ -377,7 +377,7 @@
             <p class="muted tiny">+ {{ unmatchedTotal() - unmatched().length }} more waiting for admin</p>
           }
         }
-        <button *can="'receiving.update'" type="button" class="btn btn-sm btn-block" (click)="openUnmatched()">
+        <button *can="'receiving.unmatched'" type="button" class="btn btn-sm btn-block" (click)="openUnmatched()">
           <span [class.urdu]="lang.isUrdu()">{{ lang.t('Log unmatched parcel', 'نامعلوم پارسل درج کریں') }}</span>
         </button>
       </div>

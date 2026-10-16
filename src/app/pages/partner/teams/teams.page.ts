@@ -1,19 +1,16 @@
 import { CanDirective } from '../../../shared/can.directive';
-import { Component, DestroyRef, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { Observable, Subject, catchError, map, of, startWith, switchMap, tap } from 'rxjs';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { BadgeService } from '../../../core/services/badge.service';
 import { LanguageService } from '../../../core/services/language.service';
-import { MasterTeam, PartnerService, TeamLoginCredential, TeamMember, TeamsResponse } from '../../../core/services/partner.service';
+import { MasterTeam, PartnerService, TeamMember, TeamsResponse } from '../../../core/services/partner.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ActivePartnerService } from '../../../core/services/active-partner.service';
-import { PartnerAccess, PartnerAdminService } from '../../../core/services/partner-admin.service';
-import { PermissionMatrixComponent } from '../../../shared/components/permission-matrix/permission-matrix.component';
-import { TempPasswordDialogComponent } from '../../../shared/components/partner-users-panel/temp-password-dialog.component';
-import { STAFF_PRESETS } from '../../../shared/components/partner-users-panel/partner-users-panel.component';
 import { UiService } from '../../../core/services/ui.service';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 
@@ -42,13 +39,8 @@ interface MemberForm {
   roles: TeamRole[];
   daily_capacity: number | null;
   master_id: string | null;
-  /** Give this person their own login (email + password + permissions). */
-  withLogin: boolean;
-  /** The person already has a login: its email, password and permissions are edited here. */
-  hasLogin: boolean;
-  email: string;
-  password: string;
-  originalEmail: string;
+  /** The user (login) this team member is: chosen from the users already added. '' = none. */
+  user_id: string;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,16 +48,17 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 @Component({
   selector: 'app-partner-teams',
   standalone: true,
-  imports: [CanDirective, FormsModule, IonSpinner, EmptyStateComponent, PermissionMatrixComponent, TempPasswordDialogComponent],
+  imports: [CanDirective, FormsModule, RouterLink, IonSpinner, EmptyStateComponent],
   templateUrl: './teams.page.html',
   styleUrls: ['./teams.page.scss'],
 })
 export class PartnerTeamsPage implements OnInit {
+  /** Shown inside Settings: the page title is left out (the tab already says it). */
+  readonly embedded = input(false);
   readonly lang = inject(LanguageService);
   private partner = inject(PartnerService);
   private ui = inject(UiService);
   private badges = inject(BadgeService);
-  private partnerAdmin = inject(PartnerAdminService);
   private auth = inject(AuthService);
   private activePartner = inject(ActivePartnerService);
   private destroyRef = inject(DestroyRef);
@@ -79,16 +72,11 @@ export class PartnerTeamsPage implements OnInit {
   readonly busy = signal<Set<string>>(new Set());
   readonly form = signal<MemberForm | null>(null);
   readonly formTouched = signal(false);
+  private originalUser = '';
   readonly saving = signal(false);
 
-  /** Login for the member being added / edited: permissions ticked, the module catalogue, and what the caller may hand out. */
-  readonly formPerms = signal<string[]>([]);
-  readonly access = signal<PartnerAccess | null>(null);
-  readonly canCreateLogin = computed(() => this.auth.can('users.create'));
-  /** Create a login, or change an existing one (email, password, permissions). */
-  readonly canManageLogin = computed(() => this.auth.can('users.create') || this.auth.can('users.update'));
-  readonly credential = signal<{ name: string; email: string; password: string } | null>(null);
-  readonly showPassword = signal(false);
+  /** The users a team member can be linked to (added on the Users page first). */
+  readonly users = signal<{ id: string; full_name: string | null; email: string; job_title: string | null }[]>([]);
 
   readonly masters = computed(() => this.data()?.masters ?? []);
   readonly activeMasters = computed(() => this.masters().filter((m) => m.is_active));
@@ -133,16 +121,6 @@ export class PartnerTeamsPage implements OnInit {
   /** Quality check, pressing and packing people (masters and tailors have their own team cards). */
   readonly stageStaff = computed(() => (this.data()?.members ?? []).filter((m) => m.role !== 'master' && m.role !== 'tailor'));
 
-  constructor() {
-    // The login fields need the permissions this person may hand out. They load as soon as the signed-in person / the chosen
-    // partner is known (not only once when the page opens, which missed the case of the partner still loading).
-    effect(() => {
-      this.activePartner.partnerId();
-      this.canManageLogin();
-      untracked(() => this.loadAccess());
-    });
-  }
-
   ngOnInit(): void {
     this.reload$
       .pipe(
@@ -163,23 +141,6 @@ export class PartnerTeamsPage implements OnInit {
       });
   }
 
-  /** What may be handed out to a new login: the caller's own modules, or (admin with a partner selected) the partner's. */
-  private loadAccess(): void {
-    if (!this.canManageLogin()) return;
-    const partnerId = this.activePartner.partnerId();
-    if (this.auth.isAdmin()) {
-      if (!partnerId) return;
-      this.partnerAdmin.getPartner(partnerId).subscribe({
-        next: (d) => this.access.set({
-          role: 'admin', partner_id: d.partner.id, partner: { id: d.partner.id, name: d.partner.name, status: d.partner.status },
-          partner_role: null, permissions: [], modules: d.modules, delegable: d.partner.permissions,
-        }),
-        error: () => undefined,
-      });
-      return;
-    }
-    this.partnerAdmin.getAccess().subscribe({ next: (a) => this.access.set(a), error: () => undefined });
-  }
 
   retry(): void {
     this.loading.set(true);
@@ -239,7 +200,7 @@ export class PartnerTeamsPage implements OnInit {
   /** `masterId` given = added from a master's card: a tailor under that master. Otherwise the roles of the other stages. */
   openAdd(role: TeamRole, masterId: string | null = null): void {
     this.formTouched.set(false);
-    if (!this.access()) this.loadAccess();
+    this.loadUsers(null);
     this.form.set({
       id: null,
       name: '',
@@ -247,39 +208,36 @@ export class PartnerTeamsPage implements OnInit {
       roles: role === 'tailor' ? ['tailor'] : role === 'master' ? ['master'] : STAGE_ROLES,
       daily_capacity: DEFAULT_CAPACITY[role],
       master_id: role === 'tailor' ? masterId ?? this.suggestedId() ?? this.activeMasters()[0]?.id ?? null : null,
-      withLogin: this.canCreateLogin(),
-      hasLogin: false,
-      email: '',
-      password: '',
-      originalEmail: '',
+      user_id: '',
     });
-    this.presetFor(role);
   }
 
-  /** Master / tailor start from their usual modules (only those the partner has); the partner can tick or untick any. */
-  private presetFor(role: TeamRole): void {
-    const have = new Set(this.access()?.delegable ?? []);
-    this.formPerms.set(STAFF_PRESETS[role].filter((p) => have.has(p)));
+  /** The users that can still be linked (plus the one this member has now). */
+  private loadUsers(memberId: string | null): void {
+    this.partner.linkableUsers(memberId).subscribe({ next: (u) => this.users.set(u), error: () => this.users.set([]) });
+  }
+
+  /** Choosing a user fills in the name when it is still empty. */
+  pickUser(id: string): void {
+    const u = this.users().find((x) => x.id === id);
+    const f = this.form();
+    this.patchForm({ user_id: id, ...(u && f && !f.name.trim() ? { name: u.full_name || '' } : {}) });
   }
 
   setRole(role: TeamRole): void {
     this.patchForm({ role, daily_capacity: DEFAULT_CAPACITY[role] });
-    if (!this.form()?.id) this.presetFor(role);
   }
 
-  /** Edit form of a member without a login: offer to create one. */
+  /** Edit form of a member without a user: pick one. */
   addLoginTo(m: TeamMember): void {
     this.openEdit(m);
-    this.patchForm({ withLogin: true });
-    this.presetFor(m.role);
   }
 
   openEdit(m: TeamMember): void {
     this.formTouched.set(false);
-    if (!this.access()) this.loadAccess();
-    this.form.set({ id: m.id, name: m.name, role: m.role, roles: ALL_ROLES, daily_capacity: m.daily_capacity, master_id: m.master_id, withLogin: false, hasLogin: !!m.login, email: m.login?.email ?? '', password: '', originalEmail: m.login?.email ?? '' });
-    // the permissions the login has now, ticked: change them and save
-    this.formPerms.set(m.login?.permissions ?? []);
+    this.loadUsers(m.id);
+    this.form.set({ id: m.id, name: m.name, role: m.role, roles: ALL_ROLES, daily_capacity: m.daily_capacity, master_id: m.master_id, user_id: m.login?.id ?? '' });
+    this.originalUser = m.login?.id ?? '';
   }
 
   patchForm(patch: Partial<MemberForm>): void {
@@ -295,14 +253,7 @@ export class PartnerTeamsPage implements OnInit {
     const cap = Number(f.daily_capacity);
     if (!(cap >= 1 && cap <= 100)) return 'Daily capacity must be between 1 and 100 articles.';
     if (f.role === 'tailor' && !f.master_id) return 'Choose which master this tailor works under.';
-    if (f.hasLogin) {
-      if (!EMAIL.test(f.email.trim())) return 'Enter a valid email: they sign in with it.';
-      if (f.password && f.password.length < 8) return 'The new password needs at least 8 characters, or leave it empty to keep the current one.';
-    }
-    if (f.withLogin) {
-      if (!EMAIL.test(f.email.trim())) return 'Enter a valid email: they sign in with it.';
-      if (f.password && f.password.length < 8) return 'The password needs at least 8 characters, or leave it empty to generate one.';
-    }
+    if (!f.id && !f.user_id) return 'Choose the user this person signs in with. Add the user first on the Users page if they are not listed.';
     return null;
   }
 
@@ -318,27 +269,13 @@ export class PartnerTeamsPage implements OnInit {
       daily_capacity: Math.round(Number(f.daily_capacity)),
       master_id: f.role === 'tailor' ? f.master_id : null,
     };
-    const login = f.withLogin ? { email: f.email.trim(), password: f.password || undefined, permissions: this.formPerms() } : undefined;
-    // an existing login: send only what changed (email, a new password) and the permissions as ticked
-    const loginChanges = f.hasLogin
-      ? { email: f.email.trim() !== f.originalEmail ? f.email.trim() : undefined, password: f.password || undefined, permissions: this.formPerms() }
-      : undefined;
     this.saving.set(true);
-    const shown = (c: TeamLoginCredential | undefined) => {
-      if (c) this.credential.set({ name: body.name, email: c.email, password: c.temporaryPassword });
-    };
     let req: Observable<string>;
     if (!f.id) {
-      req = this.partner.addMember({ ...body, login }).pipe(map((r) => { shown(r.data.credential); return r.message || `${body.name} added.`; }));
-    } else if (login) {
-      // save the changes, then create the login
-      const id = f.id;
-      req = this.partner.updateMember(id, body).pipe(
-        switchMap(() => this.partner.addMemberLogin(id, login)),
-        map((r) => { shown(r.data.credential); return r.message; })
-      );
+      req = this.partner.addMember({ ...body, user_id: f.user_id }).pipe(map((r) => r.message || `${body.name} added.`));
     } else {
-      req = this.partner.updateMember(f.id, loginChanges ? { ...body, login: loginChanges } : body).pipe(map((m) => `${m.name} updated.`));
+      // send the user only when it changed (linking, changing or unlinking)
+      req = this.partner.updateMember(f.id, f.user_id !== this.originalUser ? { ...body, user_id: f.user_id || null } : body).pipe(map((m) => `${m.name} updated.`));
     }
     req.subscribe({
       next: (msg) => {

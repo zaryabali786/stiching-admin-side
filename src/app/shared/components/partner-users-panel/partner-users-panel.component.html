@@ -16,7 +16,7 @@
             <th>Name</th>
             <th>Email</th>
             <th>Phone</th>
-            <th>Access</th>
+            <th>{{ useRoles() ? 'Roles' : 'Access' }}</th>
             <th>Status</th>
             <th><span class="sr-only">Actions</span></th>
           </tr>
@@ -28,40 +28,31 @@
             }
           } @else {
             @for (u of list.items(); track u.id) {
-              <tr [class.inactive]="!u.is_active">
+              <tr class="clickable" [class.inactive]="!u.is_active" tabindex="0" (click)="openDetail(u)" (keydown.enter)="openDetail(u)" [attr.aria-label]="'Open ' + (u.full_name || u.email)">
                 <td class="c-name">
                   <span class="cell-main">{{ u.full_name || '—' }}</span>
                   @if (u.is_owner) { <span class="badge gold tag">Owner</span> }
                   @if (u.is_me) { <span class="badge blue tag">You</span> }
-                  @if (!u.is_owner && u.staff_type && u.staff_type !== 'staff') { <span class="badge tag">{{ staffTypeLabel(u.staff_type) }}</span> }
+                  @if (!hideType() && !u.is_owner && u.staff_type && u.staff_type !== 'staff') { <span class="badge tag">{{ staffTypeLabel(u.staff_type) }}</span> }
                   @if (u.job_title) { <span class="cell-sub">{{ u.job_title }}</span> }
                 </td>
                 <td class="c-email">{{ u.email }}</td>
                 <td class="c-phone nowrap">{{ u.phone || '—' }}</td>
                 <td class="c-access">
-                  <span class="access" tabindex="0" [attr.title]="detail(u)" [attr.aria-label]="'Access: ' + detail(u).split('\n').join('; ')">{{ summary(u) }}</span>
+                  @if (useRoles()) {
+                    @if (u.is_owner) { <span class="badge gold">Owner</span> }
+                    @for (n of rolesOf(u); track n) { <span class="badge role-chip">{{ n }}</span> }
+                    @if (!u.is_owner && !u.role_ids?.length) { <span class="cell-sub">{{ u.permissions.length ? 'Set directly, no role' : 'No role' }}</span> }
+                    @if (u.team_member; as tm) { <span class="cell-sub">Team: {{ tm.name }} · {{ tm.role }}</span> }
+                  } @else {
+                    <span class="access" tabindex="0" [attr.title]="detail(u)" [attr.aria-label]="'Access: ' + detail(u).split('\n').join('; ')">{{ summary(u) }}</span>
+                  }
                 </td>
                 <td class="c-status">
                   <span class="badge dot" [class.green]="u.is_active">{{ u.is_active ? 'Active' : 'Off' }}</span>
                   @if (u.is_active && u.must_change_password) { <span class="cell-sub">Has not chosen a password yet</span> }
                 </td>
-                <td class="actions-cell c-actions">
-                  @if (canManage(u)) {
-                    <button type="button" class="btn btn-sm" [disabled]="busyId() === u.id" [attr.aria-label]="'Edit ' + (u.full_name || u.email)" (click)="openEdit(u)">Edit</button>
-                    <button type="button" class="btn btn-sm" [disabled]="busyId() === u.id" [attr.aria-label]="'Reset password for ' + (u.full_name || u.email)" (click)="resetPassword(u)">Reset password</button>
-                    @if (u.is_active) {
-                      <button type="button" class="btn btn-sm btn-ghost danger" [disabled]="busyId() === u.id" [attr.aria-label]="'Switch off ' + (u.full_name || u.email)" (click)="switchOff(u)">
-                        @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Switch off
-                      </button>
-                    } @else {
-                      <button type="button" class="btn btn-sm" [disabled]="busyId() === u.id" [attr.aria-label]="'Switch on ' + (u.full_name || u.email)" (click)="switchOn(u)">
-                        @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Switch on
-                      </button>
-                    }
-                  } @else if (lockedReason(u)) {
-                    <span class="locked">{{ lockedReason(u) }}</span>
-                  }
-                </td>
+                <td class="actions-cell c-actions"><span class="manage" aria-hidden="true">Open ›</span></td>
               </tr>
             } @empty {
               <tr class="empty-row"><td colspan="6">
@@ -111,7 +102,7 @@
             <label for="puPhone">Phone <span class="opt">(optional)</span></label>
             <input id="puPhone" class="input" type="tel" autocomplete="off" maxlength="40" [value]="f.phone" (input)="patchForm({ phone: $any($event.target).value })" />
           </div>
-          @if (!f.isOwner) {
+          @if (!f.isOwner && !hideType()) {
             <div class="field">
               <label for="puType">Type</label>
               <select id="puType" class="input" [value]="f.staff_type" (change)="pickType($any($event.target).value)">
@@ -127,26 +118,48 @@
           </div>
         </div>
 
+        @if (!f.id) {
+          <div class="field pw-field">
+            <label for="puPassword">Password</label>
+            <span class="pw-wrap">
+              <input id="puPassword" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" placeholder="Type a password for them, or leave empty to generate one" [value]="f.password"
+                [attr.aria-invalid]="showErrors() && passwordError() ? 'true' : null" [attr.aria-describedby]="'puPwHint' + (showErrors() && passwordError() ? ' puPwErr' : '')"
+                (input)="patchForm({ password: $any($event.target).value })" />
+              <button type="button" class="btn btn-sm btn-ghost" [attr.aria-pressed]="showPassword()" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
+              <button type="button" class="btn btn-sm" (click)="generatePassword()">Generate</button>
+            </span>
+            @if (showErrors() && passwordError()) { <span class="error" id="puPwErr">{{ passwordError() }}</span> }
+            <span class="hint" id="puPwHint">At least {{ passwordMin }} characters. You will see it once after saving, to hand over.</span>
+            <label class="check-line"><input type="checkbox" [checked]="f.mustChange" (change)="patchForm({ mustChange: $any($event.target).checked })" /> They must choose their own password the first time they sign in</label>
+          </div>
+        }
+
         @if (f.isOwner) {
           <p class="owner-note">This is the partner owner. The owner always has every module the partner has; change the partner's modules instead.</p>
+        } @else if (useRoles()) {
+          <section class="roles-pick" aria-labelledby="puRolesLbl">
+            <h4 id="puRolesLbl">Roles <span class="opt">(everything this person may do comes from their roles)</span></h4>
+            @if (f.id && !(formRoleIds().length) && formPerms().length && !rolesTouched()) {
+              <p class="hint-line">This person's access was set one by one, before roles existed. It stays as it is until you choose a role here.</p>
+            }
+            <app-multi-select [options]="roleChoices()" [value]="formRoleIds()" (valueChange)="setRoles($event)" [disabled]="saving()" placeholder="Choose one or more roles…" emptyText="There are no roles yet. Create them first on the Roles and permissions page." />
+            @if (!roleOptions().length) { <p class="hint-line">Create roles first on the <a class="link" href="/partner/roles">Roles and permissions</a> page.</p> }
+            @if (rolesTouched() && !formRoleIds().length) { <p class="hint-line">No role is chosen, so this person will not be able to open any page.</p> }
+          </section>
+          <section class="roles-pick">
+            <h4>Team member <span class="opt">(optional)</span></h4>
+            <div class="field">
+              <select class="input" aria-label="Team member" [disabled]="saving()" (change)="formTeamId.set($any($event.target).value)">
+                <option value="" [selected]="!formTeamId()">Not a team member</option>
+                @for (t of teamOptions(); track t.id) { <option [value]="t.id" [selected]="t.id === formTeamId()">{{ t.name }} · {{ t.role }}</option> }
+              </select>
+              <span class="hint">Tag a master, tailor or other team person with this login. Their scans then count for that person.</span>
+            </div>
+          </section>
         } @else {
           <app-permission-matrix [modules]="modules()" [available]="ceiling()" [(value)]="formPerms" [disabled]="saving()"
             [unavailableHint]="api().kind === 'admin' ? 'This module is not enabled for the partner' : 'Your partner does not have this'" />
           @if (!formPerms().length) { <p class="hint-line">Nothing is ticked, so this person will not be able to open any page.</p> }
-        }
-
-        @if (!f.id) {
-          <div class="field pw-field">
-            <label for="puPassword">Temporary password <span class="opt">(optional)</span></label>
-            <span class="pw-wrap">
-              <input id="puPassword" class="input" [type]="showPassword() ? 'text' : 'password'" autocomplete="new-password" maxlength="72" [value]="f.password"
-                [attr.aria-invalid]="showErrors() && passwordError() ? 'true' : null" [attr.aria-describedby]="'puPwHint' + (showErrors() && passwordError() ? ' puPwErr' : '')"
-                (input)="patchForm({ password: $any($event.target).value })" />
-              <button type="button" class="btn btn-sm btn-ghost" [attr.aria-pressed]="showPassword()" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
-            </span>
-            @if (showErrors() && passwordError()) { <span class="error" id="puPwErr">{{ passwordError() }}</span> }
-            <span class="hint" id="puPwHint">Leave empty to generate one. Either way they must choose their own password at first sign-in.</span>
-          </div>
         }
 
         @if (formError()) { <p class="form-error" role="alert">{{ formError() }}</p> }
@@ -163,4 +176,76 @@
 
 @if (credential(); as c) {
   <app-temp-password-dialog [title]="c.title" [name]="c.name" [email]="c.email" [password]="c.password" (closed)="closeCredential()" />
+}
+
+@if (openUser(); as u) {
+  <div class="drawer-backdrop" (click)="closeDetail()"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="udTitle">
+    <div class="drawer-head">
+      <span class="avatar lg" aria-hidden="true">{{ initials(u) }}</span>
+      <div class="dh-text">
+        <h3 id="udTitle">{{ u.full_name || u.email }}</h3>
+        <span class="dh-sub">{{ roleLabel(u) }}</span>
+        <span class="badge dot" [class.green]="u.is_active">{{ u.is_active ? 'Active' : 'Switched off' }}</span>
+        @if (u.is_me) { <span class="badge blue">You</span> }
+      </div>
+      <button type="button" class="close-btn" (click)="closeDetail()" aria-label="Close">×</button>
+    </div>
+
+    <div class="drawer-body">
+      <section class="d-sec">
+        <h4>Sign-in</h4>
+        <dl>
+          <dt>Email</dt><dd>{{ u.email }}</dd>
+          <dt>Phone</dt><dd>{{ u.phone || '—' }}</dd>
+          <dt>Added</dt><dd>{{ u.created_at | date: 'd MMM y' }}</dd>
+          <dt>Password</dt><dd>{{ u.must_change_password ? 'Not chosen yet: they must set their own at first sign-in' : 'Chosen by them' }}</dd>
+        </dl>
+      </section>
+
+      <section class="d-sec">
+        <h4>Job</h4>
+        <p class="d-role"><strong>{{ roleLabel(u) }}</strong>@if (!u.is_owner) { <span class="muted"> · access chosen by the owner</span> }</p>
+        @if (useRoles() && !u.is_owner) {
+          <p class="d-role">
+            <span class="muted">Roles: </span>
+            @for (n of rolesOf(u); track n) { <span class="badge role-chip">{{ n }}</span> } @empty { <span class="muted">{{ u.permissions.length ? 'none, access set directly' : 'none' }}</span> }
+          </p>
+          <p class="d-role"><span class="muted">Team member: </span>@if (u.team_member; as tm) { <strong>{{ tm.name }}</strong> <span class="muted">({{ tm.role }})</span> } @else { <span class="muted">not tagged</span> }</p>
+        }
+      </section>
+
+      <section class="d-sec">
+        <h4>What they can do</h4>
+        @if (u.is_owner) { <p class="muted small">The owner always has every module the partner has.</p> }
+        <ul class="acc">
+          @for (m of access(u); track m.id) {
+            <li [class.on]="m.actions.length">
+              <span class="tick" aria-hidden="true">{{ m.actions.length ? '✓' : '–' }}</span>
+              <span class="acc-text"><strong>{{ m.label }}</strong><small>{{ m.description }}</small></span>
+              <span class="acc-acts">{{ m.actions.length ? m.actions.join(' · ') : 'No access' }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    </div>
+
+    <div class="drawer-foot">
+      @if (canManage(u)) {
+        <button type="button" class="btn btn-primary" (click)="closeDetail(); openEdit(u)">Edit user</button>
+        <button type="button" class="btn" [disabled]="busyId() === u.id" (click)="resetPassword(u)">Reset password</button>
+        @if (u.is_active) {
+          <button type="button" class="btn btn-ghost danger" [disabled]="busyId() === u.id" (click)="switchOff(u)">
+            @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Switch off
+          </button>
+        } @else {
+          <button type="button" class="btn" [disabled]="busyId() === u.id" (click)="switchOn(u)">
+            @if (busyId() === u.id) { <ion-spinner name="crescent" /> } Switch on
+          </button>
+        }
+      } @else {
+        <p class="muted small locked-note">{{ lockedReason(u) || (u.is_me ? 'This is you. Ask the owner to change your access.' : 'You cannot change this person.') }}</p>
+      }
+    </div>
+  </aside>
 }

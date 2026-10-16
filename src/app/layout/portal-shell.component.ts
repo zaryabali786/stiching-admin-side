@@ -29,6 +29,10 @@ interface NavItem {
   badge?: number;
   /** Partner portal: the permission needed to see this entry (admins always see everything). */
   permission?: string;
+  /** Admin portal: the admin module needed to see this entry (a full admin sees all). */
+  module?: string;
+  /** Admin portal: only a full admin sees this entry (user and role management). */
+  fullAdmin?: boolean;
   /** badge tone: amber = needs action, red = problem */
   tone?: 'amber' | 'red';
 }
@@ -98,47 +102,52 @@ export class PortalShellComponent implements OnInit, OnDestroy {
   readonly navGroups = computed<NavGroup[]>(() => {
     if (this.portal === 'admin') {
       const b = this.badges.admin();
-      return [
-        { label: '', items: [{ path: '/admin/overview', label: 'Overview', icon: 'grid-outline' }] },
+      const adminGroups: NavGroup[] = [
+        { label: '', items: [{ path: '/admin/overview', label: 'Overview', icon: 'grid-outline', module: 'overview' }] },
         {
           label: 'Operations',
           items: [
-            { path: '/admin/orders', label: 'Orders', icon: 'cube-outline', badge: b?.orders, tone: 'red' },
-            { path: '/admin/messages', label: 'Messages', icon: 'chatbubbles-outline', badge: b?.messages, tone: 'amber' },
-            { path: '/admin/support', label: 'Support chat', icon: 'help-buoy-outline' },
-            { path: '/admin/warehouse', label: 'Warehouse', icon: 'file-tray-stacked-outline', badge: b?.warehouse, tone: 'amber' },
+            { path: '/admin/orders', label: 'Orders', icon: 'cube-outline', badge: b?.orders, tone: 'red', module: 'orders' },
+            { path: '/admin/messages', label: 'Messages', icon: 'chatbubbles-outline', badge: b?.messages, tone: 'amber', module: 'messages' },
+            { path: '/admin/support', label: 'Support chat', icon: 'help-buoy-outline', module: 'support' },
+            { path: '/admin/warehouse', label: 'Warehouse', icon: 'file-tray-stacked-outline', badge: b?.warehouse, tone: 'amber', module: 'warehouse' },
           ],
         },
         {
           label: 'Finance',
           items: [
-            { path: '/admin/invoices', label: 'Invoices', icon: 'document-text-outline', badge: b?.invoices, tone: 'amber' },
-            { path: '/admin/reports', label: 'Reports', icon: 'bar-chart-outline' },
+            { path: '/admin/invoices', label: 'Invoices', icon: 'document-text-outline', badge: b?.invoices, tone: 'amber', module: 'invoices' },
+            { path: '/admin/reports', label: 'Reports', icon: 'bar-chart-outline', module: 'reports' },
           ],
         },
         {
           label: 'People',
           items: [
-            { path: '/admin/customers', label: 'Customers', icon: 'people-outline' },
-            { path: '/admin/partners', label: 'Partners & teams', icon: 'cut-outline' },
+            { path: '/admin/customers', label: 'Customers', icon: 'people-outline', module: 'customers' },
+            { path: '/admin/partners', label: 'Partners & teams', icon: 'cut-outline', module: 'partners' },
+            { path: '/admin/users', label: 'Users', icon: 'id-card-outline', fullAdmin: true },
+            { path: '/admin/roles', label: 'Roles & permissions', icon: 'shield-checkmark-outline', fullAdmin: true },
           ],
         },
         {
           label: 'Setup',
           items: [
-            { path: '/admin/price-list', label: 'Price list', icon: 'pricetags-outline' },
-            { path: '/admin/shipping', label: 'Shipping rates', icon: 'airplane-outline' },
-            { path: '/admin/settings', label: 'Settings', icon: 'settings-outline' },
+            { path: '/admin/price-list', label: 'Price list', icon: 'pricetags-outline', module: 'price_list' },
+            { path: '/admin/shipping', label: 'Shipping rates', icon: 'airplane-outline', module: 'shipping' },
+            { path: '/admin/settings', label: 'Settings', icon: 'settings-outline', module: 'settings' },
           ],
         },
         {
           label: 'Build & theming',
           items: [
-            { path: '/admin/home-layout', label: 'App build & theme', icon: 'construct-outline' },
-            { path: '/admin/portal-theme', label: 'Portal theme', icon: 'color-fill-outline' },
+            { path: '/admin/home-layout', label: 'App build & theme', icon: 'construct-outline', module: 'app_builder' },
+            { path: '/admin/portal-theme', label: 'Portal theme', icon: 'color-fill-outline', module: 'portal_theme' },
           ],
         },
       ];
+      return adminGroups
+        .map((g) => ({ ...g, items: g.items.filter((i) => (!i.module || this.auth.canAdminModule(i.module)) && (!i.fullAdmin || this.auth.isFullAdmin())) }))
+        .filter((g) => g.items.length > 0);
     }
     const p = this.badges.partner();
     const groups: NavGroup[] = [
@@ -175,10 +184,18 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           { path: '/partner/earnings', label: 'Earnings', urdu: 'کمائی', icon: 'wallet-outline', permission: 'earnings.view' },
         ],
       },
+      {
+        label: 'Settings',
+        urdu: 'ترتیبات',
+        items: [
+          { path: '/partner/users', label: 'Users', urdu: 'صارفین', icon: 'id-card-outline', permission: 'users.view' },
+          { path: '/partner/roles', label: 'Roles & permissions', urdu: 'رولز اور اجازتیں', icon: 'shield-checkmark-outline', permission: 'users.view' },
+        ],
+      },
     ];
     // Only what this person may open; a group with nothing left disappears. The server re-checks every request.
     return groups
-      .map((g) => ({ ...g, items: g.items.filter((i) => !i.permission || this.auth.can(i.permission)) }))
+      .map((g) => ({ ...g, items: g.items.filter((i) => (!i.permission || this.auth.can(i.permission)) && (!i.module || this.auth.canAdminModule(i.module))) }))
       .filter((g) => g.items.length > 0);
   });
 
@@ -188,7 +205,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.badges.start(this.portal);
-    if (this.auth.isAdmin()) this.activePartner.load();
+    if (this.auth.isAdmin() && this.auth.canAdminModule('partners')) this.activePartner.load();
     this.updateTitle();
     this.lastPath = this.router.url.split('?')[0];
 

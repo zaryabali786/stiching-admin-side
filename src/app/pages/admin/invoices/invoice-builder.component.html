@@ -243,11 +243,35 @@
               </div>
               <div class="field">
                 <label for="fx">PKR per 1 {{ currency() }}</label>
-                <input id="fx" class="input" type="number" min="0" step="0.01" [disabled]="!canEdit() || currency() === 'PKR'" [class.invalid]="fxMissing()"
-                  [attr.aria-invalid]="fxMissing() && canEdit()" [value]="fxRate()" (input)="fxRate.set($any($event.target).value); dirty.set(true)" />
-                @if (fxMissing() && canEdit()) { <span class="error">Enter the exchange rate</span> }
+                <input id="fx" class="input" type="number" min="0" step="0.0001" [disabled]="!canEdit() || currency() === 'PKR' || fxLoading()" [class.invalid]="fxMissing()"
+                  [attr.aria-invalid]="fxMissing() && canEdit()" [attr.placeholder]="fxLoading() ? 'Fetching…' : ''" [value]="fxRate()" (input)="onFxInput($any($event.target).value)" />
+                @if (fxMissing() && canEdit() && !fxLoading() && !fxError()) { <span class="error">Enter the exchange rate</span> }
               </div>
             </div>
+            @if (currency() !== 'PKR') {
+              <div class="fx-meta" aria-live="polite">
+                @if (fxLoading()) {
+                  <span><ion-spinner name="crescent" /> Fetching the latest {{ currency() }} rate…</span>
+                } @else if (fxError()) {
+                  <span class="error">{{ fxError() }}</span>
+                  @if (canEdit()) { <button type="button" class="btn btn-sm" (click)="loadRate()">Retry</button> }
+                } @else if (fxManual()) {
+                  <span>Rate typed by hand: no live rate date is saved.</span>
+                  @if (canEdit()) { <button type="button" class="btn btn-sm" (click)="loadRate(currency(), true)">Use the live rate</button> }
+                } @else if (fxInfo(); as fx) {
+                  <span>Rate of <b>{{ fx.rate_date | day }}</b> · {{ fx.source }}</span>
+                  @if (!fx.is_today) { <span class="fx-warn">Latest available rate: there is none for today yet (weekend, holiday or the provider has not updated).</span> }
+                  @if (fx.stale) { <span class="fx-warn">The live service could not be reached: this is the newest rate saved earlier.</span> }
+                  @if (canEdit()) { <button type="button" class="btn btn-sm btn-ghost" (click)="loadRate(currency(), true)">Refresh</button> }
+                } @else if (fxDay(); as saved) {
+                  <span>Saved rate of <b>{{ saved | day }}</b></span>
+                  @if (canEdit()) { <button type="button" class="btn btn-sm btn-ghost" (click)="loadRate(currency(), true)">Update to the latest rate</button> }
+                } @else if (invoice()) {
+                  <span>The day of this rate was not recorded.</span>
+                  @if (canEdit()) { <button type="button" class="btn btn-sm btn-ghost" (click)="loadRate(currency(), true)">Update to the latest rate</button> }
+                }
+              </div>
+            }
             <p class="hint">The rate is locked when the invoice is issued.</p>
 
             @if (invoice()?.status === 'issued' && showPayment()) {
@@ -352,7 +376,7 @@
           @if (inv.discount_pkr) { <tr><td colspan="2" class="r">Discount</td><td class="r">− {{ inv.discount_pkr | pkr }}</td></tr> }
           <tr class="grand"><td colspan="2" class="r">Total</td><td class="r">{{ inv.total_pkr | pkr }}</td></tr>
           @if (inv.currency !== 'PKR') {
-            <tr class="grand"><td colspan="2" class="r">Total in {{ inv.currency }} (1 {{ inv.currency }} = {{ inv.fx_rate }} PKR)</td><td class="r">{{ inv.total_foreign | pkr: inv.currency }}</td></tr>
+            <tr class="grand"><td colspan="2" class="r">Total in {{ inv.currency }} (1 {{ inv.currency }} = {{ inv.fx_rate }} PKR{{ inv.fx?.source === 'manual' ? ', rate typed by hand' : inv.fx?.rate_date ? ', rate of ' + (inv.fx!.rate_date | day) : '' }})</td><td class="r">{{ inv.total_foreign | pkr: inv.currency }}</td></tr>
           }
         </tfoot>
       </table>

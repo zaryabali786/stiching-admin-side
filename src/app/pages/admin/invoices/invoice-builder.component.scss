@@ -284,3 +284,5 @@ table.lines-table {
 .ep-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
 .ep-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ep-bill { font-weight: 600; font-size: 13px; color: var(--c-green, #2f7d4f); text-decoration: underline; }
+
+.fx-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 4px; font-size: 12.5px; color: var(--c-ink-2); .error { color: var(--c-red); } .fx-warn { flex-basis: 100%; color: var(--c-amber, #8a4505); font-size: 12px; } ion-spinner { width: 14px; height: 14px; vertical-align: -2px; } }

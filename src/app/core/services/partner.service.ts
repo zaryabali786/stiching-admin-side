@@ -272,6 +272,8 @@ export interface TeamLoginCredential {
 
 export interface TeamMemberInput {
   login?: TeamLoginInput;
+  /** The user (added on the Users page) this team member is; null unlinks. */
+  user_id?: string | null;
   name?: string;
   role?: 'master' | 'tailor' | 'qa' | 'pressing' | 'packing';
   daily_capacity?: number;
@@ -396,6 +398,11 @@ export interface DispatchShipment {
   events?: { status: string; note: string | null; source: 'manual' | 'webhook' | 'system'; occurred_at: string }[];
 }
 export type DispatchRoute = 'admin_warehouse' | 'direct_dispatch';
+export interface BulkBookResult {
+  results: { order_id: string; reference: string; ok: boolean; message: string; cn?: string }[];
+  done: number;
+  failed: number;
+}
 
 export interface WarehouseOrder {
   id: string;
@@ -651,6 +658,11 @@ export class PartnerService {
     return this.api.postWithMessage<TeamMember & { credential?: TeamLoginCredential }>(`${this.base}/teams/members`, body);
   }
 
+  /** Users that can still be linked to a team member (plus the one `memberId` has now). */
+  linkableUsers(memberId: string | null): Observable<{ id: string; full_name: string | null; email: string; job_title: string | null }[]> {
+    return this.api.get<{ id: string; full_name: string | null; email: string; job_title: string | null }[]>(`${this.base}/teams/users`, memberId ? { member_id: memberId } : undefined);
+  }
+
   addMemberLogin(id: string, body: TeamLoginInput) {
     return this.api.postWithMessage<{ member_id: string; credential: TeamLoginCredential }>(`${this.base}/teams/members/${id}/login`, body);
   }
@@ -705,6 +717,21 @@ export class PartnerService {
   /** Book the courier of a paid parcel: the CN the courier gave (no courier API is connected). */
   bookDispatch(orderId: string, body: { courier_id: string; cn_number?: string; manual?: boolean }) {
     return this.api.postWithMessage<unknown>(`${this.base}/warehouse/orders/${orderId}/book`, body);
+  }
+
+  /** Book many paid orders at once: through a courier's API, by hand (CN added later), or send them to the admin warehouse. */
+  bulkBook(body: { order_ids: string[]; route: DispatchRoute; mode?: 'api' | 'manual'; courier?: string; courier_id?: string }) {
+    return this.api.postWithMessage<BulkBookResult>(`${this.base}/warehouse/dispatch/bulk-book`, body);
+  }
+
+  /** Add the CN of a parcel that was booked by hand without one. */
+  addDispatchCn(shipmentId: string, cnNumber: string) {
+    return this.api.postWithMessage<unknown>(`${this.base}/warehouse/shipments/${shipmentId}/cn`, { cn_number: cnNumber });
+  }
+
+  /** The order list for the warehouse team (QR codes, article codes, quantities): a printable page. */
+  orderList(orderIds: string[]) {
+    return this.api.getBlob(`${this.base}/warehouse/orders/list?order_ids=${orderIds.map(encodeURIComponent).join(',')}`);
   }
 
   /** The CN slips of the given parcels: PostEx's own PDF for PostEx parcels, otherwise a printable slip. */

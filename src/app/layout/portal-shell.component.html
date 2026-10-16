@@ -41,7 +41,7 @@
         </div>
       }
 
-      @if (auth.isAdmin()) {
+      @if (auth.isAdmin() && (portal === 'partner' || auth.canAdminModule('partners'))) {
         <a class="nav-link switch" [routerLink]="portal === 'admin' ? '/partner/overview' : '/admin/overview'"
           [attr.title]="collapsed() ? (portal === 'admin' ? 'Open partner portal' : 'Open admin portal') : null">
           <ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon>

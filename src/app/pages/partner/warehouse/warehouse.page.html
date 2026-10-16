@@ -48,20 +48,24 @@
               <b>Loadsheet</b>
               <span class="muted small">Tick the parcels you are handing to one courier and download the loadsheet. They are Dispatched only after you confirm the courier took them.</span>
             </div>
-            <div class="sheet-actions">
-              @for (c of readyCouriers(); track c) { <button type="button" class="btn btn-ghost btn-xs" (click)="pickAllOf(c)">All {{ c }}</button> }
+            <div class="sheet-actions bulk-wrap">
               @if (picked().size) { <button type="button" class="btn btn-ghost btn-xs" (click)="clearPicked()">Clear</button> }
-              <button type="button" class="btn" [disabled]="!picked().size || printing()" (click)="printCn([...picked()])">
-                @if (printing()) { <ion-spinner name="crescent" /> } Print CN@if (picked().size) { ({{ picked().size }}) }
-              </button>
-              @if (canEdit()) {
-                <button type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy()" (click)="downloadLoadsheet()">
-                  @if (sheetBusy()) { <ion-spinner name="crescent" /> } Download Loadsheet@if (picked().size) { ({{ picked().size }}) }
+              @if (canLoadsheet()) {
+                <button type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy() || printing()" [attr.aria-expanded]="readyMenuOpen()" aria-haspopup="menu" (click)="readyMenuOpen.set(!readyMenuOpen())">
+                  @if (sheetBusy() || printing()) { <ion-spinner name="crescent" /> } Bulk action@if (picked().size) { ({{ picked().size }}) } <span aria-hidden="true">▾</span>
                 </button>
+                @if (readyMenuOpen()) {
+                  <div class="bulk-menu" role="menu">
+                    <button type="button" role="menuitem" class="bulk-item" [disabled]="listBusy()" (click)="downloadOrderList()">Download order list</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="bulkCancelBookings()">Cancel booking</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="bulkPrintCn()">Print CN</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="bulkLoadsheet()">Generate loadsheet</button>
+                  </div>
+                }
               }
             </div>
           </div>
-          @if (canEdit()) {
+          @if (canLoadsheet()) {
             @for (h of awaitingHandover(); track h.id) {
               <div class="handover-bar" role="status">
                 <span><b>{{ h.count }} parcel{{ h.count === 1 ? '' : 's' }}</b> on a downloaded loadsheet are waiting for the courier.</span>
@@ -72,28 +76,93 @@
             }
           }
         }
+        @if (tab() === 'dispatched') {
+          <div class="sheet-bar" role="region" aria-label="Bulk actions">
+            <div class="sheet-text">
+              <b>Dispatched parcels</b>
+              <span class="muted small">Tick parcels, then use Bulk action. Click a parcel to see all its details.</span>
+            </div>
+            <div class="sheet-actions bulk-wrap">
+              @if (picked().size) { <button type="button" class="btn btn-ghost btn-xs" (click)="clearPicked()">Clear</button> }
+              @if (canLoadsheet()) {
+                <button type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy() || printing()" [attr.aria-expanded]="readyMenuOpen()" aria-haspopup="menu" (click)="readyMenuOpen.set(!readyMenuOpen())">
+                  @if (sheetBusy() || printing()) { <ion-spinner name="crescent" /> } Bulk action@if (picked().size) { ({{ picked().size }}) } <span aria-hidden="true">▾</span>
+                </button>
+                @if (readyMenuOpen()) {
+                  <div class="bulk-menu" role="menu">
+                    <button type="button" role="menuitem" class="bulk-item" (click)="bulkPrintCn()">Print CN</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="bulkRefreshTracking()">Refresh courier tracking <span class="muted small">· API couriers</span></button>
+                    <span class="bulk-group">Courier status · manual couriers</span>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="openBulkTrack('in_transit')">In transit</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="openBulkTrack('delivered')">Delivered</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="openBulkTrack('failed_delivery')">Attempt failed</button>
+                    <button type="button" role="menuitem" class="bulk-item" (click)="openBulkTrack('returning_to_partner')">Courier is returning it</button>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        }
+        @if (tab() === 'paid' && canBook()) {
+          <div class="sheet-bar bulk-bar" role="region" aria-label="Bulk booking">
+            <div class="sheet-text">
+              <b>Bulk booking</b>
+              <span class="muted small">Tick the paid orders you want to book together, then choose Bulk action.</span>
+            </div>
+            <div class="sheet-actions bulk-wrap">
+              @if (bulkSel().size) { <button type="button" class="btn btn-ghost btn-xs" (click)="clearBulk()">Clear</button> }
+              <button type="button" class="btn btn-primary" [disabled]="!bulkSel().size" [attr.aria-expanded]="bulkMenuOpen()" aria-haspopup="menu" (click)="toggleBulkMenu()">
+                Bulk action@if (bulkSel().size) { ({{ bulkSel().size }}) } <span aria-hidden="true">▾</span>
+              </button>
+              @if (bulkMenuOpen()) {
+                <div class="bulk-menu" role="menu">
+                  @for (c of apiCouriers(); track c.name) {
+                    <button type="button" role="menuitem" class="bulk-item" [disabled]="!c.configured" [attr.title]="c.configured ? null : c.message" (click)="openBulk('api', c.name)">
+                      Book with {{ c.name }}@if (!c.configured) { <span class="muted small"> · not connected</span> }
+                    </button>
+                  }
+                  <button type="button" role="menuitem" class="bulk-item" (click)="openBulk('manual')">Book manually <span class="muted small">· CN added later</span></button>
+                  <button type="button" role="menuitem" class="bulk-item" [disabled]="listBusy()" (click)="downloadOrderList()">Download order list</button>
+                </div>
+              }
+            </div>
+          </div>
+        }
         <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Parcel</th>
+                <th>
+                  @if ((tab() === 'ready_dispatch' || tab() === 'dispatched') && canLoadsheet() && pickable().length) {
+                    <input type="checkbox" class="pick" [checked]="allPicked()" (change)="toggleAllPicked()" aria-label="Select all parcels on this page" />
+                  }
+                  @if (tab() === 'paid' && canBook() && bulkable().length) {
+                    <input type="checkbox" class="pick" [checked]="allBulkSelected()" (change)="toggleAllBulk()" aria-label="Select all orders on this page" />
+                  }
+                  Parcel
+                </th>
                 <th>Customer</th>
                 <th>Ships to</th>
                 <th>Weight</th>
                 <th>Invoice</th>
-                <th class="num">Amount</th>
                 <th>Status</th>
                 @if (tab() === 'paid') { <th class="num"><span class="sr-only">Route</span></th> }
-                @if (tab() === 'ready_dispatch' || tab() === 'dispatched' || tab() === 'failed_delivery') { <th class="num"><span class="sr-only">Action</span></th> }
+                @if (tab() === 'ready_dispatch' || tab() === 'failed_delivery') { <th class="num"><span class="sr-only">Action</span></th> }
               </tr>
             </thead>
             <tbody>
               @for (o of orders(); track o.id) {
-                <tr [class.clickable]="tab() === 'paid' && canEdit()" [class.selected]="o.id === selectedId()" (click)="onRowClick(o)"
-                  [attr.tabindex]="tab() === 'paid' && canEdit() ? 0 : null" (keydown.enter)="onRowClick(o)" [attr.aria-selected]="tab() === 'paid' && canEdit() ? o.id === selectedId() : null">
+                <tr [class.clickable]="tab() !== 'paid' || canBook()" [class.selected]="o.id === selectedId() || o.id === detailId()" (click)="onRowClick(o)"
+                  [attr.tabindex]="tab() !== 'paid' || canBook() ? 0 : null" (keydown.enter)="onRowClick(o)" [attr.aria-selected]="tab() === 'paid' && canBook() ? o.id === selectedId() : null">
                   <td>
+                    @if (tab() === 'paid' && canBook() && (!o.shipment || o.shipment.status === 'needs_label')) {
+                      <input type="checkbox" class="pick" [checked]="bulkSel().has(o.id)" (change)="toggleBulk(o.id)" (click)="$event.stopPropagation()" [attr.aria-label]="'Select ' + o.reference + ' for bulk booking'" />
+                    }
+                    @if (tab() === 'dispatched' && canLoadsheet() && o.shipment; as pk) {
+                      <input type="checkbox" class="pick" [checked]="isPicked(pk.id)" (change)="togglePick(pk.id)" (click)="$event.stopPropagation()" [attr.aria-label]="'Select ' + o.reference" />
+                    }
                     @if (tab() === 'ready_dispatch' && o.shipment; as pick) {
-                      <input type="checkbox" class="pick" [checked]="isPicked(pick.id)" [disabled]="!canEdit() || (!canPick(pick) && !isPicked(pick.id))" (change)="togglePick(pick.id)" (click)="$event.stopPropagation()" [attr.aria-label]="'Select ' + o.reference + ' for the loadsheet'" />
+                      <input type="checkbox" class="pick" [checked]="isPicked(pick.id)" [disabled]="!canLoadsheet() || (!canPick(pick) && !isPicked(pick.id))" (change)="togglePick(pick.id)" (click)="$event.stopPropagation()" [attr.aria-label]="'Select ' + o.reference + ' for the loadsheet'" [attr.title]="needsCn(o) ? 'Add the CN first' : null" />
                     }
                     <span class="cell-main">{{ o.reference }}@if (o.order_kind === 'return') { <span class="return-tag">Return</span> }</span>
                     @if (o.order_kind === 'return') {
@@ -123,14 +192,16 @@
                       <span class="badge amber">Not issued</span>
                     }
                   </td>
-                  <td class="num">
-                    @if (o.invoice; as inv) { <span class="cell-main">{{ inv.total_pkr | pkr }}</span> } @else { <span class="muted">—</span> }
-                  </td>
                   <td>
+                    @if (courierTab() && o.shipment; as csh) {
+                      <span class="ship-chip" [attr.data-s]="csh.status">{{ courierStatus(csh) }}</span>
+                      <span class="cell-sub"><b>{{ csh.courier }}</b> · CN <b class="mono">{{ csh.tracking_number }}</b></span>
+                    } @else {
                     <app-status-badge [status]="o.status" [label]="o.status_label" />
                     @if (o.transfer; as tr) { <span class="cell-sub">{{ tr.code }} · {{ tr.status | humanize }}</span> }
                     @if (o.shipment; as sh) {
                       @if (sh.tracking_number) { <span class="cell-sub"><b>{{ sh.courier }}</b> · CN <b class="mono">{{ sh.tracking_number }}</b></span> }
+                      @else if (sh.status === 'booked') { <span class="cell-sub"><b>{{ sh.courier }}</b> · <span class="cn-pending">CN pending</span></span> }
                       @if (sh.status !== 'needs_label') { <span class="ship-chip" [attr.data-s]="sh.status">{{ shipLabel(sh) }}</span> }
                       @if (sh.booked_at && (tab() === 'ready_dispatch')) { <span class="cell-sub">Booked {{ sh.booked_at | day }}@if (sh.booking_source === 'api') { · through the {{ sh.courier }} API } @else { · CN entered by hand }</span> }
                       @if (sh.handed_at && tab() === 'dispatched') { <span class="cell-sub">Dispatched {{ sh.handed_at | day }}</span> }
@@ -143,10 +214,11 @@
                         </ul>
                       }
                     }
+                    }
                   </td>
                   @if (tab() === 'paid') {
                     <td class="num route-cell">
-                      @if (!canEdit()) {
+                      @if (!canBook()) {
                         <span class="muted">—</span>
                       } @else if (o.id === selectedId()) {
                         <span class="route-state on">Choosing route <span aria-hidden="true">→</span></span>
@@ -158,32 +230,22 @@
                   @if (tab() === 'ready_dispatch') {
                     <td class="num" (click)="$event.stopPropagation()">
                       @if (o.shipment?.tracking_number) { <button type="button" class="btn btn-xs" [disabled]="printing()" (click)="printCn([o.shipment!.id])" [attr.aria-label]="'Print CN of ' + o.reference">Print CN</button> }
-                      @if (o.shipment?.status === 'booked' && canEdit()) {
-                        <button type="button" class="btn btn-ghost btn-xs" [disabled]="isBusy('cb:' + o.id)" (click)="cancelBooking(o)">Cancel booking</button>
-                      }
-                    </td>
-                  }
-                  @if (tab() === 'dispatched') {
-                    <td class="num" (click)="$event.stopPropagation()">
-                      @if (o.shipment && o.partner_route === 'direct_dispatch' && canEdit()) {
-                        <div class="track-actions">
-                          <button type="button" class="btn btn-xs" [disabled]="printing()" (click)="printCn([o.shipment!.id])">Print CN</button>
-                          @if (isPostex(o)) {
-                            <button type="button" class="btn btn-xs" [disabled]="isBusy('rt:' + o.id)" (click)="refreshTracking(o)">
-                              @if (isBusy('rt:' + o.id)) { <ion-spinner name="crescent" /> } Refresh PostEx tracking
-                            </button>
-                          }
-                          <button type="button" class="btn btn-xs" (click)="openTrack(o, 'in_transit')">In transit</button>
-                          <button type="button" class="btn btn-xs btn-primary" (click)="openTrack(o, 'delivered')">Delivered</button>
-                          <button type="button" class="btn btn-xs" (click)="openTrack(o, 'failed_delivery')">Attempt failed</button>
-                          <button type="button" class="btn btn-xs" (click)="openTrack(o, 'returning_to_partner')">Courier is returning it</button>
+                      @if (needsCn(o) && canBook()) {
+                        <div class="cn-add">
+                          <input class="input input-sm" placeholder="CN number" [attr.aria-label]="'CN number of ' + o.reference" [ngModel]="cnDraft()[o.shipment!.id] || ''" (ngModelChange)="setCnDraft(o.shipment!.id, $event)" (keydown.enter)="saveCn(o)" />
+                          <button type="button" class="btn btn-primary btn-xs" [disabled]="isBusy('cn:' + o.id)" (click)="saveCn(o)">
+                            @if (isBusy('cn:' + o.id)) { <ion-spinner name="crescent" /> } Save CN
+                          </button>
                         </div>
+                      }
+                      @if (o.shipment?.status === 'booked' && canBook()) {
+                        <button type="button" class="btn btn-ghost btn-xs" [disabled]="isBusy('cb:' + o.id)" (click)="cancelBooking(o)">Cancel booking</button>
                       }
                     </td>
                   }
                   @if (tab() === 'failed_delivery') {
                     <td class="num" (click)="$event.stopPropagation()">
-                      @if (o.shipment?.status === 'returning_to_partner' && canEdit()) {
+                      @if (o.shipment?.status === 'returning_to_partner' && canTrack()) {
                         <button type="button" class="btn btn-primary btn-xs" [disabled]="isBusy('rb:' + o.id)" (click)="receivedBack(o)">
                           @if (isBusy('rb:' + o.id)) { <ion-spinner name="crescent" /> } Received back
                         </button>
@@ -199,7 +261,7 @@
       }
     </section>
 
-    @if (tab() === 'paid' && canEdit() && !loading() && selected(); as o) {
+    @if (tab() === 'paid' && canBook() && !loading() && selected(); as o) {
       <aside class="card route-card" aria-label="Choose route">
         @if (o.paid_at || o.invoice) {
           <span class="route-meta">Paid {{ o.paid_at | day }}@if (o.invoice) { · {{ o.invoice.number }} }</span>
@@ -263,7 +325,7 @@
                   · @if (t.dispatched_at) { dispatched {{ t.dispatched_at | day }} } @else { started {{ t.created_at | day }} }</span>
               </div>
               <app-status-badge [status]="t.status" />
-              @if (t.status === 'open' && canEdit()) {
+              @if (t.status === 'open' && canTransfer()) {
                 <button type="button" class="btn btn-primary btn-floor" [disabled]="isBusy('t:' + t.id) || !t.orders.length" (click)="dispatchTransfer(t)">
                   @if (isBusy('t:' + t.id)) { <ion-spinner name="crescent" /> }
                   <span [class.urdu]="lang.isUrdu()">{{ lang.t('Dispatch transfer', 'منتقلی روانہ کریں') }}</span>
@@ -333,6 +395,186 @@
         <button type="button" class="btn btn-primary" (click)="submitShip()" [disabled]="shipSaving() || !f.courier || (!(apiBookable(f) && !f.manual) && !f.tracking.trim())">
           @if (shipSaving()) { <ion-spinner name="crescent" /> }
           {{ apiBookable(f) && !f.manual ? 'Book with ' + f.courier?.name : 'Save CN' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Bulk booking: how to book the ticked orders, then the result of each one -->
+@if (bulkDlg(); as d) {
+  <div class="modal-backdrop" (click)="closeBulk()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bulk-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ d.results ? 'Result' : (bulkSel().size + ' order' + (bulkSel().size === 1 ? '' : 's') + ' selected') }}</span>
+          <h3 id="bulk-title">{{ d.mode === 'api' ? 'Book with ' + d.courierName : 'Book manually' }}</h3>
+        </div>
+        <button type="button" class="close-btn" (click)="closeBulk()" aria-label="Close">×</button>
+      </div>
+      @if (!d.results) {
+        <div class="modal-body">
+          <div class="route-options" role="radiogroup" aria-label="Route">
+            <button type="button" class="route-option" role="radio" [attr.aria-checked]="d.route === 'direct_dispatch'" [class.checked]="d.route === 'direct_dispatch'" (click)="patchBulk({ route: 'direct_dispatch' })">
+              <span class="radio"></span>
+              <span class="route-text">
+                <strong>Dispatch directly to customer</strong>
+                <span class="muted small">@if (d.mode === 'api') { {{ d.courierName }} books each parcel and gives its CN. } @else { The courier is saved on each parcel. Add the CN numbers later in “Ready for dispatch”. }</span>
+              </span>
+            </button>
+            <button type="button" class="route-option" role="radio" [attr.aria-checked]="d.route === 'admin_warehouse'" [class.checked]="d.route === 'admin_warehouse'" (click)="patchBulk({ route: 'admin_warehouse' })">
+              <span class="radio"></span>
+              <span class="route-text">
+                <strong>Send to admin warehouse</strong>
+                <span class="muted small">No courier is booked. The parcels join the open transfer to the admin warehouse@if (openTransfer(); as tr) { ({{ tr.code }}) }.</span>
+              </span>
+            </button>
+          </div>
+          @if (d.mode === 'manual' && d.route === 'direct_dispatch') {
+            <div class="field">
+              <span class="label">Courier *</span>
+              <app-courier-select [selected]="d.courier" (selectedChange)="patchBulk({ courier: $event })" label="Courier" />
+            </div>
+          }
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" (click)="closeBulk()" [disabled]="bulkBusy()">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="confirmBulk()" [disabled]="bulkBusy() || !bulkReady(d)">
+            @if (bulkBusy()) { <ion-spinner name="crescent" /> }
+            {{ d.route === 'admin_warehouse' ? 'Send to admin warehouse' : d.mode === 'api' ? 'Book with ' + d.courierName : 'Book manually' }} ({{ bulkSel().size }})
+          </button>
+        </div>
+      } @else {
+        <div class="modal-body">
+          <ul class="bulk-results">
+            @for (r of d.results; track r.order_id) {
+              <li [class.bad]="!r.ok"><b>{{ r.reference }}</b> <span aria-hidden="true">{{ r.ok ? '✓' : '✕' }}</span> <span>{{ r.message }}</span></li>
+            }
+          </ul>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-primary" (click)="closeBulk()">Done</button>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+<!-- All the details of one parcel (click a row) -->
+@if (detail(); as o) {
+  <div class="drawer-backdrop" (click)="detailId.set(null)"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">{{ o.customer_name || '—' }} · {{ o.customer_code }}</span>
+        <h3 id="dr-title">{{ o.reference }}@if (o.order_kind === 'return') { <span class="return-tag">Return</span> }</h3>
+        @if (o.shipment; as sh) { <span class="ship-chip" [attr.data-s]="sh.status">{{ courierTab() ? courierStatus(sh) : shipLabel(sh) }}</span> } @else { <app-status-badge [status]="o.status" [label]="o.status_label" /> }
+      </div>
+      <button type="button" class="close-btn" (click)="detailId.set(null)" aria-label="Close">×</button>
+    </div>
+    <div class="drawer-body">
+      <section class="dr-sec">
+        <h4>Parcel</h4>
+        <dl>
+          <dt>Order</dt><dd>@if (o.order_kind === 'return') { Return of {{ o.return_unit?.unit_title || 'an article' }} } @else { {{ o.units_count }} unit{{ o.units_count === 1 ? '' : 's' }}@if (o.brand) { · {{ o.brand }} } }</dd>
+          <dt>Weight</dt><dd>{{ o.weight_kg ? o.weight_kg + ' kg' : '—' }}</dd>
+          <dt>Service</dt><dd>{{ o.shipping_service ? (o.shipping_service | humanize) : '—' }}</dd>
+          <dt>Packed</dt><dd>{{ o.packed_at ? (o.packed_at | day) : '—' }}</dd>
+          <dt>Route</dt><dd>{{ o.partner_route ? (o.partner_route | humanize) : '—' }}@if (o.transfer; as tr) { · {{ tr.code }} }</dd>
+        </dl>
+      </section>
+      <section class="dr-sec">
+        <h4>Deliver to</h4>
+        <dl>
+          <dt>Customer</dt><dd>{{ o.customer_name || '—' }} · {{ o.customer_code }}</dd>
+          <dt>Phone</dt><dd>{{ o.destination_phone || '—' }}</dd>
+          <dt>Address</dt><dd>{{ o.destination_address || '—' }}</dd>
+          <dt>City</dt><dd>{{ destination(o) }}</dd>
+        </dl>
+      </section>
+      <section class="dr-sec">
+        <h4>Invoice</h4>
+        @if (o.invoice; as inv) {
+          <dl><dt>Number</dt><dd>{{ inv.number }}</dd><dt>Issued</dt><dd>{{ inv.issued_at ? (inv.issued_at | day) : '—' }}</dd><dt>Status</dt><dd>{{ inv.status | humanize }}</dd></dl>
+        } @else { <p class="muted small">Not issued yet.</p> }
+      </section>
+      @if (o.shipment; as sh) {
+        <section class="dr-sec">
+          <h4>Courier</h4>
+          <dl>
+            <dt>Courier</dt><dd>{{ sh.courier || '—' }}@if (sh.booking_source) { · {{ sh.booking_source === 'api' ? 'booked through the API' : 'booked by hand' }} }</dd>
+            <dt>CN</dt><dd class="mono">{{ sh.tracking_number || 'pending' }}</dd>
+            @if (sh.booked_at) { <dt>Booked</dt><dd>{{ sh.booked_at | day }}</dd> }
+            @if (sh.handed_at) { <dt>Dispatched</dt><dd>{{ sh.handed_at | day }}</dd> }
+            @if (sh.delivered_at) { <dt>Delivered</dt><dd>{{ sh.delivered_at | day }}@if (sh.proof?.receiver) { · received by {{ sh.proof!.receiver }} }</dd> }
+            @if (sh.failure_reason) { <dt>Reason</dt><dd class="warn">{{ sh.failure_reason }}</dd> }
+            @if (sh.return_started_at) { <dt>Return started</dt><dd>{{ sh.return_started_at | day }}@if (sh.returned_at) { · received back {{ sh.returned_at | day }} }</dd> }
+          </dl>
+        </section>
+        @if (sh.events?.length) {
+          <section class="dr-sec">
+            <h4>Timeline</h4>
+            <ul class="ship-events">
+              @for (ev of sh.events!; track $index) { <li><b>{{ ev.status === 'handed_to_courier' ? 'Handed over' : (ev.status | humanize) }}</b> <span class="muted">{{ ev.occurred_at | day }} · {{ ev.source === 'webhook' ? 'courier' : ev.source === 'manual' ? 'staff' : 'system' }}@if (ev.note) { · {{ ev.note }} }</span></li> }
+            </ul>
+          </section>
+        }
+      }
+    </div>
+    @if (canEdit() && o.shipment; as sh) {
+      <div class="drawer-foot">
+        @if (sh.tracking_number) { <button type="button" class="btn btn-xs" [disabled]="printing()" (click)="printCn([sh.id])">Print CN</button> }
+        @if (tab() === 'dispatched' && o.partner_route === 'direct_dispatch') {
+          @if (isPostex(o)) {
+            <button type="button" class="btn btn-xs" [disabled]="isBusy('rt:' + o.id)" (click)="refreshTracking(o)">
+              @if (isBusy('rt:' + o.id)) { <ion-spinner name="crescent" /> } Refresh courier tracking
+            </button>
+          } @else {
+            <button type="button" class="btn btn-xs" (click)="openTrack(o, 'in_transit')">In transit</button>
+            <button type="button" class="btn btn-xs btn-primary" (click)="openTrack(o, 'delivered')">Delivered</button>
+            <button type="button" class="btn btn-xs" (click)="openTrack(o, 'failed_delivery')">Attempt failed</button>
+            <button type="button" class="btn btn-xs" (click)="openTrack(o, 'returning_to_partner')">Courier is returning it</button>
+          }
+        }
+        @if (sh.status === 'returning_to_partner') {
+          <button type="button" class="btn btn-primary btn-xs" [disabled]="isBusy('rb:' + o.id)" (click)="receivedBack(o)">Received back</button>
+        }
+      </div>
+    }
+  </aside>
+}
+
+<!-- Bulk courier status for manual couriers -->
+@if (bulkTrack(); as f) {
+  <div class="modal-backdrop" (click)="bulkTrack.set(null)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bt-title" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">{{ picked().size }} parcel{{ picked().size === 1 ? '' : 's' }} ticked</span>
+          <h3 id="bt-title">
+            @switch (f.status) {
+              @case ('in_transit') { Mark in transit }
+              @case ('delivered') { Courier delivered them }
+              @case ('failed_delivery') { Delivery attempt failed }
+              @default { Courier is returning them }
+            }
+          </h3>
+        </div>
+        <button type="button" class="close-btn" (click)="bulkTrack.set(null)" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        @if (f.status === 'failed_delivery' || f.status === 'returning_to_partner') {
+          <div class="field">
+            <label for="bt-reason">Reason <span class="muted">(optional)</span></label>
+            <input id="bt-reason" class="input" maxlength="200" placeholder="e.g. Customer not available" [ngModel]="f.reason" (ngModelChange)="bulkTrack.set({ status: f.status, note: f.note, reason: $event })" />
+          </div>
+        }
+        <p class="muted small">Applies to the ticked parcels of manual couriers. Parcels of an API courier are skipped: their status comes from the courier. A parcel moves to the next tab by this status (Delivered, or Failed delivery when the courier is returning it).</p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" (click)="bulkTrack.set(null)" [disabled]="trackSaving()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="confirmBulkTrack()" [disabled]="trackSaving()">
+          @if (trackSaving()) { <ion-spinner name="crescent" /> } Confirm
         </button>
       </div>
     </div>
