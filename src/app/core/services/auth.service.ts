@@ -1,9 +1,10 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, Injector, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, firstValueFrom, finalize, map, shareReplay, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiEnvelope, AuthTokens, Profile, Role } from '../models/api.models';
+import { PushService } from './push.service';
 
 interface Session {
   user: Profile;
@@ -20,6 +21,7 @@ const STORAGE_KEY = 'v360_staff_session';
 export class AuthService {
   private http = inject(HttpClient);
   private router = inject(Router);
+  private injector = inject(Injector);
   private api = environment.apiUrl;
 
   private session = signal<Session | null>(readSession());
@@ -156,6 +158,8 @@ export class AuthService {
   logout(options: { redirect?: boolean; reason?: string } = {}): void {
     const token = this.accessToken();
     if (token) {
+      // this device stops getting the user's pushes (sent now, while the login is still in place)
+      this.injector.get(PushService).unregister();
       this.http
         .post(`${this.api}/auth/logout`, {}, { headers: { Authorization: `Bearer ${token}` } })
         .subscribe({ error: () => undefined });
