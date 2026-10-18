@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "894190452773",
+    "project_id": "stiching-98483",
+    "storage_bucket": "stiching-98483.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:894190452773:android:3f69793699c7b0a171ffcc",
+        "android_client_info": {
+          "package_name": "com.stiching.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZFEC5meXq78BXTmY2v3tC-Fz0r_Fypuk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:894190452773:android:9628a884bd2b1df471ffcc",
+        "android_client_info": {
+          "package_name": "com.stitchnship.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZFEC5meXq78BXTmY2v3tC-Fz0r_Fypuk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:894190452773:android:9eb7f4a8fe2ceddd71ffcc",
+        "android_client_info": {
+          "package_name": "com.stitchnship.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZFEC5meXq78BXTmY2v3tC-Fz0r_Fypuk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
