@@ -5,7 +5,7 @@ import { IonSpinner } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService, apiErrorMessage } from '../../core/services/api.service';
-import { GoogleSignInCancelled, isNativeApp, nativeGoogleIdToken } from '../../core/services/native-oauth';
+import { AppleSignInCancelled, GoogleSignInCancelled, isIosApp, isNativeApp, nativeAppleIdToken, nativeGoogleIdToken } from '../../core/services/native-oauth';
 
 const GOOGLE_STATE_KEY = 'v360_google_oauth';
 
@@ -49,6 +49,8 @@ interface PublicConfig {
     }
     .btn-google:hover:not(:disabled) { background: #f8f9fa; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
     .btn-google:disabled { opacity: 0.7; cursor: default; }
+    .btn-apple { margin-top: 10px; background: #000; border-color: #000; color: #fff; }
+    .btn-apple:hover:not(:disabled) { background: #1a1a1a; }
   `],
   template: `
     <div class="auth">
@@ -118,6 +120,20 @@ interface PublicConfig {
               </button>
             }
 
+            @if (isIos) {
+              @if (!googleEnabled()) { <div class="or"><span>or</span></div> }
+              <button type="button" class="btn-google btn-apple" (click)="startApple()" [disabled]="loading() || googleBusy() || appleBusy()">
+                @if (appleBusy()) {
+                  <ion-spinner name="crescent" />
+                } @else {
+                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.8-1.287-1.82-2.323-4.63-2.323-7.28 0-4.28 2.797-6.55 5.552-6.55 1.448 0 2.675.95 3.6.95.865 0 2.222-1.01 3.902-1.01.613 0 2.886.06 4.374 2.19-.13.09-2.383 1.37-2.383 4.19 0 3.26 2.854 4.42 2.955 4.45z" />
+                  </svg>
+                }
+                Continue with Apple
+              </button>
+            }
+
             <p class="switch">Accounts are created by your admin or partner.</p>
           } @else {
             <span class="eyebrow">Reset password</span>
@@ -159,6 +175,8 @@ export class LoginPage implements OnInit {
   readonly resetMessage = signal<string | null>(null);
   readonly googleEnabled = signal(false);
   readonly googleBusy = signal(false);
+  readonly appleBusy = signal(false);
+  readonly isIos = isIosApp();
   private googleClientId: string | null = null;
   private googleIosClientId: string | null = null;
   private googleHandled = false;
@@ -223,6 +241,27 @@ export class LoginPage implements OnInit {
     });
     const url = `https://accounts.google.com/o/oauth2/v2/auth?${q.toString().replace(/\+/g, '%20')}`;
     window.location.href = url;
+  }
+
+  async startApple(): Promise<void> {
+    if (this.appleBusy()) return; // a second tap must not start a second sign-in
+    this.error.set(null);
+    this.notice.set(null);
+    this.appleBusy.set(true);
+    try {
+      const { idToken, name } = await nativeAppleIdToken();
+      const user = await this.auth.appleLoginWithIdToken(idToken, name);
+      if (user.role === 'customer') {
+        this.auth.logout({ redirect: false });
+        this.error.set('This is a customer account. Please use the customer app to log in.');
+        return;
+      }
+      await this.router.navigateByUrl(this.auth.homeUrl());
+    } catch (err) {
+      if (!(err instanceof AppleSignInCancelled)) this.error.set(apiErrorMessage(err, 'Apple sign-in failed. Please try again.'));
+    } finally {
+      this.appleBusy.set(false);
+    }
   }
 
   private async nativeGoogle(clientId: string, iosClientId: string | null): Promise<void> {

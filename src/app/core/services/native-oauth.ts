@@ -38,3 +38,31 @@ export async function nativeGoogleIdToken(webClientId: string, apiIosClientId?: 
     throw err;
   }
 }
+
+export class AppleSignInCancelled extends Error {
+  constructor() {
+    super('Apple sign-in was cancelled.');
+    this.name = 'AppleSignInCancelled';
+  }
+}
+
+/** Sign in with Apple exists on iPhone only (App Store rule: required next to any other social sign-in). */
+export const isIosApp = (): boolean => Capacitor.getPlatform() === 'ios';
+
+/** Opens the native Apple sheet and returns the signed identity token (+ the name, which Apple shares only the first time). */
+export async function nativeAppleIdToken(): Promise<{ idToken: string; name: string }> {
+  const { SocialLogin } = await import('@capgo/capacitor-social-login');
+  await SocialLogin.initialize({ apple: {} });
+  // a later Google sign-in must configure the plugin again
+  initializedFor = null;
+  try {
+    const { result } = await SocialLogin.login({ provider: 'apple', options: { scopes: ['email', 'name'] } });
+    if (!result.idToken) throw new Error('Apple did not return a sign-in token. Please try again.');
+    const name = [result.profile?.givenName, result.profile?.familyName].filter(Boolean).join(' ');
+    return { idToken: result.idToken, name };
+  } catch (err) {
+    const text = String((err as { message?: unknown; code?: unknown })?.message ?? '') + ' ' + String((err as { code?: unknown })?.code ?? '');
+    if (/cancel|dismiss|1001|-5/i.test(text)) throw new AppleSignInCancelled();
+    throw err;
+  }
+}
