@@ -14,7 +14,7 @@ interface Store {
   installed_at: string | null;
   install_url: string | null;
   brand?: { id: string; name: string } | null;
-  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean };
+  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; webhooks?: { ok: boolean; at: string; failed: string[] } };
 }
 
 interface QueueRow {
@@ -103,6 +103,13 @@ interface QueueRow {
                 <div class="main">
                   <strong>{{ s.shop_domain }}</strong>
                   <span class="small"><span class="pill" [attr.data-s]="s.connected ? 'ok' : s.status">{{ s.connected ? 'Connected' : s.status === 'uninstalled' ? 'Uninstalled' : 'Waiting for install' }}</span>@if (s.installed_at) { <span class="muted"> · installed {{ s.installed_at | date: 'MMM d, y' }}</span> }@if (s.brand) { <span class="muted"> · brand {{ s.brand.name }}</span> }</span>
+                  @if (s.connected) {
+                    <span class="small">
+                      Order notifications:
+                      @if (s.settings.webhooks?.ok) { <span class="pill" data-s="ok">Connected</span> }
+                      @else { <span class="pill" data-s="pending">Not connected</span> @if (s.settings.webhooks?.failed?.length) { <span class="err">{{ s.settings.webhooks?.failed?.[0] }}</span> } }
+                    </span>
+                  }
                   <label class="small sms">
                     <input type="checkbox" [ngModel]="smsOn(s)" (ngModelChange)="setSms(s, $event)" [name]="'sms-' + s.id" [disabled]="!smsConfigured()" />
                     Also text the customer ("add your sizes")@if (!smsConfigured()) { <span class="muted"> · text messages are not set up on the server</span> }
@@ -113,6 +120,7 @@ interface QueueRow {
                 </div>
                 <div class="row">
                   @if (s.install_url) { <button type="button" class="btn btn-sm" (click)="copy(s.install_url)">Copy install link</button> }
+                  @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
                   <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="saveGateways(s)">Save</button>
                 </div>
               </li>
@@ -254,6 +262,10 @@ export class AdminShopifyPage implements OnInit {
   saveGateways(s: Store): void {
     const names = this.gateways(s).split(',').map((n) => n.trim()).filter(Boolean);
     this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s) } }), 'Saved.');
+  }
+
+  reconnect(s: Store): void {
+    this.run(this.api.post(`/admin/shopify/stores/${s.id}/webhooks`), 'Order notifications connected.');
   }
 
   retry(r: QueueRow): void {
