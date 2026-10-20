@@ -81,5 +81,11 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera is used to scan article QR codes and to take photos and videos of parcels, articles and quality checks.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone is used to record voice notes for chat messages and for issue and quality notes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Your photo library is used to choose photos and videos of parcels, articles and catalogue items.</string>
 </dict>
 </plist>

@@ -30,6 +30,7 @@ import {
 } from '../../../core/services/partner.service';
 import { UiService } from '../../../core/services/ui.service';
 import { DayPipe, TimeAgoPipe } from '../../../shared/pipes';
+import { CodPaymentPanelComponent } from '../../../shared/components/cod-payment-panel/cod-payment-panel.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
@@ -72,7 +73,7 @@ interface IssueForm {
 @Component({
   selector: 'app-partner-receiving',
   standalone: true,
-  imports: [RouterLink, CanDirective, CourierSelectComponent, FormsModule, IonSpinner, DayPipe, TimeAgoPipe, QrCodeComponent, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent, VoiceNoteFieldComponent, VoiceNotePlayComponent],
+  imports: [RouterLink, CanDirective, CodPaymentPanelComponent, CourierSelectComponent, FormsModule, IonSpinner, DayPipe, TimeAgoPipe, QrCodeComponent, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent, VoiceNoteFieldComponent, VoiceNotePlayComponent],
   templateUrl: './receiving.page.html',
   styleUrls: ['./receiving.page.scss'],
 })

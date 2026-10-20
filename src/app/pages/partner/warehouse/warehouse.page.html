@@ -51,6 +51,7 @@
             <div class="sheet-actions bulk-wrap">
               @if (picked().size) { <button type="button" class="btn btn-ghost btn-xs" (click)="clearPicked()">Clear</button> }
               @if (canLoadsheet()) {
+                <button type="button" class="btn" (click)="scanOpen.set(true)">Scan for Loadsheet / CN</button>
                 <button type="button" class="btn btn-primary" [disabled]="!picked().size || sheetBusy() || printing()" [attr.aria-expanded]="readyMenuOpen()" aria-haspopup="menu" (click)="readyMenuOpen.set(!readyMenuOpen())">
                   @if (sheetBusy() || printing()) { <ion-spinner name="crescent" /> } Bulk action@if (picked().size) { ({{ picked().size }}) } <span aria-hidden="true">▾</span>
                 </button>
@@ -628,4 +629,8 @@
       </div>
     </div>
   </div>
+}
+
+@if (canLoadsheet()) {
+  <app-scan-dispatch #scanDispatch [open]="scanOpen()" [sheetBusy]="sheetBusy()" [printing]="printing()" (closed)="scanOpen.set(false)" (loadsheet)="scanLoadsheet($event, scanDispatch)" (printCn)="scanPrintCn($event)" />
 }

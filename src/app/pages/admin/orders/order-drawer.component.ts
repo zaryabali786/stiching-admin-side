@@ -13,6 +13,7 @@ import { ApprovalChipComponent } from '../../../shared/components/approval-chip.
 import { VoiceNotePlayComponent } from '../../../shared/components/voice-note-field/voice-note-play.component';
 import { chartTitle, groupMeasurements } from '../../../core/utils/measurements';
 import { DayPipe, HumanizePipe, PkrPipe } from '../../../shared/pipes';
+import { CodPaymentPanelComponent } from '../../../shared/components/cod-payment-panel/cod-payment-panel.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge.component';
 
@@ -24,7 +25,7 @@ const STATUS_LABEL = Object.fromEntries(ORDER_STATUS_OPTIONS.map((o) => [o.value
 @Component({
   selector: 'app-order-drawer',
   standalone: true,
-  imports: [DecimalPipe, RouterLink, IonSpinner, DayPipe, HumanizePipe, PkrPipe, EmptyStateComponent, StatusBadgeComponent, VoiceNotePlayComponent, ApprovalChipComponent],
+  imports: [DecimalPipe, RouterLink, IonSpinner, CodPaymentPanelComponent, DayPipe, HumanizePipe, PkrPipe, EmptyStateComponent, StatusBadgeComponent, VoiceNotePlayComponent, ApprovalChipComponent],
   templateUrl: './order-drawer.component.html',
   styleUrls: ['./order-drawer.component.scss'],
 })

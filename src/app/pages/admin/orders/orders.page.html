@@ -71,8 +71,9 @@
                   (click)="open(o)" (keydown.enter)="open(o)">
                   <td>
                     <span class="cell-main nowrap-id">{{ o.reference }}</span>
-                    @if (o.priority === 'rush' || o.has_issue) {
+                    @if (o.priority === 'rush' || o.has_issue || o.cod?.payment_type === 'COD') {
                       <span class="flags">
+                        @if (o.cod?.payment_type === 'COD') { <span class="badge" [class.green]="o.cod?.payment_status === 'PAID'" [class.amber]="o.cod?.payment_status !== 'PAID'">COD · {{ o.cod?.payment_status === 'PAID' ? 'PAID' : o.cod?.payment_status === 'PENDING' ? 'Pending' : 'NOT PAID' }}</span> }
                         @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
                         @if (o.has_issue) { <span class="badge red">Issue</span> }
                       </span>

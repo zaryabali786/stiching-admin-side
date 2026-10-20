@@ -71,7 +71,12 @@ export class PushService {
       await PushNotifications.addListener('pushNotificationActionPerformed', (a) => this.open(a.notification?.data));
     }
     let perm = await PushNotifications.checkPermissions();
-    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') perm = await PushNotifications.requestPermissions();
+    // Ask at most once a week: after a "Don't allow" (or a dismissed dialog) the phone keeps answering "prompt", and asking on every
+    // app start is what made the permission box come back each time the app was opened.
+    if ((perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') && askedLongAgo()) {
+      markAsked();
+      perm = await PushNotifications.requestPermissions();
+    }
     if (perm.receive !== 'granted') return;
     if (Capacitor.getPlatform() === 'android') {
       await PushNotifications.createChannel({ id: 'default', name: 'Updates', importance: 4, visibility: 1 }).catch(() => undefined);
@@ -116,6 +121,27 @@ export class PushService {
     const forUser = data?.['userId'];
     if (typeof forUser === 'string' && forUser && forUser !== this.auth.user()?.id) return;
     if (typeof link === 'string' && /^\/(admin|partner)(\/|$|\?)/.test(link)) void this.router.navigateByUrl(link);
+  }
+}
+
+const ASKED_KEY = 'v360_push_token_asked_at';
+const ASK_AGAIN_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The notification permission box was not shown in the last week (or never). */
+function askedLongAgo(): boolean {
+  try {
+    const at = Number(localStorage.getItem(ASKED_KEY));
+    return !at || Date.now() - at > ASK_AGAIN_AFTER_MS;
+  } catch {
+    return true;
+  }
+}
+
+function markAsked(): void {
+  try {
+    localStorage.setItem(ASKED_KEY, String(Date.now()));
+  } catch {
+    /* storage unavailable */
   }
 }
 

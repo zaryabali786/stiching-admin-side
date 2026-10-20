@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService, apiErrorMessage } from '../../core/services/api.service';
 import { AppleSignInCancelled, GoogleSignInCancelled, isIosApp, isNativeApp, nativeAppleIdToken, nativeGoogleIdToken } from '../../core/services/native-oauth';
@@ -154,6 +155,9 @@ interface PublicConfig {
             </form>
             <p class="switch"><button type="button" class="link" (click)="mode.set('login'); error.set(null); resetMessage.set(null)">← Back to log in</button></p>
           }
+          @if (privacyUrl) {
+            <p class="switch"><a [href]="privacyUrl" target="_blank" rel="noopener">Privacy policy</a></p>
+          }
         </div>
       </section>
     </div>
@@ -167,6 +171,7 @@ export class LoginPage implements OnInit {
 
   email = '';
   password = '';
+  readonly privacyUrl = environment.privacyPolicyUrl;
   readonly mode = signal<'login' | 'forgot'>('login');
   readonly showPassword = signal(false);
   readonly loading = signal(false);

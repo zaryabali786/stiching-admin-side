@@ -1,5 +1,7 @@
 export const environment = {
   production: false,
+  // The public Privacy Policy page (App Store rule: also linked inside the app). Empty = no link is shown. Set it once the page exists.
+  privacyPolicyUrl: '',
   apiUrl: 'http://localhost:5000/api',
   // switch on ONLY after android/app/google-services.json (Firebase) is in the project: without it the app crashes on push
   nativePush: true,

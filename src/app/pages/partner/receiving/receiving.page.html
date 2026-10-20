@@ -123,6 +123,15 @@
               </div>
               <div class="badges">
                 <span class="badge blue" [title]="'Order source: ' + sourceLabel(o)">{{ sourceLabel(o) }} order</span>
+                @if (o.cod; as c) {
+                  @if (c.payment_type === 'COD') {
+                    <span class="badge" [class.green]="c.payment_status === 'PAID'" [class.amber]="c.payment_status !== 'PAID'" [title]="c.needs_verification ? 'The total still has to be verified' : 'Cash on delivery order'">
+                      COD · {{ c.payment_status === 'PAID' ? 'PAID' : c.payment_status === 'PENDING' ? 'Payment pending' : 'NOT PAID' }}@if (c.amount != null) { · {{ c.currency }} {{ c.amount }} }
+                    </span>
+                  } @else if (c.payment_type === 'NON_COD') {
+                    <span class="badge">Non-COD</span>
+                  }
+                }
                 @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
                 @if (o.has_issue) { <span class="badge red dot">Has issue</span> }
                 <app-status-badge [status]="o.status" [label]="o.status_label" />
@@ -134,6 +143,8 @@
             @if (o.customer_notes) {
               <p class="notes"><b>Customer notes:</b> {{ o.customer_notes }}</p>
             }
+
+            @if (!o.group || o.group === 'main') { <app-cod-payment-panel [orderId]="o.id" scope="partner" /> }
 
             <ul class="units" [attr.aria-label]="'Pieces in ' + o.reference">
               @for (u of o.units; track u.id) {

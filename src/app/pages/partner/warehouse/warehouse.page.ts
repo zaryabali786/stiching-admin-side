@@ -15,6 +15,7 @@ import { CatalogueService } from '../../../core/services/catalogue.service';
 import { BulkBookResult, DispatchRoute, DispatchShipment, PartnerService, Transfer, WarehouseMeta, WarehouseOrder, WarehouseTab } from '../../../core/services/partner.service';
 import { UiService } from '../../../core/services/ui.service';
 import { DayPipe, HumanizePipe } from '../../../shared/pipes';
+import { ScanDispatchComponent } from '../../../shared/components/scan-dispatch/scan-dispatch.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
@@ -35,7 +36,7 @@ const DOMESTIC = ['pakistan', 'pk'];
 @Component({
   selector: 'app-partner-warehouse',
   standalone: true,
-  imports: [CourierSelectComponent, FormsModule, IonSpinner, DayPipe, HumanizePipe, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent],
+  imports: [CourierSelectComponent, ScanDispatchComponent, FormsModule, IonSpinner, DayPipe, HumanizePipe, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent],
   templateUrl: './warehouse.page.html',
   styleUrls: ['./warehouse.page.scss'],
 })
@@ -753,7 +754,7 @@ export class PartnerWarehousePage implements OnInit {
   readonly printing = signal(false);
 
   /** Print the CN slip of one parcel, or of every ticked parcel (PostEx: its own PDF, 10 at a time; other couriers: a slip made here). */
-  printCn(ids: string[]): void {
+  printCn(ids: string[], onDone?: () => void): void {
     if (!ids.length || this.printing()) return;
     this.printing.set(true);
     // PostEx prints 10 CNs per file: a larger selection opens one file per 10
@@ -762,6 +763,7 @@ export class PartnerWarehousePage implements OnInit {
     const next = (i: number): void => {
       if (i >= parts.length) {
         this.printing.set(false);
+        onDone?.();
         return;
       }
       this.partner.printCn(parts[i]).subscribe({
@@ -800,6 +802,22 @@ export class PartnerWarehousePage implements OnInit {
     next(0);
   }
 
+  // ───────────── Scan for loadsheet / CN ─────────────
+
+  readonly scanOpen = signal(false);
+
+  /** The scan modal asked for a loadsheet of the scanned parcels. One courier per loadsheet, like the bulk action. */
+  scanLoadsheet(ids: string[], modal: ScanDispatchComponent): void {
+    this.downloadLoadsheet(ids, () => {
+      modal.reset();
+      this.scanOpen.set(false);
+    });
+  }
+
+  scanPrintCn(ids: string[]): void {
+    this.printCn(ids);
+  }
+
   cancelBooking(o: WarehouseOrder): void {
     const key = `cb:${o.id}`;
     this.setBusy(key, true);
@@ -817,8 +835,7 @@ export class PartnerWarehousePage implements OnInit {
   }
 
   /** Make the loadsheet and save the file. Only a saved file marks the parcels as downloaded; the handover is a separate, explicit step. */
-  downloadLoadsheet(): void {
-    const ids = [...this.picked()];
+  downloadLoadsheet(ids: string[] = [...this.picked()], onProcessed?: () => void): void {
     if (!ids.length || this.sheetBusy()) return;
     this.sheetBusy.set(true);
     this.partner.createDispatchLoadsheet(ids).subscribe({
@@ -846,12 +863,14 @@ export class PartnerWarehousePage implements OnInit {
                   next: (done) => {
                     this.sheetBusy.set(false);
                     this.ui.success(done.message || `${sheet.number} downloaded. Parcels dispatched.`);
+                    onProcessed?.();
                     this.go({ tab: 'dispatched', page: null });
                   },
                   error: (e) => {
                     // the file is saved but the dispatch failed: the handover bar stays so it can be confirmed again
                     this.sheetBusy.set(false);
                     this.pendingHandover.set({ id: sheet.id, number: sheet.number, count: sheet.count });
+                    onProcessed?.();
                     this.ui.error(e);
                     this.refresh();
                   },

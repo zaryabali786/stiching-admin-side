@@ -156,6 +156,8 @@ export interface ReturnShipmentInfo {
 
 export interface ReceivingOrder {
   id: string;
+  /** COD orders: whether the customer has paid. */
+  cod?: CodSummary;
   /** The group this row shows: the normal order, or its hold / return / resolved articles. */
   group?: 'main' | 'hold' | 'return' | 'resolved';
   /** <reference>, <reference>-HOLD, <reference>-RETURN or <reference>-RESOLVED. */
@@ -734,6 +736,11 @@ export class PartnerService {
     return this.api.getBlob(`${this.base}/warehouse/orders/list?order_ids=${orderIds.map(encodeURIComponent).join(',')}`);
   }
 
+  /** What a scanned article QR code (or parcel reference) points to: its order, its dispatch shipment, and whether it can go on a loadsheet / have its CN printed. */
+  scanLookupDispatch(code: string) {
+    return this.api.get<DispatchScan>(`${this.base}/warehouse/scan-lookup`, { code });
+  }
+
   /** The CN slips of the given parcels: PostEx's own PDF for PostEx parcels, otherwise a printable slip. */
   printCn(shipmentIds: string[]) {
     return this.api.getBlob(`${this.base}/warehouse/cn/print?shipment_ids=${shipmentIds.map(encodeURIComponent).join(',')}`);
@@ -870,3 +877,24 @@ export const ISSUE_TYPES: { value: IssueType; en: string; ur: string }[] = [
 
 /** Single source of truth lives in core/utils/measurements.ts (grouped labels for the new size form). */
 export { MEASUREMENT_LABELS, MEASUREMENT_GROUP_DEFS, groupMeasurements, chartTitle } from '../utils/measurements';
+
+/** The answer of the dispatch scan lookup (Ready for dispatch > Scan for Loadsheet / CN). */
+export interface DispatchScan {
+  code: string;
+  article: { id: string; code: string; title: string | null; line_no: number | null } | null;
+  order: { id: string; reference: string; customer_name: string | null; customer_code: string | null; destination_city: string | null; destination_country: string | null; weight_kg: number | null };
+  shipment: { id: string; status: string; courier: string | null; courier_id: string | null; tracking_number: string | null; loadsheet_id: string | null } | null;
+  can_loadsheet: boolean;
+  can_print_cn: boolean;
+  reason: string | null;
+}
+
+/** The COD state shown on order lists (from the server). */
+export interface CodSummary {
+  payment_type: 'COD' | 'NON_COD' | null;
+  payment_status: 'UNPAID' | 'PENDING' | 'PAID' | null;
+  amount: number | null;
+  currency: string | null;
+  needs_verification: boolean;
+  locked: boolean;
+}

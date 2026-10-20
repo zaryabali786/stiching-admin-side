@@ -1,3 +1,4 @@
+import type { CodSummary } from './partner.service';
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
@@ -80,6 +81,8 @@ export interface PartnerChip {
 
 export interface AdminOrderRow {
   id: string;
+  /** COD orders: type and payment status. */
+  cod?: CodSummary | null;
   reference: string;
   partner?: PartnerChip | null;
   brand: string | null;

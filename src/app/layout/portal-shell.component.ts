@@ -135,6 +135,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
             { path: '/admin/price-list', label: 'Price list', icon: 'pricetags-outline', module: 'price_list' },
             { path: '/admin/shipping', label: 'Shipping rates', icon: 'airplane-outline', module: 'shipping' },
             { path: '/admin/settings', label: 'Settings', icon: 'settings-outline', module: 'settings' },
+            { path: '/admin/shopify', label: 'Shopify stores', icon: 'layers-outline', module: 'settings' },
           ],
         },
         {

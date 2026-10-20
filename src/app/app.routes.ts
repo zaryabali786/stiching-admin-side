@@ -75,6 +75,7 @@ export const routes: Routes = [
       { path: 'users', data: { title: 'Users' }, title: 'Users · Admin', loadComponent: () => import('./pages/admin/users/users.page').then((m) => m.AdminUsersPage) },
       { path: 'roles', data: { title: 'Roles and permissions' }, title: 'Roles · Admin', loadComponent: () => import('./pages/admin/roles/roles.page').then((m) => m.AdminRolesPage) },
       { path: 'settings', data: { adminModule: 'settings', title: 'Settings' }, title: 'Settings · Admin', loadComponent: () => import('./pages/admin/settings/settings.page').then((m) => m.AdminSettingsPage) },
+      { path: 'shopify', data: { adminModule: 'settings', title: 'Shopify stores' }, title: 'Shopify · Admin', loadComponent: () => import('./pages/admin/shopify/shopify.page').then((m) => m.AdminShopifyPage) },
     ],
   },
 
