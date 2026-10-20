@@ -5,12 +5,11 @@ const config: CapacitorConfig = {
   appName: 'Stitch And Ship',
   webDir: 'www',
   plugins: {
-    LiveUpdates: {
-      appId: 'f938d50b',
-      channel: 'Production',
-      autoUpdateMethod: 'background',
-      maxVersions: 2
-    }
+    LiveUpdate: {
+      appId: '0a3ced75-b36f-4b7c-b591-841038093175',
+      autoDeleteBundles: true,
+      readyTimeout: 10000,
+    },
   }
 };
 
