@@ -332,7 +332,13 @@
               } @else if (returnWaiting(o)) {
                 <span class="muted small return-wait">Send the rejected article back first. Receiving opens again after that.</span>
               } @else if (pendingCount(o) > 0) {
-                <button *can="'receiving.receive'" type="button" class="btn btn-primary btn-floor all-btn" (click)="openReceive(o)">
+                @if (o.cod?.receive_blocked) {
+                  <span class="pay-block" role="status">
+                    <b>Payment is required before receiving this order.</b>
+                    <span>{{ payStateLabel(o) }}. The Received button opens when the customer's payment is confirmed.</span>
+                  </span>
+                }
+                <button *can="'receiving.receive'" type="button" class="btn btn-primary btn-floor all-btn" [disabled]="!!o.cod?.receive_blocked" [attr.title]="o.cod?.receive_blocked ? 'Payment is required before receiving this order.' : null" (click)="openReceive(o)">
                   <span aria-hidden="true">📦</span>
                   <span [class.urdu]="lang.isUrdu()">{{ sentBackCount(o) ? 'Receive corrected article' : lang.t('Receive parcel', 'پارسل وصول کریں') }}</span>
                   @if (pendingCount(o) > 1) { <span class="all-count">{{ pendingCount(o) }}</span> }

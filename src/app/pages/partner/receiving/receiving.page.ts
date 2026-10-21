@@ -702,7 +702,15 @@ export class PartnerReceivingPage implements OnInit {
 
   rcvProblems = computed(() => this.rcv()?.units.filter((u) => u.problem).length ?? 0);
 
+  /** What the person receiving sees in place of the button while a COD order is not paid. */
+  payStateLabel(o: ReceivingOrder): string {
+    const s = o.cod?.payment_state;
+    return s === 'processing' ? 'Payment started, not confirmed yet' : s === 'verification_pending' ? 'The total is still being confirmed' : 'Payment required';
+  }
+
   openReceive(order: ReceivingOrder): void {
+    // the server refuses it too; this only keeps the person from opening a popup that cannot be saved
+    if (order.cod?.receive_blocked) return;
     this.rcvTouched.set(false);
     this.rcv.set({
       order,

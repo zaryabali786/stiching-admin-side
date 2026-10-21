@@ -405,3 +405,11 @@ app-search-input.search-lg {
   .input { width: 120px; min-height: 40px; } b { color: var(--c-red, #b3261e); } }
 
 .unit-thumb { flex: none; width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: var(--c-neutral-soft); }
+
+/* a COD order that is not paid yet: why the Received button is closed */
+.pay-block {
+  display: flex; flex-direction: column; gap: 2px; max-width: 280px; text-align: right;
+  padding: 8px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.4;
+  background: var(--c-amber-soft); color: var(--c-amber);
+  b { font-weight: 600; }
+}

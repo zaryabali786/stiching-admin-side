@@ -1,4 +1,4 @@
-import { DatePipe, NgClass } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -14,7 +14,7 @@ interface Store {
   installed_at: string | null;
   install_url: string | null;
   brand?: { id: string; name: string } | null;
-  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; webhooks?: { ok: boolean; at: string; failed: string[] } };
+  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; clothing_collection?: string; webhooks?: { ok: boolean; at: string; failed: string[] } };
 }
 
 interface QueueRow {
@@ -32,6 +32,30 @@ interface QueueRow {
   created_at: string;
   store?: { shop_domain: string } | null;
   needs_attention: boolean;
+  /** The price split of the order when it mixes Stitch&Ship (clothing) lines and normal lines: one row per group. */
+  split?: SplitRow[];
+}
+
+interface SplitRow {
+  id: string;
+  kind: 'stitchship' | 'normal';
+  line_ids: string[];
+  lines: { title: string; variant_title: string | null; sku: string | null; quantity: number }[];
+  subtotal: number;
+  discounts: number;
+  taxes: number;
+  shipping: number;
+  total: number;
+  currency: string | null;
+  amount_paid: number | null;
+  outstanding: number | null;
+  refunded: number;
+  payment_status: string;
+  payment_verified: boolean;
+  reconciled: boolean;
+  unallocated: number;
+  tag: string | null;
+  address: { kind: string; city: string | null; country: string | null; matches_atelier?: boolean; needs_separate_delivery?: boolean; note?: string } | null;
 }
 
 /**
@@ -42,7 +66,7 @@ interface QueueRow {
   selector: 'app-admin-shopify',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, IonSpinner, DatePipe, NgClass],
+  imports: [FormsModule, RouterLink, IonSpinner, DatePipe, DecimalPipe, NgClass],
   template: `
     <div class="page">
       <header class="page-header">
@@ -138,6 +162,9 @@ interface QueueRow {
                       <label class="small gw">Cash on delivery payment names (comma separated, if the store's COD gateway has its own name)
                         <input class="input" [ngModel]="gateways(s)" (ngModelChange)="setGateways(s, $event)" [name]="'gw-' + s.id" placeholder="Cash on Delivery (COD)" />
                       </label>
+                      <label class="small gw">Clothing collection (handle or ID). Only products in it can be stitched; leave empty for no restriction. Use the same collection in the theme block.
+                        <input class="input" [ngModel]="clothing(s)" (ngModelChange)="setClothing(s, $event)" [name]="'cl-' + s.id" placeholder="e.g. clothing" />
+                      </label>
                       <div class="row"><button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="saveGateways(s)">Save settings</button></div>
                     </div>
                   </details>
@@ -187,6 +214,52 @@ interface QueueRow {
                         @else { <span class="muted">—</span> }
                       </td>
                     </tr>
+                    @if (r.split?.length) {
+                      <tr class="split-row">
+                        <td colspan="7">
+                          <details [open]="r.needs_attention">
+                            <summary>
+                              Price split · Shopify order {{ r.shopify_order_name }} stays the one real order and payment
+                              @if (needsRecheck(r)) { <span class="badge amber">Payment not verified</span> }
+                              @if (r.split![0].reconciled === false) { <span class="badge red">Does not add up: {{ r.split![0].unallocated }} {{ r.split![0].currency }} unallocated</span> }
+                            </summary>
+                            <div class="table-scroll">
+                              <table class="data-table split-table">
+                                <thead>
+                                  <tr><th>Group</th><th>Products</th><th class="num">Subtotal</th><th class="num">Discounts</th><th class="num">Taxes</th><th class="num">Shipping</th><th class="num">Total</th><th class="num">Paid (share)</th><th class="num">Outstanding</th><th class="num">Refunded</th><th>Payment</th><th>Address</th></tr>
+                                </thead>
+                                <tbody>
+                                  @for (g of r.split; track g.id) {
+                                    <tr>
+                                      <td><span class="badge" [ngClass]="g.kind === 'stitchship' ? 'green' : ''">{{ g.kind === 'stitchship' ? 'Stitch&Ship' : 'Normal' }}</span>@if (g.tag) { <span class="cell-sub">tag {{ g.tag }}</span> }</td>
+                                      <td>@for (l of g.lines; track $index) { <span class="cell-sub">{{ l.quantity }} × {{ l.title }}@if (l.sku) { · {{ l.sku }} }</span> }</td>
+                                      <td class="num">{{ g.subtotal | number: '1.2-2' }}</td>
+                                      <td class="num">{{ g.discounts | number: '1.2-2' }}</td>
+                                      <td class="num">{{ g.taxes | number: '1.2-2' }}</td>
+                                      <td class="num">{{ g.shipping | number: '1.2-2' }}</td>
+                                      <td class="num"><b>{{ g.total | number: '1.2-2' }}</b> {{ g.currency }}</td>
+                                      <td class="num">{{ g.amount_paid == null ? '—' : (g.amount_paid | number: '1.2-2') }}</td>
+                                      <td class="num">{{ g.outstanding == null ? '—' : (g.outstanding | number: '1.2-2') }}</td>
+                                      <td class="num">{{ g.refunded | number: '1.2-2' }}</td>
+                                      <td><span class="badge" [ngClass]="payTone(g.payment_status)">{{ payLabel(g.payment_status) }}</span></td>
+                                      <td>
+                                        @if (g.address; as a) {
+                                          {{ a.kind === 'atelier' ? 'Atelier' : a.kind === 'billing' ? 'Customer (billing)' : 'Customer (shipping)' }}
+                                          <span class="cell-sub">{{ a.city }}{{ a.country ? ', ' + a.country : '' }}</span>
+                                          @if (a.needs_separate_delivery) { <span class="cell-sub err">{{ a.note }}</span> }
+                                        } @else { — }
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                            <p class="muted small">The groups add up to the checkout. One real payment covers both; the paid figures are each group's share of it. Nothing here moves money or changes the order in Shopify.</p>
+                            @if (needsRecheck(r)) { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="retry(r)">Check payment again</button> }
+                          </details>
+                        </td>
+                      </tr>
+                    }
                   }
                 </tbody>
               </table>
@@ -230,6 +303,9 @@ interface QueueRow {
     .sms { display: flex; gap: 8px; align-items: center; }
     .gw { display: flex; flex-direction: column; gap: 6px; }
     .nowrap { white-space: nowrap; }
+    .split-row > td { background: var(--c-bg-soft); padding: 8px 16px 14px; }
+    .split-row summary { cursor: pointer; font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .split-table { margin-top: 10px; background: var(--c-surface); }
     tr.attn-row td:first-child { box-shadow: inset 3px 0 0 var(--c-red); }
     .steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; }
     .steps li { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--c-line); font-size: 0; display: grid; place-items: center; color: var(--c-faint); }
@@ -256,6 +332,7 @@ export class AdminShopifyPage implements OnInit {
   readonly shop = signal('');
   private edits = signal<Record<string, string>>({});
   private smsEdits = signal<Record<string, boolean>>({});
+  private clothingEdits = signal<Record<string, string>>({});
   readonly attention = computed(() => this.queue().filter((r) => r.needs_attention));
 
   readonly connectedCount = computed(() => this.stores().filter((s) => s.connected).length);
@@ -309,12 +386,29 @@ export class AdminShopifyPage implements OnInit {
     });
   }
 
+  /** The payment of a saved split could not be confirmed against Shopify's transactions (or the split could not be saved yet). */
+  needsRecheck(r: QueueRow): boolean {
+    return (r.split || []).some((g) => g.payment_status === 'verification_pending' || g.payment_status === 'paid_unverified') || (!r.split?.length && /price split/i.test(r.last_error || ''));
+  }
+
+  payLabel(status: string): string {
+    const map: Record<string, string> = { paid: 'Paid', paid_unverified: 'Paid (not verified)', partially_paid: 'Partly paid', unpaid: 'Unpaid', verification_pending: 'Verification pending', partially_refunded: 'Partly refunded', refunded: 'Refunded', cancelled: 'Cancelled' };
+    return map[status] || status;
+  }
+
+  payTone(status: string): '' | 'green' | 'amber' | 'red' {
+    return status === 'paid' ? 'green' : ['partially_paid', 'paid_unverified', 'verification_pending', 'unpaid'].includes(status) ? 'amber' : ['refunded', 'partially_refunded'].includes(status) ? 'red' : '';
+  }
+
   why(r: QueueRow): string {
     if (r.state === 'failed') return 'This order could not be taken in.';
     if (r.address_state === 'address_mismatch' && r.hold_state === 'held') return 'The shipping address is not the atelier. The shipment is on hold until the customer confirms.';
     if (r.hold_state === 'failed') return 'The shipment could not be held or released: check it in Shopify.';
     if (r.state === 'draft_created' && !r.notified_at) return 'The customer has not been emailed yet.';
     if (r.state === 'cancelled') return 'Cancelled by the brand.';
+    if (this.needsRecheck(r)) return 'The payment of this order could not be verified with Shopify yet. Check it again.';
+    if ((r.split || []).some((g) => g.address?.needs_separate_delivery)) return 'This order mixes stitching and normal items, and its one shipping address is the atelier: the normal items must be delivered to the customer separately.';
+    if (r.split?.[0]?.reconciled === false) return 'The price split does not add up to the Shopify total (a tip or duties?). Look at it.';
     return '';
   }
 
@@ -324,6 +418,14 @@ export class AdminShopifyPage implements OnInit {
 
   smsOn(s: Store): boolean {
     return this.smsEdits()[s.id] ?? s.settings?.sms_enabled === true;
+  }
+
+  clothing(s: Store): string {
+    return this.clothingEdits()[s.id] ?? s.settings?.clothing_collection ?? '';
+  }
+
+  setClothing(s: Store, value: string): void {
+    this.clothingEdits.update((m) => ({ ...m, [s.id]: value }));
   }
 
   setSms(s: Store, value: boolean): void {
@@ -358,7 +460,7 @@ export class AdminShopifyPage implements OnInit {
 
   saveGateways(s: Store): void {
     const names = this.gateways(s).split(',').map((n) => n.trim()).filter(Boolean);
-    this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s) } }), 'Saved.');
+    this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s), clothing_collection: this.clothing(s).trim() } }), 'Saved.');
   }
 
   reconnect(s: Store): void {

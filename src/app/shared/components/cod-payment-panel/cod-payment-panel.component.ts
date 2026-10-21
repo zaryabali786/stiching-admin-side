@@ -1,5 +1,7 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChatSocketService } from '../../../core/services/chat-socket.service';
 import { FormsModule } from '@angular/forms';
 import { IonSpinner } from '@ionic/angular';
 import { ApiService, apiErrorMessage } from '../../../core/services/api.service';
@@ -20,6 +22,11 @@ interface Cod {
   can_pay: boolean;
   locked: boolean;
   paid_at: string | null;
+  source?: 'shopify' | 'email' | 'manual';
+  payment_state?: 'not_required' | 'payment_required' | 'processing' | 'verification_pending' | 'paid';
+  receive_blocked?: boolean;
+  receive_block_reason?: string | null;
+  shopify?: { financial_status: string; amount_paid: number | null; outstanding: number | null } | null;
 }
 
 interface HistoryRow {
@@ -60,6 +67,19 @@ const AMOUNT_LABEL: Record<string, string> = { extracted: 'Read from the email',
               <dt>Total status</dt><dd>{{ amountLabel(c.amount_status) }}</dd>
               <dt>Payment status</dt><dd><span class="pill" [attr.data-s]="c.payment_status">{{ statusLabel(c.payment_status) }}</span>@if (c.paid_at) { <span class="muted small"> · {{ c.paid_at | date: 'MMM d, y, h:mm a' }}</span> }</dd>
             </dl>
+            @if (c.receive_blocked) {
+              <p class="warn" role="status">
+                <b>Payment is required before receiving this order.</b> The Received button stays closed until the customer's payment is confirmed by Stripe.
+                <button type="button" class="btn btn-sm" (click)="checkAgain()" [disabled]="busy()">Check payment again</button>
+              </p>
+            } @else if (c.payment_status === 'PAID') {
+              <p class="ok" role="status">Payment confirmed. This order can be received.</p>
+            }
+            @if (c.shopify) {
+              <dl class="kv">
+                <dt>Shopify says</dt><dd>{{ c.shopify.financial_status }}@if (c.shopify.outstanding != null) { · outstanding {{ c.shopify.outstanding }} {{ c.currency || '' }} }</dd>
+              </dl>
+            }
             @if (c.needs_verification) {
               <p class="warn" role="alert">The total could not be read with certainty. Check the original email and enter the total payable below; the customer cannot pay until it is confirmed.</p>
               @if (c.amount_note) { <p class="muted small">{{ c.amount_note }}</p> }
@@ -110,7 +130,8 @@ const AMOUNT_LABEL: Record<string, string> = { extracted: 'Read from the email',
     .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
     .kv dt { color: var(--c-muted); }
     .kv dd { margin: 0; }
-    .warn { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--c-red-soft); color: var(--c-red); font-size: 13.5px; }
+    .warn { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--c-red-soft); color: var(--c-red); font-size: 13.5px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    .ok { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--c-green-soft); color: var(--c-green); font-size: 13.5px; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .verify { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-line-soft); }
     .grid { display: grid; grid-template-columns: 1fr 110px; gap: 8px; }
@@ -123,6 +144,8 @@ export class CodPaymentPanelComponent {
   private api = inject(ApiService);
   private auth = inject(AuthService);
   private ui = inject(UiService);
+  private socket = inject(ChatSocketService);
+  private destroyRef = inject(DestroyRef);
 
   readonly orderId = input.required<string>();
   /** 'admin' uses the admin routes, 'partner' the receiving routes of the partner that owns the order. */
@@ -144,6 +167,29 @@ export class CodPaymentPanelComponent {
     effect(() => {
       this.orderId();
       untracked(() => this.load());
+    });
+    // the customer paid (or a payment changed) while this page is open: the state and the Received button follow without a refresh
+    this.socket
+      .on('unit:update')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((e) => {
+        if (e?.orderId === this.orderId()) this.load();
+      });
+  }
+
+  /** Asks the server to check with Stripe again. It only reads from Stripe: it never charges anyone. */
+  checkAgain(): void {
+    this.busy.set(true);
+    this.api.post<{ cod: Cod; history: HistoryRow[] }>(`${this.base()}/cod/check`).subscribe({
+      next: (res) => {
+        this.busy.set(false);
+        this.apply(res);
+        this.ui.success(res.cod.payment_status === 'PAID' ? 'Payment confirmed.' : 'Not paid yet.');
+      },
+      error: (e) => {
+        this.busy.set(false);
+        this.error.set(apiErrorMessage(e));
+      },
     });
   }
 

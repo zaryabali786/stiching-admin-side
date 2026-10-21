@@ -893,8 +893,14 @@ export interface DispatchScan {
 export interface CodSummary {
   payment_type: 'COD' | 'NON_COD' | null;
   payment_status: 'UNPAID' | 'PENDING' | 'PAID' | null;
+  /** payment_required, processing, verification_pending, paid or not_required: kept apart from the order's workflow status. */
+  payment_state?: 'not_required' | 'payment_required' | 'processing' | 'verification_pending' | 'paid';
+  source?: 'shopify' | 'email' | 'manual';
   amount: number | null;
   currency: string | null;
   needs_verification: boolean;
   locked: boolean;
+  /** The server refuses receiving while this is true (an unpaid COD order). */
+  receive_blocked?: boolean;
+  receive_block_reason?: string | null;
 }
