@@ -43,7 +43,7 @@ export class AdminOrdersPage implements OnInit {
     { key: 'all', label: 'All' },
     { key: 'issues', label: 'Issues', tone: 'bad' },
     { key: 'invoice', label: 'To invoice', tone: 'attn' },
-    { key: 'draft', label: 'Drafts (from email)' },
+    { key: 'draft', label: 'Drafts (email & Shopify)' },
     { key: 'awaiting_parcel', label: 'Awaiting parcel' },
     { key: 'production', label: 'In production' },
     { key: 'payment', label: 'Awaiting payment' },

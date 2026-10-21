@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgClass } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -42,128 +42,204 @@ interface QueueRow {
   selector: 'app-admin-shopify',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, IonSpinner, DatePipe],
+  imports: [FormsModule, RouterLink, IonSpinner, DatePipe, NgClass],
   template: `
-    <header class="page-head">
-      <div>
-        <span class="eyebrow">Settings</span>
-        <h1>Shopify stores</h1>
-        <p class="muted">Brand stores that offer "Customise stitching with Stitch&Ship", and the orders that came from them.</p>
-      </div>
-    </header>
-
-    @if (loading()) {
-      <p class="muted"><ion-spinner name="crescent" /> Loading…</p>
-    } @else {
-      @if (!configured()) {
-        <div class="notice warn" role="alert">
-          The Shopify connection is not set up on the server. Add <code>SHOPIFY_APP_API_KEY</code>, <code>SHOPIFY_APP_API_SECRET</code>, <code>SHOPIFY_APP_URL</code> and <code>SHOPIFY_TOKEN_KEY</code> to the server's .env, then restart it.
+    <div class="page">
+      <header class="page-header">
+        <div>
+          <span class="eyebrow">Settings</span>
+          <h1>Shopify stores</h1>
+          <p class="subtitle">Brand stores that offer "Customise stitching with Stitch&Ship", and the orders that came from them.</p>
         </div>
-      }
-      @if (error()) { <div class="notice warn" role="alert">{{ error() }}</div> }
+      </header>
 
-      <section class="card">
-        <h2 class="card-title">Needs attention ({{ attention().length }})</h2>
-        @if (!attention().length) {
-          <p class="muted">Nothing is waiting for you.</p>
-        } @else {
-          <ul class="list">
-            @for (r of attention(); track r.id) {
-              <li>
-                <div class="main">
-                  <strong>{{ r.shopify_order_name || r.shopify_order_id }}</strong>
-                  <span class="muted small">{{ r.store?.shop_domain }} · {{ r.customer_email || 'no email' }} · {{ r.created_at | date: 'MMM d, h:mm a' }}</span>
-                  <span class="small">{{ why(r) }}</span>
-                  @if (r.last_error) { <span class="small err">{{ r.last_error }}</span> }
-                </div>
-                <div class="row">
-                  @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">Open order</a> }
-                  @if (r.state === 'failed') { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="retry(r)">Try again</button> }
-                  @if (r.order_id && !r.notified_at) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="resend(r)">Send email</button> }
-                </div>
-              </li>
-            }
-          </ul>
+      @if (loading()) {
+        <p class="muted"><ion-spinner name="crescent" /> Loading…</p>
+      } @else {
+        @if (!configured()) {
+          <div class="notice warn" role="alert">
+            The Shopify connection is not set up on the server. Add <code>SHOPIFY_APP_API_KEY</code>, <code>SHOPIFY_APP_API_SECRET</code>, <code>SHOPIFY_APP_URL</code> and <code>SHOPIFY_TOKEN_KEY</code> to the server's .env, then restart it.
+          </div>
         }
-      </section>
+        @if (error()) { <div class="notice warn" role="alert">{{ error() }}</div> }
 
-      <section class="card">
-        <h2 class="card-title">Stores</h2>
-        <form class="add" (submit)="$event.preventDefault(); addStore()">
-          <input class="input" placeholder="my-brand.myshopify.com" [ngModel]="shop()" (ngModelChange)="shop.set($event)" name="shop" aria-label="Store address" />
-          <button type="submit" class="btn btn-primary" [disabled]="busy() || !shop().trim()">Add store</button>
-        </form>
-        <p class="muted small">Add the store first, then send the brand its install link. Only stores added here can install the app.</p>
-        @if (!stores().length) {
-          <p class="muted">No store yet.</p>
-        } @else {
-          <ul class="list">
-            @for (s of stores(); track s.id) {
-              <li>
-                <div class="main">
-                  <strong>{{ s.shop_domain }}</strong>
-                  <span class="small"><span class="pill" [attr.data-s]="s.connected ? 'ok' : s.status">{{ s.connected ? 'Connected' : s.status === 'uninstalled' ? 'Uninstalled' : 'Waiting for install' }}</span>@if (s.installed_at) { <span class="muted"> · installed {{ s.installed_at | date: 'MMM d, y' }}</span> }@if (s.brand) { <span class="muted"> · brand {{ s.brand.name }}</span> }</span>
-                  @if (s.connected) {
-                    <span class="small">
-                      Order notifications:
-                      @if (s.settings.webhooks?.ok) { <span class="pill" data-s="ok">Connected</span> }
-                      @else { <span class="pill" data-s="pending">Not connected</span> @if (s.settings.webhooks?.failed?.length) { <span class="err">{{ s.settings.webhooks?.failed?.[0] }}</span> } }
-                    </span>
+        <div class="stats">
+          <div class="stat"><b>{{ connectedCount() }}<small> / {{ stores().length }}</small></b><span>Stores connected</span></div>
+          <div class="stat"><b>{{ queue().length }}</b><span>Shopify orders</span></div>
+          <div class="stat" [class.attn]="attention().length > 0"><b>{{ attention().length }}</b><span>Need attention</span></div>
+        </div>
+
+        <p class="flow">
+          <b>How an order travels:</b> a customer buys on the brand's store → we make a <b>draft order</b> (see it in Orders → Drafts) and email the customer to add sizes → the customer confirms in the portal → the brand ships the parcel to the atelier → only then does it reach <b>Receiving</b>.
+        </p>
+
+        @if (attention().length) {
+          <section class="panel attn-panel">
+            <h2 class="panel-title">Needs attention <span class="badge red">{{ attention().length }}</span></h2>
+            <ul class="alerts">
+              @for (r of attention(); track r.id) {
+                <li>
+                  <div class="main">
+                    <div class="title"><strong>{{ r.shopify_order_name || r.shopify_order_id }}</strong><span class="badge" [ngClass]="badge(r).tone">{{ badge(r).label }}</span></div>
+                    <span class="muted small">{{ r.store?.shop_domain }} · {{ r.customer_email || 'no email' }} · {{ r.created_at | date: 'MMM d, h:mm a' }}</span>
+                    @if (why(r)) { <span class="small">{{ why(r) }}</span> }
+                    @if (r.last_error) { <span class="small err">{{ r.last_error }}</span> }
+                  </div>
+                  <div class="row">
+                    @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">Open order</a> }
+                    @if (r.state === 'failed') { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="retry(r)">Try again</button> }
+                    @if (r.order_id && !r.notified_at) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="resend(r)">Send email</button> }
+                  </div>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        <section class="panel">
+          <h2 class="panel-title">Stores</h2>
+          <form class="add" (submit)="$event.preventDefault(); addStore()">
+            <input class="input" placeholder="my-brand.myshopify.com" [ngModel]="shop()" (ngModelChange)="shop.set($event)" name="shop" aria-label="Store address" />
+            <button type="submit" class="btn btn-primary" [disabled]="busy() || !shop().trim()">Add store</button>
+          </form>
+          <p class="muted small hint">Add the store first, then send the brand its install link. Only stores added here can install the app.</p>
+          @if (!stores().length) {
+            <p class="muted">No store yet.</p>
+          } @else {
+            <ul class="stores">
+              @for (s of stores(); track s.id) {
+                <li class="store">
+                  <div class="store-top">
+                    <span class="avatar" aria-hidden="true">{{ s.shop_domain.charAt(0).toUpperCase() }}</span>
+                    <div class="main">
+                      <strong>{{ s.shop_domain }}</strong>
+                      <span class="small meta">
+                        <span class="badge" [ngClass]="s.connected ? 'green' : s.status === 'uninstalled' ? 'red' : 'amber'">{{ s.connected ? 'Connected' : s.status === 'uninstalled' ? 'Uninstalled' : 'Waiting for install' }}</span>
+                        @if (s.connected) {
+                          <span class="badge" [ngClass]="s.settings.webhooks?.ok ? 'green' : 'amber'">Order notifications {{ s.settings.webhooks?.ok ? 'on' : 'off' }}</span>
+                        }
+                        @if (s.installed_at) { <span class="muted">Installed {{ s.installed_at | date: 'MMM d, y' }}</span> }
+                        @if (s.brand) { <span class="muted">· Brand {{ s.brand.name }}</span> }
+                      </span>
+                      @if (s.connected && !s.settings.webhooks?.ok && s.settings.webhooks?.failed?.length) { <span class="small err">{{ s.settings.webhooks?.failed?.[0] }}</span> }
+                    </div>
+                    <div class="row">
+                      @if (s.install_url) { <button type="button" class="btn btn-sm" (click)="copy(s.install_url)">Copy install link</button> }
+                      @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
+                    </div>
+                  </div>
+                  <details class="more">
+                    <summary>Store settings</summary>
+                    <div class="more-body">
+                      <label class="small sms">
+                        <input type="checkbox" [ngModel]="smsOn(s)" (ngModelChange)="setSms(s, $event)" [name]="'sms-' + s.id" [disabled]="!smsConfigured()" />
+                        Also text the customer ("add your sizes")@if (!smsConfigured()) { <span class="muted"> · text messages are not set up on the server</span> }
+                      </label>
+                      <label class="small gw">Cash on delivery payment names (comma separated, if the store's COD gateway has its own name)
+                        <input class="input" [ngModel]="gateways(s)" (ngModelChange)="setGateways(s, $event)" [name]="'gw-' + s.id" placeholder="Cash on Delivery (COD)" />
+                      </label>
+                      <div class="row"><button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="saveGateways(s)">Save settings</button></div>
+                    </div>
+                  </details>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="panel flush">
+          <h2 class="panel-title pad">Recent Shopify orders</h2>
+          @if (!queue().length) {
+            <p class="muted pad">No Shopify order yet.</p>
+          } @else {
+            <div class="table-scroll">
+              <table class="data-table">
+                <caption class="sr-only">Orders that came from Shopify stores</caption>
+                <thead>
+                  <tr>
+                    <th>Shopify order</th>
+                    <th>Store</th>
+                    <th>Customer</th>
+                    <th>Received</th>
+                    <th>Progress</th>
+                    <th>Status</th>
+                    <th>Stitch&amp;Ship order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (r of queue(); track r.id) {
+                    <tr [class.attn-row]="r.needs_attention">
+                      <td><span class="cell-main">{{ r.shopify_order_name || r.shopify_order_id }}</span></td>
+                      <td>{{ r.store?.shop_domain }}</td>
+                      <td>{{ r.customer_email || '—' }}</td>
+                      <td class="nowrap">{{ r.created_at | date: 'MMM d, h:mm a' }}</td>
+                      <td>
+                        <ol class="steps" aria-label="Progress">
+                          @for (st of steps(r); track st.label) { <li [attr.data-s]="st.state" [attr.title]="st.label">{{ st.label }}</li> }
+                        </ol>
+                      </td>
+                      <td>
+                        <span class="badge" [ngClass]="badge(r).tone">{{ badge(r).label }}</span>
+                        @if (r.last_error) { <span class="cell-sub err">{{ r.last_error }}</span> }
+                      </td>
+                      <td>
+                        @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">{{ r.order?.reference }}</a> }
+                        @else { <span class="muted">—</span> }
+                      </td>
+                    </tr>
                   }
-                  <label class="small sms">
-                    <input type="checkbox" [ngModel]="smsOn(s)" (ngModelChange)="setSms(s, $event)" [name]="'sms-' + s.id" [disabled]="!smsConfigured()" />
-                    Also text the customer ("add your sizes")@if (!smsConfigured()) { <span class="muted"> · text messages are not set up on the server</span> }
-                  </label>
-                  <label class="small gw">Cash on delivery payment names (comma separated, if the store's COD gateway has its own name)
-                    <input class="input" [ngModel]="gateways(s)" (ngModelChange)="setGateways(s, $event)" [name]="'gw-' + s.id" placeholder="Cash on Delivery (COD)" />
-                  </label>
-                </div>
-                <div class="row">
-                  @if (s.install_url) { <button type="button" class="btn btn-sm" (click)="copy(s.install_url)">Copy install link</button> }
-                  @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
-                  <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="saveGateways(s)">Save</button>
-                </div>
-              </li>
-            }
-          </ul>
-        }
-      </section>
-
-      <section class="card">
-        <h2 class="card-title">Recent Shopify orders</h2>
-        @if (!queue().length) {
-          <p class="muted">No Shopify order yet.</p>
-        } @else {
-          <ul class="list">
-            @for (r of queue(); track r.id) {
-              <li>
-                <div class="main">
-                  <strong>{{ r.shopify_order_name || r.shopify_order_id }}</strong>
-                  <span class="muted small">{{ r.store?.shop_domain }} · {{ r.customer_email }} · {{ r.created_at | date: 'MMM d, h:mm a' }}</span>
-                  <span class="small">{{ why(r) || 'All good' }}</span>
-                </div>
-                @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">{{ r.order?.reference }}</a> }
-              </li>
-            }
-          </ul>
-        }
-      </section>
-    }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+    </div>
   `,
   styles: `
     .notice { padding: 10px 14px; border-radius: 12px; margin-bottom: 14px; }
     .notice.warn { background: var(--c-amber-soft); color: var(--c-amber); }
-    .list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-    .list li { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--c-line); border-radius: 12px; flex-wrap: wrap; }
-    .main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px; }
+    .stat { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+    .stat b { font-size: 28px; line-height: 1.1; font-weight: 600; color: var(--c-ink); }
+    .stat b small { font-size: 16px; color: var(--c-muted); font-weight: 500; }
+    .stat span { color: var(--c-muted); font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .stat.attn b { color: var(--c-red); }
+    .flow { background: var(--c-blue-soft); color: var(--c-ink-2); border-radius: var(--radius); padding: 12px 16px; margin: 0 0 18px; line-height: 1.55; font-size: 13.5px; }
+    .panel { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 20px 22px; margin-bottom: 18px; }
+    .panel.flush { padding: 0; overflow: hidden; }
+    .panel-title { font-size: 16px; font-weight: 600; margin: 0 0 12px; display: flex; gap: 8px; align-items: center; }
+    .pad { padding: 18px 22px 0; margin-bottom: 14px; }
+    p.pad { padding: 0 22px 20px; }
+    .attn-panel { border-left: 4px solid var(--c-red); }
+    .alerts, .stores { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .alerts li { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; padding: 12px 14px; border-radius: var(--radius); background: var(--c-bg-soft); }
+    .store { border: 1px solid var(--c-line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .store-top { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .avatar { width: 40px; height: 40px; border-radius: 12px; background: var(--c-gold-soft); color: var(--c-gold-dark); font-weight: 700; display: grid; place-items: center; flex: none; }
+    .main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
+    .title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .meta { display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .err { color: var(--c-red); }
-    .add { display: flex; gap: 8px; margin-top: 8px; input { flex: 1; min-width: 0; } }
-    .sms { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
-    .gw { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
-    .pill { padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--c-neutral-soft); color: var(--c-neutral); }
-    .pill[data-s='ok'] { background: var(--c-green-soft); color: var(--c-green); }
-    .pill[data-s='pending'] { background: var(--c-amber-soft); color: var(--c-amber); }
+    .add { display: flex; gap: 10px; margin-top: 4px; input { flex: 1; min-width: 0; } }
+    .hint { margin: 8px 0 4px; }
+    .more { border-top: 1px dashed var(--c-line); padding-top: 10px; }
+    .more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--c-muted); }
+    .more-body { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+    .sms { display: flex; gap: 8px; align-items: center; }
+    .gw { display: flex; flex-direction: column; gap: 6px; }
+    .nowrap { white-space: nowrap; }
+    tr.attn-row td:first-child { box-shadow: inset 3px 0 0 var(--c-red); }
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; }
+    .steps li { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--c-line); font-size: 0; display: grid; place-items: center; color: var(--c-faint); }
+    .steps li::before { font-size: 11px; font-weight: 700; content: '·'; }
+    .steps li[data-s='done'] { background: var(--c-green-soft); border-color: var(--c-green); color: var(--c-green); }
+    .steps li[data-s='done']::before { content: '✓'; }
+    .steps li[data-s='todo'] { border-color: var(--c-line); }
+    .steps li[data-s='bad'] { background: var(--c-red-soft); border-color: var(--c-red); color: var(--c-red); }
+    .steps li[data-s='bad']::before { content: '!'; }
+    @media (max-width: 700px) { .add { flex-direction: column; } .panel { padding: 16px; } }
   `,
 })
 export class AdminShopifyPage implements OnInit {
@@ -181,6 +257,27 @@ export class AdminShopifyPage implements OnInit {
   private edits = signal<Record<string, string>>({});
   private smsEdits = signal<Record<string, boolean>>({});
   readonly attention = computed(() => this.queue().filter((r) => r.needs_attention));
+
+  readonly connectedCount = computed(() => this.stores().filter((s) => s.connected).length);
+
+  badge(r: QueueRow): { label: string; tone: 'green' | 'amber' | 'red' | '' } {
+    if (r.state === 'cancelled') return { label: 'Cancelled', tone: '' };
+    if (r.state === 'failed') return { label: 'Could not be taken in', tone: 'red' };
+    if (r.address_state === 'address_mismatch' && r.hold_state === 'held') return { label: 'On hold', tone: 'amber' };
+    if (r.hold_state === 'failed') return { label: 'Check in Shopify', tone: 'red' };
+    if (r.state === 'draft_created' && !r.notified_at) return { label: 'Customer not emailed', tone: 'amber' };
+    if (r.state === 'draft_created') return { label: 'Waiting for customer sizes', tone: 'green' };
+    return { label: 'Received', tone: '' };
+  }
+
+  steps(r: QueueRow): { label: string; state: 'done' | 'todo' | 'bad' }[] {
+    return [
+      { label: 'Order received', state: 'done' },
+      { label: r.address_state === 'address_mismatch' ? 'Wrong address' : 'Address checked', state: r.address_state === 'address_ok' ? 'done' : r.address_state === 'address_mismatch' ? 'bad' : 'todo' },
+      { label: 'Draft order', state: r.order_id ? 'done' : r.state === 'failed' ? 'bad' : 'todo' },
+      { label: 'Customer emailed', state: r.notified_at ? 'done' : 'todo' },
+    ];
+  }
 
   ngOnInit(): void {
     this.reload();

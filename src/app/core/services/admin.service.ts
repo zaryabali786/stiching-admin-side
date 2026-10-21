@@ -83,6 +83,8 @@ export interface AdminOrderRow {
   id: string;
   /** COD orders: type and payment status. */
   cod?: CodSummary | null;
+  /** 'shopify' when the order came from a brand's Shopify store. */
+  external_source?: string | null;
   reference: string;
   partner?: PartnerChip | null;
   brand: string | null;
