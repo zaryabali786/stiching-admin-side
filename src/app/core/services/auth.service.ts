@@ -132,6 +132,12 @@ export class AuthService {
     return res.message;
   }
 
+  /** Sets the new password with the one-time token from the reset email. */
+  async resetPassword(token: string, password: string): Promise<string> {
+    const res = await firstValueFrom(this.http.post<ApiEnvelope<null>>(`${this.api}/auth/reset-password`, { token, password }));
+    return res.message;
+  }
+
   async loadMe(): Promise<Profile> {
     const res = await firstValueFrom(this.http.get<ApiEnvelope<{ user: Profile }>>(`${this.api}/auth/me`));
     const current = this.session();

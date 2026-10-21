@@ -35,6 +35,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
   },
   {
+    path: 'reset-password',
+    title: 'Choose a new password · V360',
+    loadComponent: () => import('./pages/reset-password/reset-password.page').then((m) => m.ResetPasswordPage),
+  },
+  {
     path: 'change-password',
     canActivate: [passwordChangeGuard],
     title: 'Choose your password · V360',

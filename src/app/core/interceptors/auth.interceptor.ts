@@ -6,7 +6,7 @@ import { environment } from '../../../environments/environment';
 import { ActivePartnerService } from '../services/active-partner.service';
 import { AuthService } from '../services/auth.service';
 
-const PUBLIC_AUTH = /\/auth\/(login|register|refresh|forgot-password)$/;
+const PUBLIC_AUTH = /\/auth\/(login|register|refresh|forgot-password|reset-password)$/;
 
 const withToken = (req: HttpRequest<unknown>, token: string | null, partnerId: string | null) =>
   token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}`, ...(partnerId && { 'X-Partner-Id': partnerId }) } }) : req;
