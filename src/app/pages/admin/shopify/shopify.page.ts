@@ -14,7 +14,7 @@ interface Store {
   installed_at: string | null;
   install_url: string | null;
   brand?: { id: string; name: string } | null;
-  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; auto_split?: boolean; tick_box?: { ok: boolean; at: string; error: string | null }; webhooks?: { ok: boolean; at: string; failed: string[] } };
+  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; auto_split?: boolean; stitch_mode?: 'enabled' | 'customer'; tick_box?: { ok: boolean; at: string; error: string | null }; webhooks?: { ok: boolean; at: string; failed: string[] } };
 }
 
 interface QueueRow {
@@ -175,6 +175,12 @@ interface SplitRow {
                       </label>
                       <label class="small gw">Cash on delivery payment names (comma separated, if the store's COD gateway has its own name)
                         <input class="input" [ngModel]="gateways(s)" (ngModelChange)="setGateways(s, $event)" [name]="'gw-' + s.id" placeholder="Cash on Delivery (COD)" />
+                      </label>
+                      <label class="small gw">Which items are Stitch&amp;Ship
+                        <select class="input" [ngModel]="stitchMode(s)" (ngModelChange)="setStitchMode(s, $event)" [name]="'sm-' + s.id">
+                          <option value="enabled">Every item of a product with "Stitch&amp;Ship available" ticked in Shopify (recommended)</option>
+                          <option value="customer">Only what the customer ticks on the product page</option>
+                        </select>
                       </label>
                       <label class="small sms">
                         <input type="checkbox" [ngModel]="autoSplit(s)" (ngModelChange)="setAutoSplit(s, $event)" [name]="'as-' + s.id" />
@@ -361,6 +367,7 @@ export class AdminShopifyPage implements OnInit {
   private edits = signal<Record<string, string>>({});
   private smsEdits = signal<Record<string, boolean>>({});
   private splitEdits = signal<Record<string, boolean>>({});
+  private modeEdits = signal<Record<string, 'enabled' | 'customer'>>({});
   readonly attention = computed(() => this.queue().filter((r) => r.needs_attention));
 
   readonly connectedCount = computed(() => this.stores().filter((s) => s.connected).length);
@@ -464,6 +471,14 @@ export class AdminShopifyPage implements OnInit {
     return this.smsEdits()[s.id] ?? s.settings?.sms_enabled === true;
   }
 
+  stitchMode(s: Store): 'enabled' | 'customer' {
+    return this.modeEdits()[s.id] ?? s.settings?.stitch_mode ?? 'enabled';
+  }
+
+  setStitchMode(s: Store, value: 'enabled' | 'customer'): void {
+    this.modeEdits.update((m) => ({ ...m, [s.id]: value }));
+  }
+
   autoSplit(s: Store): boolean {
     return this.splitEdits()[s.id] ?? s.settings?.auto_split === true;
   }
@@ -504,7 +519,7 @@ export class AdminShopifyPage implements OnInit {
 
   saveGateways(s: Store): void {
     const names = this.gateways(s).split(',').map((n) => n.trim()).filter(Boolean);
-    this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s), auto_split: this.autoSplit(s) } }), 'Saved.');
+    this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s), auto_split: this.autoSplit(s), stitch_mode: this.stitchMode(s) } }), 'Saved.');
   }
 
   createTickBox(s: Store): void {
