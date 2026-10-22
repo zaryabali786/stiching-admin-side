@@ -7,7 +7,7 @@ import {
   gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
   airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
   searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-  chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, chevronDownOutline, checkmarkOutline, albumsOutline,
+  chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, chevronDownOutline, checkmarkOutline, albumsOutline, bagHandleOutline, storefrontOutline, cashOutline,
 } from 'ionicons/icons';
 import { filter } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
@@ -94,7 +94,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
       gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
       airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
       searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-      chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline,
+      chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, bagHandleOutline, storefrontOutline, cashOutline,
     });
   }
 
@@ -118,6 +118,15 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           items: [
             { path: '/admin/invoices', label: 'Invoices', icon: 'document-text-outline', badge: b?.invoices, tone: 'amber', module: 'invoices' },
             { path: '/admin/reports', label: 'Reports', icon: 'bar-chart-outline', module: 'reports' },
+          ],
+        },
+        {
+          label: 'Ecommerce',
+          items: [
+            { path: '/admin/shop-orders', label: 'Shop orders', icon: 'bag-handle-outline', fullAdmin: true },
+            { path: '/admin/shop-products', label: 'Shop products', icon: 'storefront-outline', fullAdmin: true },
+            { path: '/admin/shop-brands', label: 'Brands', icon: 'business-outline', fullAdmin: true },
+            { path: '/admin/shop-commission', label: 'Commission', icon: 'cash-outline', fullAdmin: true },
           ],
         },
         {

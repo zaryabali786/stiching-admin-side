@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
@@ -9,6 +9,8 @@ import { apiErrorMessage } from '../../../core/services/api.service';
 import { UiService } from '../../../core/services/ui.service';
 import { Role } from '../../../core/models/api.models';
 import { DayPipe } from '../../../shared/pipes';
+import { GeoService } from '../../../core/services/geo.service';
+import { GeoPickerComponent } from '../../../shared/components/geo-picker.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
 import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
@@ -50,7 +52,7 @@ const ROLE_LABELS: Record<Role, string> = { admin: 'Admin', partner_staff: 'Part
 @Component({
   selector: 'app-admin-settings',
   standalone: true,
-  imports: [RouterLink, IonSpinner, DayPipe, SearchInputComponent, PaginationComponent, EmptyStateComponent],
+  imports: [RouterLink, IonSpinner, DayPipe, GeoPickerComponent, SearchInputComponent, PaginationComponent, EmptyStateComponent],
   templateUrl: './settings.page.html',
   styleUrls: ['./settings.page.scss'],
 })
@@ -83,12 +85,23 @@ export class AdminSettingsPage implements OnInit {
   readonly busyId = signal<string | null>(null);
 
   // ── Ship-to address: where customers send parcels ──
-  readonly shipTo = signal<ShipToAddress>({ name: '', address: '', city: '', phone: '' });
-  private readonly shipToSaved = signal<ShipToAddress>({ name: '', address: '', city: '', phone: '' });
+  private readonly geo = inject(GeoService);
+  private static readonly EMPTY_SHIP_TO: ShipToAddress = { name: '', address: '', city: '', phone: '', country: '', country_code: '', state: '', province_code: '', zip: '' };
+  /** name, street, phone and postal code are plain fields; country, state and city come from the pickers below (their own signals). */
+  readonly shipTo = signal<ShipToAddress>({ ...AdminSettingsPage.EMPTY_SHIP_TO });
+  readonly stCountry = signal('');
+  readonly stState = signal('');
+  readonly stCity = signal('');
+  readonly stCountryCode = signal('');
+  readonly stProvinceCode = signal('');
+  private readonly shipToSaved = signal<ShipToAddress>({ ...AdminSettingsPage.EMPTY_SHIP_TO });
   readonly shipToLoaded = signal(false);
   readonly savingShipTo = signal(false);
-  readonly shipToDirty = computed(() => JSON.stringify(this.shipTo()) !== JSON.stringify(this.shipToSaved()));
-  readonly shipToValid = computed(() => !!this.shipTo().address.trim() && !!this.shipTo().city.trim());
+  /** The whole address as it would be saved. */
+  readonly shipToForm = computed<ShipToAddress>(() => ({ ...this.shipTo(), country: this.stCountry(), state: this.stState(), city: this.stCity(), country_code: this.stCountryCode(), province_code: this.stProvinceCode() }));
+  readonly shipToDirty = computed(() => JSON.stringify(this.shipToForm()) !== JSON.stringify(this.shipToSaved()));
+  readonly codeMissing = computed(() => !!this.stCountry() && !/^[A-Za-z]{2}$/.test(this.stCountryCode()));
+  readonly shipToValid = computed(() => !!this.shipTo().address.trim() && !!this.stCity().trim() && !!this.stCountry().trim() && /^[A-Za-z]{2}$/.test(this.stCountryCode().trim()));
 
   // ── PostEx courier connection: the token is entered here and stays on the server (only its last 4 characters come back) ──
   readonly postex = signal<PostexSettings | null>(null);
@@ -219,6 +232,17 @@ export class AdminSettingsPage implements OnInit {
     });
   }
 
+  private applyShipTo(a: ShipToAddress): void {
+    const full = { ...AdminSettingsPage.EMPTY_SHIP_TO, ...a };
+    this.shipTo.set(full);
+    this.stCountry.set(full.country);
+    this.stState.set(full.state);
+    this.stCity.set(full.city);
+    this.stCountryCode.set(full.country_code);
+    this.stProvinceCode.set(full.province_code);
+    this.shipToSaved.set(full);
+  }
+
   setShipToField(key: keyof ShipToAddress, value: string): void {
     this.shipTo.update((a) => ({ ...a, [key]: value }));
   }
@@ -226,11 +250,10 @@ export class AdminSettingsPage implements OnInit {
   saveShipTo(): void {
     if (!this.shipToValid() || this.savingShipTo()) return;
     this.savingShipTo.set(true);
-    this.admin.setShipTo(this.shipTo()).subscribe({
+    this.admin.setShipTo(this.shipToForm()).subscribe({
       next: (res) => {
         this.savingShipTo.set(false);
-        this.shipTo.set(res.data);
-        this.shipToSaved.set(res.data);
+        this.applyShipTo(res.data);
         this.ui.success(res.message || 'Address saved.');
       },
       error: (err) => {
@@ -262,6 +285,25 @@ export class AdminSettingsPage implements OnInit {
     return null;
   });
   readonly pwValid = computed(() => !!this.currentPw() && this.newPw().length >= 8 && this.newPw() === this.confirmPw());
+
+  constructor() {
+    // the codes Shopify needs follow the chosen country and state (a code that cannot be found keeps what was saved)
+    effect(() => {
+      const country = this.stCountry();
+      untracked(() => void this.geo.countryCodeOf(country).then((code) => { if (country === this.stCountry() && code) this.stCountryCode.set(code); }));
+    });
+    effect(() => {
+      const country = this.stCountry();
+      const state = this.stState();
+      untracked(() => {
+        if (!state) {
+          this.stProvinceCode.set('');
+          return;
+        }
+        void this.geo.stateCodeOf(country, state).then((code) => { if (state === this.stState() && country === this.stCountry()) this.stProvinceCode.set(code); });
+      });
+    });
+  }
 
   ngOnInit(): void {
     const q$ = this.route.queryParamMap.pipe(
@@ -306,8 +348,7 @@ export class AdminSettingsPage implements OnInit {
 
     this.admin.getShipTo().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (a) => {
-        this.shipTo.set(a);
-        this.shipToSaved.set(a);
+        this.applyShipTo(a);
         this.shipToLoaded.set(true);
       },
       error: (err) => this.ui.error(err),

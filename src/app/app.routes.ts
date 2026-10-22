@@ -80,6 +80,11 @@ export const routes: Routes = [
       { path: 'users', data: { title: 'Users' }, title: 'Users · Admin', loadComponent: () => import('./pages/admin/users/users.page').then((m) => m.AdminUsersPage) },
       { path: 'roles', data: { title: 'Roles and permissions' }, title: 'Roles · Admin', loadComponent: () => import('./pages/admin/roles/roles.page').then((m) => m.AdminRolesPage) },
       { path: 'settings', data: { adminModule: 'settings', title: 'Settings' }, title: 'Settings · Admin', loadComponent: () => import('./pages/admin/settings/settings.page').then((m) => m.AdminSettingsPage) },
+      // Ecommerce (the Shop): products and brands are setup (settings module), orders follow Orders, commission follows Finance (invoices module)
+      { path: 'shop-products', data: { title: 'Shop products' }, title: 'Shop products · Admin', loadComponent: () => import('./pages/admin/ecommerce/shop-products.page').then((m) => m.AdminShopProductsPage) },
+      { path: 'shop-brands', data: { title: 'Shop brands' }, title: 'Shop brands · Admin', loadComponent: () => import('./pages/admin/ecommerce/shop-brands.page').then((m) => m.AdminShopBrandsPage) },
+      { path: 'shop-orders', data: { title: 'Shop orders' }, title: 'Shop orders · Admin', loadComponent: () => import('./pages/admin/ecommerce/shop-orders.page').then((m) => m.AdminShopOrdersPage) },
+      { path: 'shop-commission', data: { title: 'Commission' }, title: 'Commission · Admin', loadComponent: () => import('./pages/admin/ecommerce/shop-commission.page').then((m) => m.AdminShopCommissionPage) },
       { path: 'shopify', data: { adminModule: 'settings', title: 'Shopify stores' }, title: 'Shopify · Admin', loadComponent: () => import('./pages/admin/shopify/shopify.page').then((m) => m.AdminShopifyPage) },
     ],
   },

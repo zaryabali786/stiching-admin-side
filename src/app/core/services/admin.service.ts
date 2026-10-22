@@ -129,6 +129,12 @@ export interface ShipToAddress {
   address: string;
   city: string;
   phone: string;
+  /** Chosen from the country → state → city lists; the codes are what Shopify needs for the checkout address. */
+  country: string;
+  country_code: string;
+  state: string;
+  province_code: string;
+  zip: string;
 }
 
 export type OrderAssignmentMode = 'default' | 'auto' | 'manual';

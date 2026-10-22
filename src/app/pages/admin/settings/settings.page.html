@@ -21,7 +21,7 @@
     <!-- ═══ Ship-to address ═══ -->
     <section class="card address-card">
       <h3 class="card-title">Where customers send their parcels</h3>
-      <p class="hint">This is the address customers see in the app (order form, order page and profile) until you assign an order to a partner. A partner with its own receiving address shows that one instead.</p>
+      <p class="hint">This is the address customers see in the app (order form, order page and profile) until you assign an order to a partner. A partner with its own receiving address shows that one instead. The same address is filled in for customers at the Shopify checkout, so choose the country, state and city from the lists.</p>
       <form (submit)="$event.preventDefault(); saveShipTo()">
         <div class="field">
           <label for="stName">Name on the parcel</label>
@@ -31,16 +31,24 @@
           <label for="stAddr">Street address <span class="req">required</span></label>
           <input id="stAddr" class="input" autocomplete="off" [value]="shipTo().address" (input)="setShipToField('address', $any($event.target).value)" />
         </div>
+        <app-geo-picker idPrefix="st" [(country)]="stCountry" [(state)]="stState" [(city)]="stCity" />
+        @if (codeMissing()) {
+          <div class="field">
+            <label for="stCode">Country code <span class="req">required</span></label>
+            <input id="stCode" class="input" maxlength="2" autocomplete="off" placeholder="2 letters, e.g. PK" [value]="stCountryCode()" (input)="stCountryCode.set($any($event.target).value.toUpperCase())" />
+            <span class="hint">The code could not be found automatically, so please type it.</span>
+          </div>
+        }
         <div class="field">
-          <label for="stCity">City <span class="req">required</span></label>
-          <input id="stCity" class="input" autocomplete="off" [value]="shipTo().city" (input)="setShipToField('city', $any($event.target).value)" />
+          <label for="stZip">Postal code</label>
+          <input id="stZip" class="input" autocomplete="off" [value]="shipTo().zip" (input)="setShipToField('zip', $any($event.target).value)" />
         </div>
         <div class="field">
           <label for="stPhone">Phone</label>
           <input id="stPhone" class="input" autocomplete="off" inputmode="tel" [value]="shipTo().phone" (input)="setShipToField('phone', $any($event.target).value)" />
         </div>
         <div class="row-end">
-          <button type="submit" class="btn btn-primary" [disabled]="!shipToLoaded() || !shipToValid() || savingShipTo()">
+          <button type="submit" class="btn btn-primary" [disabled]="!shipToLoaded() || !shipToValid() || !shipToDirty() || savingShipTo()">
             @if (savingShipTo()) { <ion-spinner name="crescent" /> } Save address
           </button>
         </div>
