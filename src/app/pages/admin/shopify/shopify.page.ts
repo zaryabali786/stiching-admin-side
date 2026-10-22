@@ -14,7 +14,7 @@ interface Store {
   installed_at: string | null;
   install_url: string | null;
   brand?: { id: string; name: string } | null;
-  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; clothing_collection?: string; webhooks?: { ok: boolean; at: string; failed: string[] } };
+  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; auto_split?: boolean; tick_box?: { ok: boolean; at: string; error: string | null }; webhooks?: { ok: boolean; at: string; failed: string[] } };
 }
 
 interface QueueRow {
@@ -55,6 +55,17 @@ interface SplitRow {
   reconciled: boolean;
   unallocated: number;
   tag: string | null;
+  /** The reference this group is known by: the new Shopify order for Stitch&Ship, the original order for the normal group. */
+  reference?: string | null;
+  internal_reference?: string | null;
+  original_order_name?: string | null;
+  split_order_name?: string | null;
+  split_state?: string | null;
+  split_error?: string | null;
+  original_total_after?: number | null;
+  overpaid_on_original?: number | null;
+  /** Where this group's items are delivered: the atelier, or the customer's own address. */
+  ship_to?: { name?: string | null; company?: string | null; address1?: string | null; address2?: string | null; city?: string | null; province?: string | null; zip?: string | null; country?: string | null; phone?: string | null } | null;
   address: { kind: string; city: string | null; country: string | null; matches_atelier?: boolean; needs_separate_delivery?: boolean; note?: string } | null;
 }
 
@@ -111,7 +122,7 @@ interface SplitRow {
                   </div>
                   <div class="row">
                     @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">Open order</a> }
-                    @if (r.state === 'failed') { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="retry(r)">Try again</button> }
+                    @if (r.state === 'failed' || r.state === 'split_failed' || r.state === 'split_pending') { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="retry(r)">Try again</button> }
                     @if (r.order_id && !r.notified_at) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="resend(r)">Send email</button> }
                   </div>
                 </li>
@@ -141,15 +152,18 @@ interface SplitRow {
                         <span class="badge" [ngClass]="s.connected ? 'green' : s.status === 'uninstalled' ? 'red' : 'amber'">{{ s.connected ? 'Connected' : s.status === 'uninstalled' ? 'Uninstalled' : 'Waiting for install' }}</span>
                         @if (s.connected) {
                           <span class="badge" [ngClass]="s.settings.webhooks?.ok ? 'green' : 'amber'">Order notifications {{ s.settings.webhooks?.ok ? 'on' : 'off' }}</span>
+                          <span class="badge" [ngClass]="s.settings.tick_box?.ok ? 'green' : 'amber'" title="The 'Stitch&Ship available' tick box on every product in Shopify">Product tick box {{ s.settings.tick_box?.ok ? 'ready' : 'not set up' }}</span>
                         }
                         @if (s.installed_at) { <span class="muted">Installed {{ s.installed_at | date: 'MMM d, y' }}</span> }
                         @if (s.brand) { <span class="muted">· Brand {{ s.brand.name }}</span> }
                       </span>
                       @if (s.connected && !s.settings.webhooks?.ok && s.settings.webhooks?.failed?.length) { <span class="small err">{{ s.settings.webhooks?.failed?.[0] }}</span> }
+                      @if (s.connected && !s.settings.tick_box?.ok) { <span class="small err">{{ s.settings.tick_box?.error || 'The "Stitch&Ship available" tick box is not on the products yet. Press "Create product tick box".' }}</span> }
                     </div>
                     <div class="row">
                       @if (s.install_url) { <button type="button" class="btn btn-sm" (click)="copy(s.install_url)">Copy install link</button> }
-                      @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
+                      @if (s.connected && !s.settings.tick_box?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="createTickBox(s)">Create product tick box</button> }
+                    @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
                     </div>
                   </div>
                   <details class="more">
@@ -162,8 +176,9 @@ interface SplitRow {
                       <label class="small gw">Cash on delivery payment names (comma separated, if the store's COD gateway has its own name)
                         <input class="input" [ngModel]="gateways(s)" (ngModelChange)="setGateways(s, $event)" [name]="'gw-' + s.id" placeholder="Cash on Delivery (COD)" />
                       </label>
-                      <label class="small gw">Clothing collection (handle or ID). Only products in it can be stitched; leave empty for no restriction. Use the same collection in the theme block.
-                        <input class="input" [ngModel]="clothing(s)" (ngModelChange)="setClothing(s, $event)" [name]="'cl-' + s.id" placeholder="e.g. clothing" />
+                      <label class="small sms">
+                        <input type="checkbox" [ngModel]="autoSplit(s)" (ngModelChange)="setAutoSplit(s, $event)" [name]="'as-' + s.id" />
+                        Split mixed orders in Shopify automatically (makes a new order for the Stitch&amp;Ship items and takes them off the original). Needs the permission to edit orders; leave off until you have tested it on this store.
                       </label>
                       <div class="row"><button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="saveGateways(s)">Save settings</button></div>
                     </div>
@@ -219,19 +234,23 @@ interface SplitRow {
                         <td colspan="7">
                           <details [open]="r.needs_attention">
                             <summary>
-                              Price split · Shopify order {{ r.shopify_order_name }} stays the one real order and payment
+                              @if (r.split![0].split_order_name) {
+                                Split of {{ r.split![0].original_order_name || r.shopify_order_name }}: Stitch&amp;Ship order {{ r.split![0].split_order_name }}@if (r.split![0].internal_reference) { ({{ r.split![0].internal_reference }}) }, normal order {{ r.split![0].original_order_name || r.shopify_order_name }}
+                              } @else {
+                                Price split · Shopify order {{ r.shopify_order_name }} stays the one real order and payment
+                              }
                               @if (needsRecheck(r)) { <span class="badge amber">Payment not verified</span> }
                               @if (r.split![0].reconciled === false) { <span class="badge red">Does not add up: {{ r.split![0].unallocated }} {{ r.split![0].currency }} unallocated</span> }
                             </summary>
                             <div class="table-scroll">
                               <table class="data-table split-table">
                                 <thead>
-                                  <tr><th>Group</th><th>Products</th><th class="num">Subtotal</th><th class="num">Discounts</th><th class="num">Taxes</th><th class="num">Shipping</th><th class="num">Total</th><th class="num">Paid (share)</th><th class="num">Outstanding</th><th class="num">Refunded</th><th>Payment</th><th>Address</th></tr>
+                                  <tr><th>Group / order</th><th>Products</th><th class="num">Subtotal</th><th class="num">Discounts</th><th class="num">Taxes</th><th class="num">Shipping</th><th class="num">Total</th><th class="num">Paid (share)</th><th class="num">Outstanding</th><th class="num">Refunded</th><th>Payment</th><th>Address</th></tr>
                                 </thead>
                                 <tbody>
                                   @for (g of r.split; track g.id) {
                                     <tr>
-                                      <td><span class="badge" [ngClass]="g.kind === 'stitchship' ? 'green' : ''">{{ g.kind === 'stitchship' ? 'Stitch&Ship' : 'Normal' }}</span>@if (g.tag) { <span class="cell-sub">tag {{ g.tag }}</span> }</td>
+                                      <td><span class="badge" [ngClass]="g.kind === 'stitchship' ? 'green' : ''">{{ g.kind === 'stitchship' ? 'Stitch&Ship' : 'Normal' }}</span>@if (g.reference) { <span class="cell-sub">{{ g.reference }}@if (g.kind === 'normal' && g.split_order_name === undefined && r.split![0].split_order_name) { (original) }</span> }@if (g.tag) { <span class="cell-sub">tag {{ g.tag }}</span> }@if (g.split_state && g.kind === 'stitchship') { <span class="cell-sub">{{ g.split_state === 'done' ? 'split complete' : 'split: ' + g.split_state }}</span> }@if (g.split_error) { <span class="cell-sub err">{{ g.split_error }}</span> }</td>
                                       <td>@for (l of g.lines; track $index) { <span class="cell-sub">{{ l.quantity }} × {{ l.title }}@if (l.sku) { · {{ l.sku }} }</span> }</td>
                                       <td class="num">{{ g.subtotal | number: '1.2-2' }}</td>
                                       <td class="num">{{ g.discounts | number: '1.2-2' }}</td>
@@ -243,7 +262,12 @@ interface SplitRow {
                                       <td class="num">{{ g.refunded | number: '1.2-2' }}</td>
                                       <td><span class="badge" [ngClass]="payTone(g.payment_status)">{{ payLabel(g.payment_status) }}</span></td>
                                       <td>
-                                        @if (g.address; as a) {
+                                        @if (g.ship_to; as t) {
+                                          {{ g.kind === 'stitchship' ? 'Atelier' : 'Customer' }}
+                                          <span class="cell-sub">{{ t.name }}@if (t.company) { · {{ t.company }} }</span>
+                                          <span class="cell-sub">{{ t.address1 }}@if (t.address2) { , {{ t.address2 }} }</span>
+                                          <span class="cell-sub">{{ t.city }}@if (t.zip) { {{ t.zip }} }@if (t.country) { , {{ t.country }} }</span>
+                                        } @else if (g.address; as a) {
                                           {{ a.kind === 'atelier' ? 'Atelier' : a.kind === 'billing' ? 'Customer (billing)' : 'Customer (shipping)' }}
                                           <span class="cell-sub">{{ a.city }}{{ a.country ? ', ' + a.country : '' }}</span>
                                           @if (a.needs_separate_delivery) { <span class="cell-sub err">{{ a.note }}</span> }
@@ -254,7 +278,11 @@ interface SplitRow {
                                 </tbody>
                               </table>
                             </div>
-                            <p class="muted small">The groups add up to the checkout. One real payment covers both; the paid figures are each group's share of it. Nothing here moves money or changes the order in Shopify.</p>
+                            @if (r.split![0].split_order_name) {
+                              <p class="muted small">The payment of the Stitch&amp;Ship lines stays recorded on the original order{{ r.split![0].overpaid_on_original ? ' (' + r.split![0].overpaid_on_original + ' ' + r.split![0].currency + ' more than it now totals)' : '' }} and is shown as "paid on the original order" on the new one. Do not refund it. No new charge was made.</p>
+                            } @else {
+                              <p class="muted small">The groups add up to the checkout. One real payment covers both; the paid figures are each group's share of it. Nothing here moves money or changes the order in Shopify.</p>
+                            }
                             @if (needsRecheck(r)) { <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="retry(r)">Check payment again</button> }
                           </details>
                         </td>
@@ -332,12 +360,15 @@ export class AdminShopifyPage implements OnInit {
   readonly shop = signal('');
   private edits = signal<Record<string, string>>({});
   private smsEdits = signal<Record<string, boolean>>({});
-  private clothingEdits = signal<Record<string, string>>({});
+  private splitEdits = signal<Record<string, boolean>>({});
   readonly attention = computed(() => this.queue().filter((r) => r.needs_attention));
 
   readonly connectedCount = computed(() => this.stores().filter((s) => s.connected).length);
 
   badge(r: QueueRow): { label: string; tone: 'green' | 'amber' | 'red' | '' } {
+    if (r.state === 'split') return { label: 'Split in Shopify', tone: 'green' };
+    if (r.state === 'split_pending') return { label: 'Splitting…', tone: 'amber' };
+    if (r.state === 'split_failed') return { label: 'Split stopped', tone: 'red' };
     if (r.state === 'cancelled') return { label: 'Cancelled', tone: '' };
     if (r.state === 'failed') return { label: 'Could not be taken in', tone: 'red' };
     if (r.address_state === 'address_mismatch' && r.hold_state === 'held') return { label: 'On hold', tone: 'amber' };
@@ -348,6 +379,17 @@ export class AdminShopifyPage implements OnInit {
   }
 
   steps(r: QueueRow): { label: string; state: 'done' | 'todo' | 'bad' }[] {
+    if (r.state.startsWith('split')) {
+      const g = r.split?.find((x) => x.kind === 'stitchship');
+      const at = g?.split_state;
+      const failed = r.state === 'split_failed';
+      return [
+        { label: 'Order received', state: 'done' },
+        { label: 'New order made', state: g?.split_order_name ? 'done' : failed ? 'bad' : 'todo' },
+        { label: 'Items moved off the original', state: at === 'original_edited' || at === 'done' ? 'done' : failed && g?.split_order_name ? 'bad' : 'todo' },
+        { label: 'Done', state: at === 'done' ? 'done' : 'todo' },
+      ];
+    }
     return [
       { label: 'Order received', state: 'done' },
       { label: r.address_state === 'address_mismatch' ? 'Wrong address' : 'Address checked', state: r.address_state === 'address_ok' ? 'done' : r.address_state === 'address_mismatch' ? 'bad' : 'todo' },
@@ -401,6 +443,8 @@ export class AdminShopifyPage implements OnInit {
   }
 
   why(r: QueueRow): string {
+    if (r.state === 'split_failed') return `The split stopped part way and the original order's shipment stays on hold. ${r.last_error || ''} Press "Try again": it carries on from where it stopped and never makes a second new order.`;
+    if (r.state === 'split_pending') return 'The split is running (or was interrupted). If it stays like this, press "Try again".';
     if (r.state === 'failed') return 'This order could not be taken in.';
     if (r.address_state === 'address_mismatch' && r.hold_state === 'held') return 'The shipping address is not the atelier. The shipment is on hold until the customer confirms.';
     if (r.hold_state === 'failed') return 'The shipment could not be held or released: check it in Shopify.';
@@ -420,12 +464,12 @@ export class AdminShopifyPage implements OnInit {
     return this.smsEdits()[s.id] ?? s.settings?.sms_enabled === true;
   }
 
-  clothing(s: Store): string {
-    return this.clothingEdits()[s.id] ?? s.settings?.clothing_collection ?? '';
+  autoSplit(s: Store): boolean {
+    return this.splitEdits()[s.id] ?? s.settings?.auto_split === true;
   }
 
-  setClothing(s: Store, value: string): void {
-    this.clothingEdits.update((m) => ({ ...m, [s.id]: value }));
+  setAutoSplit(s: Store, value: boolean): void {
+    this.splitEdits.update((m) => ({ ...m, [s.id]: !!value }));
   }
 
   setSms(s: Store, value: boolean): void {
@@ -460,7 +504,23 @@ export class AdminShopifyPage implements OnInit {
 
   saveGateways(s: Store): void {
     const names = this.gateways(s).split(',').map((n) => n.trim()).filter(Boolean);
-    this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s), clothing_collection: this.clothing(s).trim() } }), 'Saved.');
+    this.run(this.api.patch(`/admin/shopify/stores/${s.id}`, { settings: { cod_gateway_names: names, sms_enabled: this.smsOn(s), auto_split: this.autoSplit(s) } }), 'Saved.');
+  }
+
+  createTickBox(s: Store): void {
+    this.busy.set(true);
+    this.api.post<{ ok: boolean; error: string | null }>(`/admin/shopify/stores/${s.id}/tick-box`).subscribe({
+      next: (r) => {
+        this.busy.set(false);
+        if (r?.ok) this.ui.success('Done. The brand now sees "Stitch&Ship available" on every product.');
+        else this.ui.error(r?.error || 'The tick box could not be created.');
+        this.reload();
+      },
+      error: (e) => {
+        this.busy.set(false);
+        this.ui.error(apiErrorMessage(e));
+      },
+    });
   }
 
   reconnect(s: Store): void {
