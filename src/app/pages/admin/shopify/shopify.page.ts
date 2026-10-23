@@ -15,7 +15,7 @@ interface Store {
   install_url: string | null;
   setup_links?: { cart_badges: string; product_block: string; cart_notice: string; checkout_editor: string };
   brand?: { id: string; name: string } | null;
-  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; stitch_mode?: 'enabled' | 'customer'; tick_box?: { ok: boolean; at: string; error: string | null }; webhooks?: { ok: boolean; at: string; failed: string[] } };
+  settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; stitch_mode?: 'enabled' | 'customer'; tick_box?: { ok: boolean; at: string; error: string | null }; webhooks?: { ok: boolean; at: string; failed: string[] }; shipping?: { at: string; method: { ok: boolean; error: string | null }; rule: { ok: boolean; error: string | null } } };
 }
 
 interface QueueRow {
@@ -120,14 +120,19 @@ interface QueueRow {
                           <span class="badge" [ngClass]="s.settings.webhooks?.ok ? 'green' : 'amber'">Order notifications {{ s.settings.webhooks?.ok ? 'on' : 'off' }}</span>
                           <span class="badge" [ngClass]="s.settings.tick_box?.ok ? 'green' : 'amber'" title="The 'Stitch&Ship available' tick box on every product in Shopify">Product tick box {{ s.settings.tick_box?.ok ? 'ready' : 'not set up' }}</span>
                         }
+                        @if (s.connected) {
+                          <span class="badge" [ngClass]="s.settings.shipping?.method?.ok ? 'green' : 'amber'" title="The 'Ship to Stitch & Ship' shipping method in the store's Pakistan zone">Shipping method {{ s.settings.shipping?.method?.ok ? 'ready' : 'not set up' }}</span>
+                        }
                         @if (s.installed_at) { <span class="muted">Installed {{ s.installed_at | date: 'MMM d, y' }}</span> }
                         @if (s.brand) { <span class="muted">· Brand {{ s.brand.name }}</span> }
                       </span>
                       @if (s.connected && !s.settings.webhooks?.ok && s.settings.webhooks?.failed?.length) { <span class="small err">{{ s.settings.webhooks?.failed?.[0] }}</span> }
+                      @if (s.connected && !s.settings.shipping?.method?.ok) { <span class="small err">{{ s.settings.shipping?.method?.error || 'The "Ship to Stitch & Ship" shipping method is not in the store yet. Press "Set up shipping method".' }}</span> }
                       @if (s.connected && !s.settings.tick_box?.ok) { <span class="small err">{{ s.settings.tick_box?.error || 'The "Stitch&Ship available" tick box is not on the products yet. Press "Create product tick box".' }}</span> }
                     </div>
                     <div class="row">
                       @if (s.install_url) { <button type="button" class="btn btn-sm" (click)="copy(s.install_url)">Copy install link</button> }
+                      @if (s.connected && !s.settings.shipping?.method?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="setupShipping(s)">Set up shipping method</button> }
                       @if (s.connected && !s.settings.tick_box?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="createTickBox(s)">Create product tick box</button> }
                     @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
                     </div>
@@ -391,6 +396,22 @@ export class AdminShopifyPage implements OnInit {
         this.busy.set(false);
         if (r?.ok) this.ui.success('Done. The brand now sees "Stitch&Ship available" on every product.');
         else this.ui.error(r?.error || 'The tick box could not be created.');
+        this.reload();
+      },
+      error: (e) => {
+        this.busy.set(false);
+        this.ui.error(apiErrorMessage(e));
+      },
+    });
+  }
+
+  setupShipping(s: Store): void {
+    this.busy.set(true);
+    this.api.post<{ ok: boolean; error: string | null }>(`/admin/shopify/stores/${s.id}/shipping`).subscribe({
+      next: (r) => {
+        this.busy.set(false);
+        if (r?.ok) this.ui.success('Done. "Ship to Stitch & Ship" is now a shipping method of the store.');
+        else this.ui.error(r?.error || 'The shipping method could not be created.');
         this.reload();
       },
       error: (e) => {
