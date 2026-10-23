@@ -13,6 +13,7 @@ interface Store {
   connected: boolean;
   installed_at: string | null;
   install_url: string | null;
+  setup_links?: { cart_badges: string; product_block: string; cart_notice: string; checkout_editor: string };
   brand?: { id: string; name: string } | null;
   settings: { cod_gateway_names?: string[]; sms_enabled?: boolean; stitch_mode?: 'enabled' | 'customer'; tick_box?: { ok: boolean; at: string; error: string | null }; webhooks?: { ok: boolean; at: string; failed: string[] } };
 }
@@ -131,6 +132,15 @@ interface QueueRow {
                     @if (s.connected && !s.settings.webhooks?.ok) { <button type="button" class="btn btn-sm btn-primary" [disabled]="busy()" (click)="reconnect(s)">Connect order notifications</button> }
                     </div>
                   </div>
+                  @if (s.connected && s.setup_links; as l) {
+                    <p class="small setup">
+                      <strong>Store setup (one click each, opens the brand's Shopify admin):</strong>
+                      <a [href]="l.cart_badges" target="_blank" rel="noopener">1. Turn on cart badges + checkout address</a> ·
+                      <a [href]="l.product_block" target="_blank" rel="noopener">2. Add the tick box to the product page</a> ·
+                      <a [href]="l.cart_notice" target="_blank" rel="noopener">3. Cart page notice (optional)</a> ·
+                      <a [href]="l.checkout_editor" target="_blank" rel="noopener">4. Checkout editor (badge below each product)</a>
+                    </p>
+                  }
                   <details class="more">
                     <summary>Store settings</summary>
                     <div class="more-body">
