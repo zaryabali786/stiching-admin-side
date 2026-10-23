@@ -28,8 +28,16 @@
           <input id="stName" class="input" autocomplete="off" placeholder="e.g. V360 Receiving" [value]="shipTo().name" (input)="setShipToField('name', $any($event.target).value)" />
         </div>
         <div class="field">
+          <label for="stCompany">Company <span class="hint">optional</span></label>
+          <input id="stCompany" class="input" autocomplete="off" [value]="shipTo().company" (input)="setShipToField('company', $any($event.target).value)" />
+        </div>
+        <div class="field">
           <label for="stAddr">Street address <span class="req">required</span></label>
           <input id="stAddr" class="input" autocomplete="off" [value]="shipTo().address" (input)="setShipToField('address', $any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="stAddr2">Apartment, suite, unit or other details</label>
+          <input id="stAddr2" class="input" autocomplete="off" placeholder="e.g. Unit 4, 2nd floor" [value]="shipTo().address2" (input)="setShipToField('address2', $any($event.target).value)" />
         </div>
         <app-geo-picker idPrefix="st" [(country)]="stCountry" [(state)]="stState" [(city)]="stCity" />
         @if (codeMissing()) {

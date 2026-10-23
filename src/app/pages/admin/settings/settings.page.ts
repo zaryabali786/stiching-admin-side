@@ -86,7 +86,7 @@ export class AdminSettingsPage implements OnInit {
 
   // ── Ship-to address: where customers send parcels ──
   private readonly geo = inject(GeoService);
-  private static readonly EMPTY_SHIP_TO: ShipToAddress = { name: '', address: '', city: '', phone: '', country: '', country_code: '', state: '', province_code: '', zip: '' };
+  private static readonly EMPTY_SHIP_TO: ShipToAddress = { name: '', company: '', address: '', address2: '', city: '', phone: '', country: '', country_code: '', state: '', province_code: '', zip: '' };
   /** name, street, phone and postal code are plain fields; country, state and city come from the pickers below (their own signals). */
   readonly shipTo = signal<ShipToAddress>({ ...AdminSettingsPage.EMPTY_SHIP_TO });
   readonly stCountry = signal('');

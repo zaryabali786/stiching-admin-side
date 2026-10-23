@@ -126,7 +126,11 @@ export interface PostexSettings {
 
 export interface ShipToAddress {
   name: string;
+  /** Optional company line of the checkout address. */
+  company: string;
   address: string;
+  /** Apartment, suite, unit or other details: goes to the second address line of the Shopify checkout address. */
+  address2: string;
   city: string;
   phone: string;
   /** Chosen from the country → state → city lists; the codes are what Shopify needs for the checkout address. */
