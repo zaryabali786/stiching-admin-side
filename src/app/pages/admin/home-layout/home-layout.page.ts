@@ -8,11 +8,11 @@ import { addIcons } from 'ionicons';
 import {
   megaphoneOutline, cloudUploadOutline, sparklesOutline, textOutline, radioButtonOnOutline, chatbubbleEllipsesOutline, colorPaletteOutline, swapHorizontalOutline, imagesOutline, imageOutline, albumsOutline, shirtOutline, gridOutline, createOutline,
   reorderTwoOutline, eyeOutline, eyeOffOutline, trashOutline, addOutline, closeOutline, copyOutline,
-  mailOutline, notificationsOutline, home, cubeOutline, optionsOutline, personOutline,
+  mailOutline, notificationsOutline, home, cubeOutline, optionsOutline, personOutline, footstepsOutline, chevronUpOutline, chevronDownOutline,
 } from 'ionicons/icons';
-import { AdminService, Banner, ClientTheme, ClientThemeData, ClientThemePreset, HomeLayoutArticle, HomeLayoutSection, HomeSectionType } from '../../../core/services/admin.service';
+import { AdminService, Banner, ClientTheme, ClientThemeData, ClientThemePreset, HomeLayoutArticle, HomeLayoutSection, HomeSectionType, HomeStepItem } from '../../../core/services/admin.service';
 import { UiService } from '../../../core/services/ui.service';
-import { ImageUpload, compressImage } from '../../../core/utils/image';
+import { ImageUpload, compressImage, prepareIcon } from '../../../core/utils/image';
 import { Paged } from '../../../core/models/api.models';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 
@@ -33,7 +33,22 @@ interface BannerForm {
   is_active: boolean;
   preview: string | null;
   upload: ImageUpload | null;
+  /** The text on the banner and its button. */
+  heading: string;
+  subheading: string;
+  button_label: string;
+  button_link: string;
+  text_color: string;
+  button_bg: string;
+  button_color: string;
+  overlay: number;
+  text_align: 'left' | 'center';
+  /** The part of the picture kept in view (percent across and down), set by dragging the picture. */
+  focus_x: number;
+  focus_y: number;
 }
+
+const BANNER_COPY_DEFAULTS = { heading: '', subheading: '', button_label: '', button_link: '', text_color: '#FFFFFF', button_bg: '#FFFFFF', button_color: '#62003E', overlay: 35, text_align: 'left' as const, focus_x: 50, focus_y: 50 };
 
 interface SectionMeta {
   type: HomeSectionType;
@@ -42,6 +57,20 @@ interface SectionMeta {
   help: string;
   defaults: Record<string, any>;
 }
+
+/** Soft colour pairs for the cards of a "How it works" section (first colour to second colour, top left to bottom right). */
+export const STEP_COLORS: { name: string; bg: string; bg2: string }[] = [
+  { name: 'Pink', bg: '#FDE2EF', bg2: '#F9B4D6' },
+  { name: 'Lavender', bg: '#EBDDFB', bg2: '#C9ABEF' },
+  { name: 'Sand', bg: '#F7ECDD', bg2: '#E6CFAE' },
+  { name: 'Mint', bg: '#D9F5DF', bg2: '#8FDBA3' },
+  { name: 'Sky', bg: '#D8F0FB', bg2: '#8ECDE8' },
+  { name: 'Peach', bg: '#FFE8D6', bg2: '#FFC29B' },
+  { name: 'Lemon', bg: '#FFF6C9', bg2: '#F7DE7A' },
+  { name: 'Slate', bg: '#E2E8F0', bg2: '#B6C2D2' },
+];
+
+const stepCard = (title: string, text: string, emoji: string, c: number): HomeStepItem => ({ title, text, icon_url: '', emoji, bg: STEP_COLORS[c].bg, bg2: STEP_COLORS[c].bg2, color: '#1F2937', link: '' });
 
 /** Every section the admin can add, with the settings a new one starts with (the server keeps the same defaults). */
 export const SECTION_META: SectionMeta[] = [
@@ -59,6 +88,17 @@ export const SECTION_META: SectionMeta[] = [
     defaults: { title: 'Our articles', article_ids: [], layout: 'grid', columns: 2, autoplay: false, button_label: '', button_link: '' } },
   { type: 'collection', label: 'Featured collection', icon: 'grid-outline', help: 'Hand-pick articles to feature, as a slider, grid or list.',
     defaults: { title: 'Featured', article_ids: [], layout: 'slider', columns: 2, autoplay: false, button_label: '', button_link: '' } },
+  { type: 'steps', label: 'How it works (cards)', icon: 'footsteps-outline', help: 'A row of numbered cards, each with its own picture, text and colours. Good for steps or features.',
+    defaults: {
+      title: 'How it works?', highlight: 'it', highlight_color: '#6D1D3A', subtitle: '', layout: 'slider', show_numbers: true, number_color: '#FFFFFF',
+      items: [
+        stepCard('Send Us Your Fabric', 'Order directly from any brand\'s website to our address, or send us your own parcel.', '📦', 0),
+        stepCard('Customize Your Fit', 'Add your measurements in the app and share your specific design preferences.', '📏', 1),
+        stepCard('Track the Crafting', 'Follow along with live updates on your dashboard as we stitch your dress.', '🧵', 2),
+        stepCard('Approve the Final Look', 'Review the finished garment and give us your final approval.', '✅', 3),
+        stepCard('Enjoy Doorstep Delivery', 'Sit back and receive your custom-stitched dress right at your door.', '🚚', 4),
+      ],
+    } },
   { type: 'custom', label: 'Custom content', icon: 'create-outline', help: 'Your own heading, text and button.',
     defaults: { heading: 'A note from the atelier', body: '', align: 'left', bg: '#FFFFFF', color: '#111827', button_label: '', button_link: '' } },
 ];
@@ -156,7 +196,16 @@ export class AdminHomeLayoutPage implements OnInit {
       return false;
     }
   });
-  readonly bannerFormValid = computed(() => !!this.bannerForm()?.preview && this.bannerLinkValid());
+  readonly bannerButtonLinkValid = computed(() => {
+    const link = this.bannerForm()?.button_link.trim();
+    if (!link || link.startsWith('/app/')) return true;
+    try {
+      return ['http:', 'https:'].includes(new URL(link).protocol);
+    } catch {
+      return false;
+    }
+  });
+  readonly bannerFormValid = computed(() => !!this.bannerForm()?.preview && this.bannerLinkValid() && this.bannerButtonLinkValid());
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly saving = signal(false);
@@ -173,6 +222,10 @@ export class AdminHomeLayoutPage implements OnInit {
   readonly pickType = signal('');
   readonly emojis = ['✨', '🎉', '🔥', '💥', '🛍️', '🧵', '🪡', '👗', '👘', '🧥', '✂️', '📦', '🚚', '🌍', '❤️', '⭐', '🌟', '🎁', '💎', '👑', '🌸', '🌙', '🕌', '🎊', '🏷️', '💯', '✅', '📢', '🔔', '⚡', '🆕', '💬', '🤝', '🙏', '😍', '😊'];
   readonly emojiOpen = signal(false);
+  /** "How it works" cards: the colours to choose from, which card is open for editing, and which card's picture is uploading. */
+  readonly stepColors = STEP_COLORS;
+  readonly stepOpen = signal(0);
+  readonly iconUploading = signal<number | null>(null);
   private pickTimer: ReturnType<typeof setTimeout> | null = null;
   private pickSeq = 0;
 
@@ -225,7 +278,7 @@ export class AdminHomeLayoutPage implements OnInit {
     addIcons({
       megaphoneOutline, cloudUploadOutline, sparklesOutline, textOutline, radioButtonOnOutline, chatbubbleEllipsesOutline, colorPaletteOutline, swapHorizontalOutline, imagesOutline, imageOutline, albumsOutline, shirtOutline, gridOutline, createOutline,
       reorderTwoOutline, eyeOutline, eyeOffOutline, trashOutline, addOutline, closeOutline, copyOutline,
-      mailOutline, notificationsOutline, home, cubeOutline, optionsOutline, personOutline,
+      mailOutline, notificationsOutline, home, cubeOutline, optionsOutline, personOutline, footstepsOutline, chevronUpOutline, chevronDownOutline,
     });
   }
 
@@ -243,12 +296,54 @@ export class AdminHomeLayoutPage implements OnInit {
 
   openNewBanner(): void {
     this.bannerFileError.set(null);
-    this.bannerForm.set({ id: null, title: '', link_url: '', is_active: true, preview: null, upload: null });
+    this.bannerForm.set({ id: null, title: '', link_url: '', is_active: true, preview: null, upload: null, ...BANNER_COPY_DEFAULTS });
   }
 
   openEditBanner(b: Banner): void {
     this.bannerFileError.set(null);
-    this.bannerForm.set({ id: b.id, title: b.title || '', link_url: b.link_url || '', is_active: b.is_active, preview: b.image_url, upload: null });
+    this.bannerForm.set({
+      id: b.id, title: b.title || '', link_url: b.link_url || '', is_active: b.is_active, preview: b.image_url, upload: null,
+      heading: b.heading || '', subheading: b.subheading || '', button_label: b.button_label || '', button_link: b.button_link || '',
+      text_color: b.text_color || '#FFFFFF', button_bg: b.button_bg || '#FFFFFF', button_color: b.button_color || '#62003E', overlay: b.overlay ?? 35, text_align: b.text_align === 'center' ? 'center' : 'left', focus_x: b.focus_x ?? 50, focus_y: b.focus_y ?? 50,
+    });
+  }
+
+  /** Any text, button or dark layer on a banner (for the small preview of the banner). */
+  bannerHasCopy(b: { heading?: string | null; subheading?: string | null; button_label?: string | null }): boolean {
+    return !!(b.heading || b.subheading || b.button_label);
+  }
+
+  // ── dragging the banner picture to choose what stays in view ──
+  private bnDrag: { x: number; y: number; fx: number; fy: number; ox: number; oy: number } | null = null;
+  readonly bnDragging = signal(false);
+
+  bnDragStart(e: PointerEvent): void {
+    const box = e.currentTarget as HTMLElement;
+    const img = box.querySelector('img');
+    const f = this.bannerForm();
+    if (!img || !f || !img.naturalWidth) return;
+    // how much of the picture is cut off on each side at this size: that is the room there is to move it
+    const scale = Math.max(box.clientWidth / img.naturalWidth, box.clientHeight / img.naturalHeight);
+    this.bnDrag = { x: e.clientX, y: e.clientY, fx: f.focus_x, fy: f.focus_y, ox: img.naturalWidth * scale - box.clientWidth, oy: img.naturalHeight * scale - box.clientHeight };
+    this.bnDragging.set(true);
+    box.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+
+  bnDragMove(e: PointerEvent): void {
+    const d = this.bnDrag;
+    if (!d) return;
+    const clamp = (n: number) => Math.round(Math.min(100, Math.max(0, n)));
+    // dragging the picture down shows more of its top: the kept point moves up
+    this.patchBanner({
+      focus_x: d.ox > 1 ? clamp(d.fx - ((e.clientX - d.x) / d.ox) * 100) : d.fx,
+      focus_y: d.oy > 1 ? clamp(d.fy - ((e.clientY - d.y) / d.oy) * 100) : d.fy,
+    });
+  }
+
+  bnDragEnd(): void {
+    this.bnDrag = null;
+    this.bnDragging.set(false);
   }
 
   patchBanner(patch: Partial<BannerForm>): void {
@@ -271,7 +366,11 @@ export class AdminHomeLayoutPage implements OnInit {
   saveBanner(): void {
     const f = this.bannerForm();
     if (!f || !this.bannerFormValid() || this.bannerSaving()) return;
-    const body = { title: f.title.trim(), link_url: f.link_url.trim(), is_active: f.is_active, ...(f.upload ? { image_upload: f.upload } : {}) };
+    const body = {
+      title: f.title.trim(), link_url: f.link_url.trim(), is_active: f.is_active, ...(f.upload ? { image_upload: f.upload } : {}),
+      heading: f.heading.trim(), subheading: f.subheading.trim(), button_label: f.button_label.trim(), button_link: f.button_link.trim(),
+      text_color: f.text_color, button_bg: f.button_bg, button_color: f.button_color, overlay: f.overlay, text_align: f.text_align, focus_x: f.focus_x, focus_y: f.focus_y,
+    };
     this.bannerSaving.set(true);
     const req = f.id ? this.admin.updateBanner(f.id, body) : this.admin.createBanner(body);
     req.subscribe({
@@ -382,6 +481,8 @@ export class AdminHomeLayoutPage implements OnInit {
       case 'image_text':
       case 'custom':
         return v['heading'] || 'No heading yet';
+      case 'steps':
+        return `${v['title'] || 'Cards'} · ${(v['items'] ?? []).length} card${(v['items'] ?? []).length === 1 ? '' : 's'}`;
       case 'articles':
       case 'collection':
         return `${v['article_ids'].length} article${v['article_ids'].length === 1 ? '' : 's'} · ${v['layout']}`;
@@ -525,6 +626,87 @@ export class AdminHomeLayoutPage implements OnInit {
     if (to < 0 || to >= ids.length) return;
     [ids[index], ids[to]] = [ids[to], ids[index]];
     this.set('article_ids', ids);
+  }
+
+  // ── "How it works" cards ──
+  steps(): HomeStepItem[] {
+    return (this.selected()?.settings['items'] as HomeStepItem[]) ?? [];
+  }
+
+  private setSteps(items: HomeStepItem[]): void {
+    this.set('items', items);
+  }
+
+  patchStep(i: number, patch: Partial<HomeStepItem>): void {
+    this.setSteps(this.steps().map((it, n) => (n === i ? { ...it, ...patch } : it)));
+  }
+
+  addStep(): void {
+    const items = this.steps();
+    if (items.length >= 12) return;
+    const c = STEP_COLORS[items.length % STEP_COLORS.length];
+    this.setSteps([...items, { title: 'New step', text: '', icon_url: '', emoji: '✨', bg: c.bg, bg2: c.bg2, color: '#1F2937', link: '' }]);
+    this.stepOpen.set(items.length);
+  }
+
+  async removeStep(i: number): Promise<void> {
+    const ok = await this.ui.confirm({ title: 'Remove this card?', message: this.steps()[i]?.title || 'This card', confirmText: 'Remove', danger: true });
+    if (!ok) return;
+    this.setSteps(this.steps().filter((_, n) => n !== i));
+    this.stepOpen.set(Math.max(0, Math.min(this.stepOpen(), this.steps().length - 1)));
+  }
+
+  moveStep(i: number, dir: -1 | 1): void {
+    const items = [...this.steps()];
+    const to = i + dir;
+    if (to < 0 || to >= items.length) return;
+    [items[i], items[to]] = [items[to], items[i]];
+    this.setSteps(items);
+    this.stepOpen.set(to);
+  }
+
+  toggleStep(i: number): void {
+    this.stepOpen.set(this.stepOpen() === i ? -1 : i);
+  }
+
+  stepGradient(it: { bg: string; bg2: string }): string {
+    return `linear-gradient(135deg, ${it.bg}, ${it.bg2})`;
+  }
+
+  /** The two colours of the card start from one of the ready-made pairs. */
+  pickStepColor(i: number, c: { bg: string; bg2: string }): void {
+    this.patchStep(i, { bg: c.bg, bg2: c.bg2 });
+  }
+
+  /** The heading cut around the highlighted word, for the preview. */
+  titleParts(title: string, word: string): [string, string, string] {
+    const t = title ?? '';
+    const w = (word ?? '').trim();
+    const at = w ? t.toLowerCase().indexOf(w.toLowerCase()) : -1;
+    return at < 0 ? [t, '', ''] : [t.slice(0, at), t.slice(at, at + w.length), t.slice(at + w.length)];
+  }
+
+  async onStepIcon(i: number, input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.iconUploading.set(i);
+    try {
+      const upload = await prepareIcon(file);
+      this.admin.uploadHomeIcon(upload).subscribe({
+        next: (res) => {
+          this.patchStep(i, { icon_url: res.data.url });
+          this.iconUploading.set(null);
+        },
+        error: (err) => {
+          this.iconUploading.set(null);
+          this.ui.error(err);
+        },
+      });
+    } catch (err) {
+      this.iconUploading.set(null);
+      this.ui.error(err);
+    }
   }
 
   async onImage(input: HTMLInputElement): Promise<void> {

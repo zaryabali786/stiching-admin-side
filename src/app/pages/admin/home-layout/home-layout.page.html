@@ -338,6 +338,93 @@
               
             }
 
+            @case ('steps') {
+              <div class="field"><label>Heading</label><input class="input" maxlength="100" placeholder="How it works?" [value]="str('title')" (input)="set('title', $any($event.target).value)" /></div>
+              <div class="two">
+                <div class="field"><label>Word to highlight (optional)</label><input class="input" maxlength="40" placeholder="e.g. it" [value]="str('highlight')" (input)="set('highlight', $any($event.target).value)" /></div>
+                <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'highlight_color', label: 'Highlight colour' }" />
+              </div>
+              <div class="field"><label>Small text under the heading (optional)</label><input class="input" maxlength="200" [value]="str('subtitle')" (input)="set('subtitle', $any($event.target).value)" /></div>
+              <div class="two">
+                <div class="field"><label>Show as</label>
+                  <select class="select" (change)="set('layout', $any($event.target).value)">
+                    <option value="slider" [selected]="str('layout') !== 'grid'">Row you swipe sideways</option>
+                    <option value="grid" [selected]="str('layout') === 'grid'">Cards one under another</option>
+                  </select></div>
+                <label class="check num-check"><input type="checkbox" [checked]="s.settings['show_numbers']" (change)="set('show_numbers', $any($event.target).checked)" /> Show the number 1, 2, 3 on each card</label>
+              </div>
+
+              <ng-container *ngTemplateOutlet="colorField; context: { $implicit: 'number_color', label: 'Number colour' }" />
+
+              <div class="steps-head"><b>Cards ({{ steps().length }} of 12)</b><button type="button" class="btn btn-sm" [disabled]="steps().length >= 12" (click)="addStep()"><ion-icon name="add-outline" aria-hidden="true"></ion-icon> Add card</button></div>
+              <ol class="step-list">
+                @for (it of steps(); track $index; let i = $index) {
+                  <li class="step-item" [class.open]="stepOpen() === i">
+                    <div class="step-bar">
+                      <button type="button" class="step-title" (click)="toggleStep(i)" [attr.aria-expanded]="stepOpen() === i">
+                        <span class="step-no">{{ i + 1 }}</span>
+                        <span class="step-swatch" [style.background]="stepGradient(it)">@if (it.icon_url) { <img [src]="it.icon_url" alt="" /> } @else { {{ it.emoji }} }</span>
+                        <span class="step-name">{{ it.title || 'Untitled card' }}</span>
+                      </button>
+                      <span class="step-acts">
+                        <button type="button" class="icon-btn" aria-label="Move up" [disabled]="i === 0" (click)="moveStep(i, -1)"><ion-icon name="chevron-up-outline" aria-hidden="true"></ion-icon></button>
+                        <button type="button" class="icon-btn" aria-label="Move down" [disabled]="i === steps().length - 1" (click)="moveStep(i, 1)"><ion-icon name="chevron-down-outline" aria-hidden="true"></ion-icon></button>
+                        <button type="button" class="icon-btn danger" aria-label="Remove card" (click)="removeStep(i)"><ion-icon name="trash-outline" aria-hidden="true"></ion-icon></button>
+                      </span>
+                    </div>
+                    @if (stepOpen() === i) {
+                      <div class="step-body">
+                        <div class="field"><label>Title</label><input class="input" maxlength="60" [value]="it.title" (input)="patchStep(i, { title: $any($event.target).value })" /></div>
+                        <div class="field"><label>Text</label><textarea class="input" rows="3" maxlength="220" [value]="it.text" (input)="patchStep(i, { text: $any($event.target).value })"></textarea><span class="hint">Keep it short (about 80 letters, 3 lines): the card has a fixed shape, like in the design.</span></div>
+
+                        <div class="field">
+                          <label>Picture or icon</label>
+                          <div class="icon-row">
+                            <span class="icon-box" [style.background]="stepGradient(it)">@if (it.icon_url) { <img [src]="it.icon_url" alt="Selected picture" /> } @else { <span class="em">{{ it.emoji || '＋' }}</span> }</span>
+                            <div class="icon-acts">
+                              <input #iconFile type="file" class="sr-only" accept="image/png,image/svg+xml,image/webp,image/jpeg,image/gif" tabindex="-1" aria-hidden="true" (change)="onStepIcon(i, iconFile)" />
+                              <button type="button" class="btn btn-sm" [disabled]="iconUploading() === i" (click)="iconFile.click()">
+                                @if (iconUploading() === i) { <ion-spinner name="crescent" /> } {{ it.icon_url ? 'Change picture' : 'Upload picture / SVG' }}
+                              </button>
+                              @if (it.icon_url) { <button type="button" class="btn btn-sm btn-ghost" (click)="patchStep(i, { icon_url: '' })">Remove</button> }
+                              <span class="hint">PNG with a see-through background or SVG looks best. Up to 2 MB.</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field"><label>Or an emoji (used when there is no picture)</label><input class="input emoji-in" maxlength="8" [value]="it.emoji" (input)="patchStep(i, { emoji: $any($event.target).value })" /></div>
+
+                        <div class="field"><label>Card colour</label>
+                          <div class="swatches" role="group" aria-label="Ready-made card colours">
+                            @for (c of stepColors; track c.name) {
+                              <button type="button" class="swatch" [class.on]="it.bg === c.bg && it.bg2 === c.bg2" [style.background]="stepGradient(c)" [attr.aria-label]="c.name" [title]="c.name" (click)="pickStepColor(i, c)"></button>
+                            }
+                          </div>
+                        </div>
+                        <div class="two">
+                          <label class="field color-field">From
+                            <span class="color-row"><input type="color" [value]="it.bg" (input)="patchStep(i, { bg: $any($event.target).value.toUpperCase() })" /><input class="input hex" [value]="it.bg" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && patchStep(i, { bg: $any($event.target).value.toUpperCase() })" /></span>
+                          </label>
+                          <label class="field color-field">To
+                            <span class="color-row"><input type="color" [value]="it.bg2" (input)="patchStep(i, { bg2: $any($event.target).value.toUpperCase() })" /><input class="input hex" [value]="it.bg2" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && patchStep(i, { bg2: $any($event.target).value.toUpperCase() })" /></span>
+                          </label>
+                        </div>
+                        <label class="field color-field">Text colour
+                          <span class="color-row"><input type="color" [value]="it.color" (input)="patchStep(i, { color: $any($event.target).value.toUpperCase() })" /><input class="input hex" [value]="it.color" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && patchStep(i, { color: $any($event.target).value.toUpperCase() })" /></span>
+                        </label>
+                        <div class="field"><label>Opens when tapped (optional)</label>
+                          <select class="select app-pick" aria-label="Pick a page inside the app" (change)="patchStep(i, { link: $any($event.target).value }); $any($event.target).value = ''">
+                            <option value="">Pick a page inside the app…</option>
+                            @for (pg of appPages; track pg.path) { <option [value]="pg.path">{{ pg.label }}</option> }
+                          </select>
+                          <input class="input" placeholder="https://… or /app/orders/new" [value]="it.link" (input)="patchStep(i, { link: $any($event.target).value })" />
+                        </div>
+                      </div>
+                    }
+                  </li>
+                } @empty { <li class="none">No cards yet. Press "Add card".</li> }
+              </ol>
+            }
+
             @case ('custom') {
               <div class="field"><label>Heading</label><input class="input" maxlength="120" [value]="str('heading')" (input)="set('heading', $any($event.target).value)" /></div>
               <div class="field"><label>Text</label><textarea class="input" rows="5" maxlength="1500" [value]="str('body')" (input)="set('body', $any($event.target).value)"></textarea></div>
@@ -551,7 +638,17 @@
                   }
                   @case ('banners') {
                     <div class="p-banners">
-                      @if (banners().length) { <img [src]="banners()[0].image_url" alt="" /> } @else { <span>No active banners</span> }
+                      @if (banners().length) {
+                        <img [src]="banners()[0].image_url" alt="" [style.object-position]="(banners()[0].focus_x ?? 50) + '% ' + (banners()[0].focus_y ?? 50) + '%'" />
+                        @if (bannerHasCopy(banners()[0])) {
+                          <i class="pv-shade" [style.opacity]="(banners()[0].overlay ?? 35) / 100"></i>
+                          <div class="pv-bn-copy" [class.ctr]="banners()[0].text_align === 'center'" [style.color]="banners()[0].text_color || '#fff'">
+                            @if (banners()[0].heading) { <b>{{ banners()[0].heading }}</b> }
+                            @if (banners()[0].subheading) { <span>{{ banners()[0].subheading }}</span> }
+                            @if (banners()[0].button_label) { <u [style.background]="banners()[0].button_bg || '#fff'" [style.color]="banners()[0].button_color || '#62003E'">{{ banners()[0].button_label }}</u> }
+                          </div>
+                        }
+                      } @else { <span>No active banners</span> }
                       @if (banners().length > 1) { <i class="dots"><u class="on"></u><u></u></i> }
                     </div>
                   }
@@ -603,6 +700,23 @@
                             </div>
                           }
                         } @empty { <span class="none">Pick articles to show</span> }
+                      </div>
+                    </div>
+                  }
+                  @case ('steps') {
+                    <div class="p-steps">
+                      @if (s.settings['title']) {
+                        <b class="ps-title">{{ titleParts(s.settings['title'], s.settings['highlight'])[0] }}<em [style.color]="s.settings['highlight_color']">{{ titleParts(s.settings['title'], s.settings['highlight'])[1] }}</em>{{ titleParts(s.settings['title'], s.settings['highlight'])[2] }}</b>
+                      }
+                      @if (s.settings['subtitle']) { <span class="ps-sub">{{ s.settings['subtitle'] }}</span> }
+                      <div class="ps-row" [class.grid]="s.settings['layout'] === 'grid'">
+                        @for (it of s.settings['items']; track $index; let i = $index) {
+                          <div class="ps-card" [style.background]="stepGradient(it)" [style.color]="it.color">
+                            <div class="ps-copy"><b>{{ it.title }}</b><span>{{ it.text }}</span></div>
+                            @if (s.settings['show_numbers']) { <i class="ps-no" [style.color]="s.settings['number_color']">{{ i + 1 }}</i> }
+                            <u class="ps-art">@if (it.icon_url) { <img [src]="it.icon_url" alt="" /> } @else { {{ it.emoji }} }</u>
+                          </div>
+                        } @empty { <span class="none">Add cards</span> }
                       </div>
                     </div>
                   }
@@ -660,7 +774,7 @@
 
 @if (bannerForm(); as f) {
   <div class="modal-backdrop" (click)="!bannerSaving() && bannerForm.set(null)">
-    <form class="modal" role="dialog" aria-modal="true" aria-labelledby="bnTitle" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); saveBanner()">
+    <form class="modal bn-modal" role="dialog" aria-modal="true" aria-labelledby="bnTitle" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); saveBanner()">
       <div class="modal-head">
         <h3 id="bnTitle">{{ f.id ? 'Edit banner' : 'New banner' }}</h3>
         <button type="button" class="close-btn" (click)="bannerForm.set(null)" aria-label="Close">×</button>
@@ -685,6 +799,67 @@
           <input id="bnLink" class="input" type="text" placeholder="https://example.com/sale or /app/orders/new" [value]="f.link_url" (input)="patchBanner({ link_url: $any($event.target).value })" />
           <span class="hint" [class.bn-err]="!bannerLinkValid()">{{ bannerLinkValid() ? 'Opens when a customer taps the banner. Leave empty for a banner that is not clickable.' : 'Enter a full address starting with http:// or https://, or pick an app page' }}</span>
         </div>
+        <fieldset class="bn-copy">
+          <legend>Text on the banner</legend>
+          <p class="hint">Words and a button printed on top of the picture. Leave them empty for a picture only.</p>
+          <p class="bn-drag-hint"><b>Face or product cut off?</b> Drag the picture below up, down or sideways to choose what stays in view.@if (f.focus_x !== 50 || f.focus_y !== 50) { <button type="button" class="link" (click)="patchBanner({ focus_x: 50, focus_y: 50 })">Reset</button> }</p>
+          <div class="bn-live" [class.center]="f.text_align === 'center'" [class.empty]="!f.preview" [class.drag]="bnDragging()" [style.--ov]="f.overlay / 100" [style.--tc]="f.text_color"
+            (pointerdown)="bnDragStart($event)" (pointermove)="bnDragMove($event)" (pointerup)="bnDragEnd()" (pointercancel)="bnDragEnd()" [attr.role]="f.preview ? 'img' : null" [attr.aria-label]="f.preview ? 'Banner as customers see it. Drag to move the picture.' : null">
+            @if (f.preview) { <img [src]="f.preview" alt="" draggable="false" [style.object-position]="f.focus_x + '% ' + f.focus_y + '%'" /> } @else { <span class="bn-live-none">Choose a picture first</span> }
+            @if (bannerHasCopy(f)) {
+              <div class="bn-live-shade"></div>
+              <div class="bn-live-copy">
+                @if (f.heading) { <b>{{ f.heading }}</b> }
+                @if (f.subheading) { <span>{{ f.subheading }}</span> }
+                @if (f.button_label) { <u [style.background]="f.button_bg" [style.color]="f.button_color">{{ f.button_label }}</u> }
+              </div>
+            }
+          </div>
+          <div class="field">
+            <label for="bnHead">Heading</label>
+            <input id="bnHead" class="input" maxlength="80" placeholder="e.g. We tailor each garment by hand" [value]="f.heading" (input)="patchBanner({ heading: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="bnSub">Small text under it</label>
+            <input id="bnSub" class="input" maxlength="160" placeholder="e.g. Your bespoke wardrobe &amp; tailoring hub" [value]="f.subheading" (input)="patchBanner({ subheading: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="bnBtn">Button text</label>
+            <input id="bnBtn" class="input" maxlength="40" placeholder="e.g. Place new order!" [value]="f.button_label" (input)="patchBanner({ button_label: $any($event.target).value })" />
+          </div>
+          <div class="field">
+            <label for="bnBtnLink">Where the button goes</label>
+            <select class="select app-pick" aria-label="Pick a page inside the app" (change)="patchBanner({ button_link: $any($event.target).value }); $any($event.target).value = ''">
+              <option value="">Pick a page inside the app…</option>
+              @for (pg of appPages; track pg.path) { <option [value]="pg.path">{{ pg.label }}</option> }
+            </select>
+            <input id="bnBtnLink" class="input" type="text" placeholder="https://example.com or /app/orders/new" [value]="f.button_link" (input)="patchBanner({ button_link: $any($event.target).value })" />
+            <span class="hint" [class.bn-err]="!bannerButtonLinkValid()">{{ bannerButtonLinkValid() ? 'A page inside the app, or a full web address. Without it the button only shows.' : 'Enter a full address starting with http:// or https://, or pick an app page' }}</span>
+          </div>
+          <div class="two">
+            <label class="field color-field">Text colour
+              <span class="color-row"><input type="color" [value]="f.text_color" (input)="patchBanner({ text_color: $any($event.target).value.toUpperCase() })" /><input class="input hex" [value]="f.text_color" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && patchBanner({ text_color: $any($event.target).value.toUpperCase() })" /></span>
+            </label>
+            <div class="field"><label>Text position</label>
+              <select class="select" (change)="patchBanner({ text_align: $any($event.target).value })">
+                <option value="left" [selected]="f.text_align === 'left'">Left</option>
+                <option value="center" [selected]="f.text_align === 'center'">Centre</option>
+              </select></div>
+          </div>
+          <div class="two">
+            <label class="field color-field">Button colour
+              <span class="color-row"><input type="color" [value]="f.button_bg" (input)="patchBanner({ button_bg: $any($event.target).value.toUpperCase() })" /><input class="input hex" [value]="f.button_bg" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && patchBanner({ button_bg: $any($event.target).value.toUpperCase() })" /></span>
+            </label>
+            <label class="field color-field">Button text colour
+              <span class="color-row"><input type="color" [value]="f.button_color" (input)="patchBanner({ button_color: $any($event.target).value.toUpperCase() })" /><input class="input hex" [value]="f.button_color" maxlength="7" (input)="/^#[0-9a-fA-F]{6}$/.test($any($event.target).value) && patchBanner({ button_color: $any($event.target).value.toUpperCase() })" /></span>
+            </label>
+          </div>
+          <div class="field">
+            <label for="bnOv">Dark layer behind the text: {{ f.overlay }}%</label>
+            <input id="bnOv" type="range" min="0" max="80" step="5" [value]="f.overlay" (input)="patchBanner({ overlay: +$any($event.target).value })" />
+            <span class="hint">Makes the words easy to read on a bright picture. 0 is none.</span>
+          </div>
+        </fieldset>
         <div class="field">
           <label for="bnName">Title (optional)</label>
           <input id="bnName" class="input" maxlength="120" placeholder="e.g. Eid collection" [value]="f.title" (input)="patchBanner({ title: $any($event.target).value })" />

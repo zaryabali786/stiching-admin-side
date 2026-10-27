@@ -583,7 +583,19 @@ export interface ShippingOption extends ShippingRate {
 export type ShippingRateInput = Partial<Omit<ShippingRate, 'id' | 'created_at' | 'countries'>> & { countries?: string[] | string };
 
 // ── Customer app home layout (sections) ──
-export type HomeSectionType = 'announcement' | 'marquee' | 'banners' | 'hero' | 'image_text' | 'articles' | 'collection' | 'custom';
+export type HomeSectionType = 'announcement' | 'marquee' | 'banners' | 'hero' | 'image_text' | 'articles' | 'collection' | 'steps' | 'custom';
+
+/** One card of a "How it works" section. */
+export interface HomeStepItem {
+  title: string;
+  text: string;
+  icon_url: string;
+  emoji: string;
+  bg: string;
+  bg2: string;
+  color: string;
+  link: string;
+}
 
 export interface HomeLayoutSection {
   id: string;
@@ -647,6 +659,18 @@ export interface Banner {
   sort_order: number;
   is_active: boolean;
   created_at?: string;
+  /** Text and a button printed on the banner. */
+  heading?: string | null;
+  subheading?: string | null;
+  button_label?: string | null;
+  button_link?: string | null;
+  text_color?: string;
+  button_bg?: string;
+  button_color?: string;
+  overlay?: number;
+  text_align?: 'left' | 'center';
+  focus_x?: number;
+  focus_y?: number;
 }
 
 export interface BannerInput {
@@ -655,6 +679,17 @@ export interface BannerInput {
   link_url?: string;
   is_active?: boolean;
   image_upload?: { name: string; dataUrl: string };
+  heading?: string;
+  subheading?: string;
+  button_label?: string;
+  button_link?: string;
+  text_color?: string;
+  button_bg?: string;
+  button_color?: string;
+  overlay?: number;
+  text_align?: 'left' | 'center';
+  focus_x?: number;
+  focus_y?: number;
 }
 
 // ── Invoices ──
@@ -1056,6 +1091,11 @@ export class AdminService {
 
   uploadHomeImage(image_upload: { name: string; dataUrl: string }): Observable<ApiResult<{ url: string }>> {
     return this.send<{ url: string }>('POST', '/admin/home-layout/image', { image_upload });
+  }
+
+  /** An icon / illustration for a card: keeps transparency, accepts SVG. */
+  uploadHomeIcon(image_upload: { name: string; dataUrl: string }): Observable<ApiResult<{ url: string }>> {
+    return this.send<{ url: string }>('POST', '/admin/home-layout/icon', { image_upload });
   }
 
   // ── Customer app appearance ──

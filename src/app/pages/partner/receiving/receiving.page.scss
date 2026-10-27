@@ -75,6 +75,58 @@ app-search-input.search-lg {
   &.urdu { letter-spacing: 0; line-height: 1.9; }
 }
 
+/* ───────── The parcels table: a summary row that opens into the whole order ───────── */
+.table-card { padding: 0; overflow: hidden; }
+.rcv-table { width: 100%; }
+.rcv-table .col-toggle { width: 34px; padding-right: 0; }
+.rcv-table td, .rcv-table th { vertical-align: middle; }
+.rcv-row { cursor: pointer; transition: background 0.12s; }
+.rcv-row:hover { background: var(--c-bg-soft); }
+.rcv-row:focus-visible { outline: 2px solid var(--c-green); outline-offset: -2px; }
+.rcv-row.open { background: color-mix(in srgb, var(--c-green) 8%, var(--c-surface)); }
+.rcv-row.open td:first-child { box-shadow: inset 4px 0 0 var(--c-green); }
+.rcv-row.open .code-pill { background: var(--c-ink); color: #fff; }
+.rcv-row.has-issue td:first-child, .rcv-row.open.has-issue td:first-child { box-shadow: inset 4px 0 0 var(--c-red); }
+.rcv-row .chev { display: inline-block; font-size: 20px; line-height: 1; color: var(--c-muted); transition: transform 0.15s; }
+.rcv-row.open .chev { transform: rotate(90deg); color: var(--c-ink); }
+.code-pill { display: inline-block; padding: 3px 9px; border: 1.5px solid var(--c-ink); border-radius: 8px; font: 700 14px/1.3 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.04em; white-space: nowrap; }
+.cell-main { display: block; font-weight: 600; }
+.cell-sub { display: block; font-size: 12px; color: var(--c-muted); margin-top: 2px; overflow-wrap: anywhere; }
+.pieces { display: block; font-size: 12.5px; color: var(--c-muted); white-space: nowrap; b { color: var(--c-ink); } .bad-text { color: var(--c-red); font-weight: 600; } }
+.rcv-row .progress-track { display: flex; width: 110px; margin-top: 5px; }
+.nowrap { white-space: nowrap; }
+/* the opened part belongs to the row above it: same tint, same coloured edge, and a line under it before the next parcel */
+.rcv-detail > td { padding: 0; background: color-mix(in srgb, var(--c-green) 4%, var(--c-bg-soft)); border-top: 0; border-bottom: 2px solid var(--c-line); box-shadow: inset 4px 0 0 var(--c-green), inset 0 10px 10px -10px rgba(23, 54, 42, 0.18); }
+.rcv-detail:has(.detail-card.has-issue) > td { box-shadow: inset 4px 0 0 var(--c-red), inset 0 10px 10px -10px rgba(23, 54, 42, 0.18); }
+.detail-card { padding: 12px 22px 22px 40px; border: 0; background: transparent; }
+.detail-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-green); }
+.detail-card.has-issue .detail-bar { color: var(--c-red); }
+.detail-bar .btn { text-transform: none; letter-spacing: 0; }
+/* the order's own header becomes one white card, like the cards under it */
+.detail-card .order-head { padding: 14px 16px; background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius); }
+.sentinel { height: 1px; }
+.list-foot { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px 16px 18px; min-height: 52px; }
+
+@media (max-width: 860px) {
+  /* a row becomes a card; each cell shows its own label */
+  .rcv-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .rcv-table, .rcv-table tbody { display: block; }
+  .rcv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; padding: 14px 16px 12px; border-top: 1px solid var(--c-line); position: relative; }
+  .rcv-row td { display: block; padding: 0; border: 0; min-width: 0; }
+  .rcv-row td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-muted); }
+  .rcv-row .col-toggle { position: absolute; top: 12px; right: 12px; width: auto; }
+  .rcv-row .col-toggle::before { content: none; }
+  .rcv-row td[data-label='Customer'] { grid-column: 1 / -1; padding-right: 28px; }
+  .rcv-row.has-issue { box-shadow: inset 3px 0 0 var(--c-red); }
+  .rcv-row.has-issue td:first-child { box-shadow: none; }
+  .rcv-detail { display: block; }
+  .rcv-detail > td { display: block; }
+  .detail-card { padding: 10px 14px 18px; }
+  .rcv-row.open td:first-child { box-shadow: none; }
+  .rcv-row.open { box-shadow: inset 4px 0 0 var(--c-green); }
+  .rcv-detail > td { box-shadow: inset 4px 0 0 var(--c-green); }
+}
+
 /* ───────── Parcel card ───────── */
 .order-card {
   padding: 18px 20px;

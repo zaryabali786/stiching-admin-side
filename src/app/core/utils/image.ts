@@ -46,3 +46,33 @@ export async function compressImage(file: File, maxDimension = MAX_DIMENSION): P
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return { name: `${baseName}.jpg`, dataUrl: canvas.toDataURL('image/jpeg', JPEG_QUALITY) };
 }
+
+const ICON_MAX_DIMENSION = 640;
+const SVG_MAX_BYTES = 600 * 1024;
+
+/**
+ * An icon / illustration for a card: unlike a photo it is not flattened onto white. A PNG, WebP or GIF keeps its transparent
+ * background (re-encoded as PNG, longest edge 640px); a JPG stays a JPG; an SVG is sent untouched (the server checks it is a plain drawing).
+ */
+export async function prepareIcon(file: File): Promise<ImageUpload> {
+  const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+  if (isSvg) {
+    if (file.size > SVG_MAX_BYTES) throw new Error('This SVG is too big. Keep it under 600 KB.');
+    const text = await file.text();
+    const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(text)));
+    return { name: file.name, dataUrl };
+  }
+  if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not a picture.`);
+  const original = await readAsDataUrl(file);
+  const img = await loadImage(original);
+  const scale = Math.min(1, ICON_MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not process this picture in your browser.');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const baseName = file.name.replace(/\.[^.]+$/, '') || 'icon';
+  const jpeg = file.type === 'image/jpeg';
+  return { name: `${baseName}.${jpeg ? 'jpg' : 'png'}`, dataUrl: canvas.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.9) };
+}

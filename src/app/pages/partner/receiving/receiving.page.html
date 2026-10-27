@@ -98,256 +98,324 @@
             </div>
           </div>
         }
-        @for (o of orders(); track o.row_key || o.id) {
-          <article class="card order-card" [class.has-issue]="o.has_issue">
-            <div class="order-head">
-              <div class="label-code" [attr.aria-label]="'Customer code ' + (o.customer_code || 'missing')">
-                <span class="lc-caption">Code</span>
-                <span class="lc-value">{{ o.customer_code || '—' }}</span>
-              </div>
-              @if (o.reference) { <app-qr-code class="order-qr" [value]="o.reference" [size]="64" [showText]="false" /> }
-              <div class="order-id">
-                <h3 class="customer">{{ o.customer_name || 'Customer' }}</h3>
-                <span class="brand-ref">{{ o.brand || 'Brand' }} · {{ o.group_reference || o.reference }}@if (o.group && o.group !== 'main') { <span class="group-tag" [attr.data-g]="o.group">{{ o.group === 'hold' ? 'Hold' : o.group === 'return' ? 'Return' : 'Resolved' }}</span> <span class="muted"> · original {{ o.original_reference || o.reference }}</span> }@if (o.brand_order_number) { <span class="muted"> · brand order {{ o.brand_order_number }}</span> }</span>
-                <div class="meta-line">
-                  @if (o.tracking_number) { <span>Tracking <b>{{ o.tracking_number }}</b></span> } @else { <span>No tracking number</span> }
-                  <span>Ordered {{ o.created_at | day }}</span>
-                  @if (o.express_shipping) { <span class="deliver-to"><b>Fast shipping</b>@if (o.express_shipping_days) { · {{ o.express_shipping_days }} days }</span> }
-                  @if (o.express_stitching) { <span class="deliver-to"><b>Priority stitching</b>@if (o.express_days) { · {{ o.express_days }} days }</span> }
-                  @if (destination(o)) { <span>Ships to {{ destination(o) }}</span> }
-                  @if (o.destination_address) { <span class="deliver-to"><b>Deliver to:</b> {{ o.destination_address }}</span> }
-                  @if (o.destination_phone) { <span class="deliver-to"><b>Phone:</b> {{ o.destination_phone }}</span> }
-                  @if (orderedFor(o)) { <span class="ordered-for" title="The address the customer was told to send the parcel to"><b>Customer chose:</b> {{ orderedFor(o) }}</span> }
-                  @if (o.received_at) { <span>Received {{ o.received_at | timeAgo }}</span> }
-                </div>
-              </div>
-              <div class="badges">
-                <span class="badge blue" [title]="'Order source: ' + sourceLabel(o)">{{ sourceLabel(o) }} order</span>
-                @if (o.cod; as c) {
-                  @if (c.payment_type === 'COD') {
-                    <span class="badge" [class.green]="c.payment_status === 'PAID'" [class.amber]="c.payment_status !== 'PAID'" [title]="c.needs_verification ? 'The total still has to be verified' : 'Cash on delivery order'">
-                      COD · {{ c.payment_status === 'PAID' ? 'PAID' : c.payment_status === 'PENDING' ? 'Payment pending' : 'NOT PAID' }}@if (c.amount != null) { · {{ c.currency }} {{ c.amount }} }
-                    </span>
-                  } @else if (c.payment_type === 'NON_COD') {
-                    <span class="badge">Non-COD</span>
-                  }
-                }
-                @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
-                @if (o.has_issue) { <span class="badge red dot">Has issue</span> }
-                <app-status-badge [status]="o.status" [label]="o.status_label" />
-                @if (o.parcel_review === 'pending') { <span class="badge amber">Waiting for customer to approve</span> }
-                @else if (o.parcel_review === 'approved') { <span class="badge green">Customer approved</span> }
-              </div>
-            </div>
-
-            @if (o.customer_notes) {
-              <p class="notes"><b>Customer notes:</b> {{ o.customer_notes }}</p>
-            }
-
-            @if (!o.group || o.group === 'main') { <app-cod-payment-panel [orderId]="o.id" scope="partner" /> }
-
-            <ul class="units" [attr.aria-label]="'Pieces in ' + o.reference">
-              @for (u of o.units; track u.id) {
-                <li class="unit" [class.has-issue]="u.status === 'issue'" [class.done]="u.status === 'received'">
-                  <div class="unit-row">
-                    <span class="line" aria-hidden="true">{{ u.line_no }}</span>
-                    @if (u.product_image_url) { <img class="unit-thumb" [src]="u.product_image_url" alt="" loading="lazy" referrerpolicy="no-referrer" /> }
-                    <div class="unit-info">
-                      <strong>{{ u.unit_title }}@if (u.quantity > 1) { <span class="qty"> × {{ u.quantity }}</span> }</strong>
-                      @if (u.code) { <span class="unit-code"><b>{{ u.code }}</b></span> }
-                      @if (u.stitching_type) { <span class="muted small">{{ u.stitching_type }}</span> }
-                      @if (weightEdit()?.id === u.id) {
-                        <span class="weight-edit">
-                          <input class="input" type="number" min="0.001" max="49.999" step="0.01" inputmode="decimal" placeholder="kg" aria-label="Weight in kg"
-                            [ngModel]="weightEdit()!.value" (ngModelChange)="setWeightText($event)" (keydown.enter)="saveWeight(u)" />
-                          <button type="button" class="btn btn-sm btn-primary" [disabled]="weightSaving()" (click)="saveWeight(u)">Save</button>
-                          <button type="button" class="btn btn-sm btn-ghost" (click)="weightEdit.set(null)">Cancel</button>
-                        </span>
-                      } @else if (u.weight_kg) {
-                        <span class="small unit-weight">Weight <b>{{ u.weight_kg }} kg</b>@if (canEditWeight(o)) { <button *can="'receiving.receive'" type="button" class="link-btn" (click)="editWeight(u)">Edit</button> }</span>
-                      } @else if (u.status !== 'pending') {
-                        <span class="small unit-weight missing">No weight yet @if (canEditWeight(o)) { <button *can="'receiving.receive'" type="button" class="link-btn" (click)="editWeight(u)">Add weight</button> }</span>
-                      }
-                      @if (u.notes) { <span class="small unit-note">Customer note: {{ u.notes }}</span> }
-                      <app-voice-note-play [note]="u.notes_audio" label="Article note, voice" />
-                    </div>
-                    @if (u.code) { <app-qr-code class="unit-qr" [value]="u.code" [size]="56" /> }
-                    <span [class]="'badge dot unit-status ' + unitTone(u.status)" [class.urdu]="lang.isUrdu()">{{ unitLabel(u.status) }}</span>
+        <div class="card table-card" aria-live="polite">
+          <div class="table-scroll">
+            <table class="data-table rcv-table">
+              <caption class="sr-only">Parcels. Open a row to see its pieces and to receive them.</caption>
+              <thead>
+                <tr>
+                  <th class="col-toggle"><span class="sr-only">Open</span></th>
+                  <th>Code</th>
+                  <th>Customer</th>
+                  <th>Source</th>
+                  <th>Payment</th>
+                  <th>Status</th>
+                  <th>Pieces</th>
+                  <th>Ordered</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (o of orders(); track key(o)) {
+                  <tr class="rcv-row" [class.open]="isOpen(o)" [class.has-issue]="o.has_issue" tabindex="0"
+                    [attr.aria-expanded]="isOpen(o)" [attr.aria-controls]="'rcv-' + key(o)" [attr.aria-label]="(isOpen(o) ? 'Close ' : 'Open ') + (o.customer_name || 'order') + ' ' + (o.customer_code || '')"
+                    (click)="toggle(o)" (keydown.enter)="toggle(o)" (keydown.space)="$event.preventDefault(); toggle(o)">
+                    <td class="col-toggle"><span class="chev" aria-hidden="true">›</span></td>
+                    <td data-label="Code"><span class="code-pill">{{ o.customer_code || '—' }}</span></td>
+                    <td data-label="Customer">
+                      <span class="cell-main">{{ o.customer_name || 'Customer' }}</span>
+                      <span class="cell-sub">{{ o.brand || 'Brand' }} · {{ o.group_reference || o.reference }}@if (o.brand_order_number) { · {{ o.brand_order_number }} }</span>
+                      @if (o.tracking_number) { <span class="cell-sub">Tracking {{ o.tracking_number }}</span> }
+                    </td>
+                    <td data-label="Source"><span class="badge blue">{{ sourceLabel(o) }}</span></td>
+                    <td data-label="Payment"><span class="badge" [ngClass]="payBadge(o).tone">{{ payBadge(o).label }}</span></td>
+                    <td data-label="Status">
+                      <app-status-badge [status]="o.status" [label]="o.status_label" />
+                      @if (o.has_issue) { <span class="badge red dot">Has issue</span> }
+                      @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
+                    </td>
+                    <td data-label="Pieces">
+                      <span class="pieces"><b>{{ receivedCount(o) }}/{{ o.units.length }}</b> received@if (issueCount(o)) { <span class="bad-text"> · {{ issueCount(o) }} issue</span> }</span>
+                      <span class="progress-track" aria-hidden="true">
+                        <span class="seg ok" [style.width.%]="(receivedCount(o) / (o.units.length || 1)) * 100"></span>
+                        <span class="seg bad" [style.width.%]="(issueCount(o) / (o.units.length || 1)) * 100"></span>
+                      </span>
+                    </td>
+                    <td data-label="Ordered" class="nowrap">{{ o.created_at | day }}</td>
+                  </tr>
+                  @if (isOpen(o)) {
+                    <tr class="rcv-detail" [id]="'rcv-' + key(o)">
+                      <td colspan="8">
+                        <article class="order-card detail-card" [class.has-issue]="o.has_issue">
+                          <div class="detail-bar">
+                            <span>{{ o.has_issue ? 'Has an issue · ' : '' }}Details of {{ o.customer_code || 'this parcel' }} · {{ o.customer_name || 'Customer' }}</span>
+                            <button type="button" class="btn btn-sm btn-ghost" (click)="toggle(o)">Close ✕</button>
+                          </div>
+                <div class="order-head">
+                  <div class="label-code" [attr.aria-label]="'Customer code ' + (o.customer_code || 'missing')">
+                    <span class="lc-caption">Code</span>
+                    <span class="lc-value">{{ o.customer_code || '—' }}</span>
                   </div>
-                  @if (u.review_status === 'pending') {
-                    @if (u.status === 'issue') {
-                      <div class="review-line pending"><span aria-hidden="true">⏳</span> Problem reported · waiting for the customer to choose Hold or Return</div>
-                    } @else {
-                      <div class="review-line pending"><span aria-hidden="true">⏳</span> Waiting for the customer to approve this article</div>
+                  @if (o.reference) { <app-qr-code class="order-qr" [value]="o.reference" [size]="64" [showText]="false" /> }
+                  <div class="order-id">
+                    <h3 class="customer">{{ o.customer_name || 'Customer' }}</h3>
+                    <span class="brand-ref">{{ o.brand || 'Brand' }} · {{ o.group_reference || o.reference }}@if (o.group && o.group !== 'main') { <span class="group-tag" [attr.data-g]="o.group">{{ o.group === 'hold' ? 'Hold' : o.group === 'return' ? 'Return' : 'Resolved' }}</span> <span class="muted"> · original {{ o.original_reference || o.reference }}</span> }@if (o.brand_order_number) { <span class="muted"> · brand order {{ o.brand_order_number }}</span> }</span>
+                    <div class="meta-line">
+                      @if (o.tracking_number) { <span>Tracking <b>{{ o.tracking_number }}</b></span> } @else { <span>No tracking number</span> }
+                      <span>Ordered {{ o.created_at | day }}</span>
+                      @if (o.express_shipping) { <span class="deliver-to"><b>Fast shipping</b>@if (o.express_shipping_days) { · {{ o.express_shipping_days }} days }</span> }
+                      @if (o.express_stitching) { <span class="deliver-to"><b>Priority stitching</b>@if (o.express_days) { · {{ o.express_days }} days }</span> }
+                      @if (destination(o)) { <span>Ships to {{ destination(o) }}</span> }
+                      @if (o.destination_address) { <span class="deliver-to"><b>Deliver to:</b> {{ o.destination_address }}</span> }
+                      @if (o.destination_phone) { <span class="deliver-to"><b>Phone:</b> {{ o.destination_phone }}</span> }
+                      @if (orderedFor(o)) { <span class="ordered-for" title="The address the customer was told to send the parcel to"><b>Customer chose:</b> {{ orderedFor(o) }}</span> }
+                      @if (o.received_at) { <span>Received {{ o.received_at | timeAgo }}</span> }
+                    </div>
+                  </div>
+                  <div class="badges">
+                    <span class="badge blue" [title]="'Order source: ' + sourceLabel(o)">{{ sourceLabel(o) }} order</span>
+                    @if (o.cod; as c) {
+                      @if (c.payment_type === 'COD') {
+                        <span class="badge" [class.green]="c.payment_status === 'PAID'" [class.amber]="c.payment_status !== 'PAID'" [title]="c.needs_verification ? 'The total still has to be verified' : 'Cash on delivery order'">
+                          COD · {{ c.payment_status === 'PAID' ? 'PAID' : c.payment_status === 'PENDING' ? 'Payment pending' : 'NOT PAID' }}@if (c.amount != null) { · {{ c.currency }} {{ c.amount }} }
+                        </span>
+                      } @else if (c.payment_type === 'NON_COD') {
+                        <span class="badge">Non-COD</span>
+                      }
                     }
-                  } @else if (u.review_status === 'approved') {
-                    <div class="review-line approved"><span aria-hidden="true">✓</span> Approved by the customer</div>
-                  }
-                  @if (u.hold_resolved_at) {
-                    <div class="review-line approved resolved">
-                      <span aria-hidden="true">✓</span> Hold resolved · corrected article received @if (u.hold_received_at) { {{ u.hold_received_at | day }} } · approved by the customer {{ u.hold_resolved_at | day }}
-                    </div>
-                  } @else if (u.return_status === 'held' && u.review_status === 'pending') {
-                    <div class="review-line pending"><span aria-hidden="true">⏳</span> Corrected article received {{ u.hold_received_at | timeAgo }} · the hold resolves when the customer approves it</div>
-                  }
-                  @if (u.review_status === 'rejected') {
-                    <div class="issue-box review-box" role="note">
-                      <div><b>Rejected by the customer</b> · {{ u.review_note }}</div>
-                      @if (u.review_media?.length) {
-                        <div class="thumbs">
-                          @for (m of u.review_media; track m.url) {
-                            <a [href]="m.url" target="_blank" rel="noopener" class="thumb" aria-label="Open the customer's photo"><img [src]="m.url" alt="Customer photo" loading="lazy" /></a>
+                    @if (o.priority === 'rush') { <span class="badge red">Rush</span> }
+                    @if (o.has_issue) { <span class="badge red dot">Has issue</span> }
+                    <app-status-badge [status]="o.status" [label]="o.status_label" />
+                    @if (o.parcel_review === 'pending') { <span class="badge amber">Waiting for customer to approve</span> }
+                    @else if (o.parcel_review === 'approved') { <span class="badge green">Customer approved</span> }
+                  </div>
+                </div>
+
+                @if (o.customer_notes) {
+                  <p class="notes"><b>Customer notes:</b> {{ o.customer_notes }}</p>
+                }
+
+                @if (!o.group || o.group === 'main') { <app-cod-payment-panel [orderId]="o.id" scope="partner" /> }
+
+                <ul class="units" [attr.aria-label]="'Pieces in ' + o.reference">
+                  @for (u of o.units; track u.id) {
+                    <li class="unit" [class.has-issue]="u.status === 'issue'" [class.done]="u.status === 'received'">
+                      <div class="unit-row">
+                        <span class="line" aria-hidden="true">{{ u.line_no }}</span>
+                        @if (u.product_image_url) { <img class="unit-thumb" [src]="u.product_image_url" alt="" loading="lazy" referrerpolicy="no-referrer" /> }
+                        <div class="unit-info">
+                          <strong>{{ u.unit_title }}@if (u.quantity > 1) { <span class="qty"> × {{ u.quantity }}</span> }</strong>
+                          @if (u.code) { <span class="unit-code"><b>{{ u.code }}</b></span> }
+                          @if (u.stitching_type) { <span class="muted small">{{ u.stitching_type }}</span> }
+                          @if (weightEdit()?.id === u.id) {
+                            <span class="weight-edit">
+                              <input class="input" type="number" min="0.001" max="49.999" step="0.01" inputmode="decimal" placeholder="kg" aria-label="Weight in kg"
+                                [ngModel]="weightEdit()!.value" (ngModelChange)="setWeightText($event)" (keydown.enter)="saveWeight(u)" />
+                              <button type="button" class="btn btn-sm btn-primary" [disabled]="weightSaving()" (click)="saveWeight(u)">Save</button>
+                              <button type="button" class="btn btn-sm btn-ghost" (click)="weightEdit.set(null)">Cancel</button>
+                            </span>
+                          } @else if (u.weight_kg) {
+                            <span class="small unit-weight">Weight <b>{{ u.weight_kg }} kg</b>@if (canEditWeight(o)) { <button *can="'receiving.receive'" type="button" class="link-btn" (click)="editWeight(u)">Edit</button> }</span>
+                          } @else if (u.status !== 'pending') {
+                            <span class="small unit-weight missing">No weight yet @if (canEditWeight(o)) { <button *can="'receiving.receive'" type="button" class="link-btn" (click)="editWeight(u)">Add weight</button> }</span>
                           }
+                          @if (u.notes) { <span class="small unit-note">Customer note: {{ u.notes }}</span> }
+                          <app-voice-note-play [note]="u.notes_audio" label="Article note, voice" />
                         </div>
+                        @if (u.code) { <app-qr-code class="unit-qr" [value]="u.code" [size]="56" /> }
+                        <span [class]="'badge dot unit-status ' + unitTone(u.status)" [class.urdu]="lang.isUrdu()">{{ unitLabel(u.status) }}</span>
+                      </div>
+                      @if (u.review_status === 'pending') {
+                        @if (u.status === 'issue') {
+                          <div class="review-line pending"><span aria-hidden="true">⏳</span> Problem reported · waiting for the customer to choose Hold or Return</div>
+                        } @else {
+                          <div class="review-line pending"><span aria-hidden="true">⏳</span> Waiting for the customer to approve this article</div>
+                        }
+                      } @else if (u.review_status === 'approved') {
+                        <div class="review-line approved"><span aria-hidden="true">✓</span> Approved by the customer</div>
                       }
-                      @if (u.return_status === 'none') {
-                        <span class="hint">No return was requested.</span>
-                      } @else if (u.return_status === 'requested') {
-                        <div class="ret-flow">
-                          <span><b>Return to {{ returnWhere(u.return_to) }}</b></span>
-                          @if (u.return_shipping; as rs) {
-                            <span class="ret-ship"><b>Return to:</b> {{ rs.name }}@if (rs.phone) { · {{ rs.phone }} }<br />{{ rs.address }}, {{ rs.city }}@if (rs.country) { , {{ rs.country }} }</span>
-                          }
-                          @if (u.return_shipment; as sh) {
-                            <div class="ship-line booked">
-                              @if (tab() === 'ready_return') {
-                                <input type="checkbox" class="pick" [checked]="isPicked(sh.id)" [disabled]="!canPick(sh) && !isPicked(sh.id)" (change)="togglePick(sh.id)" [attr.aria-label]="'Select ' + (u.code || u.unit_title) + ' for the loadsheet'" />
+                      @if (u.hold_resolved_at) {
+                        <div class="review-line approved resolved">
+                          <span aria-hidden="true">✓</span> Hold resolved · corrected article received @if (u.hold_received_at) { {{ u.hold_received_at | day }} } · approved by the customer {{ u.hold_resolved_at | day }}
+                        </div>
+                      } @else if (u.return_status === 'held' && u.review_status === 'pending') {
+                        <div class="review-line pending"><span aria-hidden="true">⏳</span> Corrected article received {{ u.hold_received_at | timeAgo }} · the hold resolves when the customer approves it</div>
+                      }
+                      @if (u.review_status === 'rejected') {
+                        <div class="issue-box review-box" role="note">
+                          <div><b>Rejected by the customer</b> · {{ u.review_note }}</div>
+                          @if (u.review_media?.length) {
+                            <div class="thumbs">
+                              @for (m of u.review_media; track m.url) {
+                                <a [href]="m.url" target="_blank" rel="noopener" class="thumb" aria-label="Open the customer's photo"><img [src]="m.url" alt="Customer photo" loading="lazy" /></a>
                               }
-                              <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
-                              <span class="ship-status">{{ sh.status_label }}</span>
                             </div>
-                            <button *can="'receiving.returns'" type="button" class="btn btn-sm btn-ghost" (click)="cancelBooking(u)">Cancel booking</button>
-                          } @else if (u.return_order; as ro) {
-                            <div class="ship-line booked">
-                              <span><b>In the Warehouse</b> · {{ ro.reference }} · {{ ro.destination === 'admin' ? 'sent to the admin warehouse' : 'returning directly to the customer' }}</span>
-                              <span class="ship-status">{{ ro.status_label }}</span>
-                            </div>
-                            <a class="btn btn-sm btn-ghost" [routerLink]="['/partner/warehouse']" [queryParams]="{ search: ro.reference }">Open in Warehouse</a>
-                          } @else {
-                            <span class="hint">Send this parcel to the Warehouse. It then leaves this tab and continues there.</span>
-                            <span *can="'receiving.returns'" class="ship-actions">
-                              @if (u.return_to === 'customer') {
-                                <button type="button" class="btn btn-sm btn-primary" [disabled]="routing() === u.id" (click)="routeReturn(u, 'customer')">Send to Warehouse</button>
+                          }
+                          @if (u.return_status === 'none') {
+                            <span class="hint">No return was requested.</span>
+                          } @else if (u.return_status === 'requested') {
+                            <div class="ret-flow">
+                              <span><b>Return to {{ returnWhere(u.return_to) }}</b></span>
+                              @if (u.return_shipping; as rs) {
+                                <span class="ret-ship"><b>Return to:</b> {{ rs.name }}@if (rs.phone) { · {{ rs.phone }} }<br />{{ rs.address }}, {{ rs.city }}@if (rs.country) { , {{ rs.country }} }</span>
+                              }
+                              @if (u.return_shipment; as sh) {
+                                <div class="ship-line booked">
+                                  @if (tab() === 'ready_return') {
+                                    <input type="checkbox" class="pick" [checked]="isPicked(sh.id)" [disabled]="!canPick(sh) && !isPicked(sh.id)" (change)="togglePick(sh.id)" [attr.aria-label]="'Select ' + (u.code || u.unit_title) + ' for the loadsheet'" />
+                                  }
+                                  <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
+                                  <span class="ship-status">{{ sh.status_label }}</span>
+                                </div>
+                                <button *can="'receiving.returns'" type="button" class="btn btn-sm btn-ghost" (click)="cancelBooking(u)">Cancel booking</button>
+                              } @else if (u.return_order; as ro) {
+                                <div class="ship-line booked">
+                                  <span><b>In the Warehouse</b> · {{ ro.reference }} · {{ ro.destination === 'admin' ? 'sent to the admin warehouse' : 'returning directly to the customer' }}</span>
+                                  <span class="ship-status">{{ ro.status_label }}</span>
+                                </div>
+                                <a class="btn btn-sm btn-ghost" [routerLink]="['/partner/warehouse']" [queryParams]="{ search: ro.reference }">Open in Warehouse</a>
                               } @else {
-                                <span class="hint">This parcel goes back to the brand, not to the customer.</span>
+                                <span class="hint">Send this parcel to the Warehouse. It then leaves this tab and continues there.</span>
+                                <span *can="'receiving.returns'" class="ship-actions">
+                                  @if (u.return_to === 'customer') {
+                                    <button type="button" class="btn btn-sm btn-primary" [disabled]="routing() === u.id" (click)="routeReturn(u, 'customer')">Send to Warehouse</button>
+                                  } @else {
+                                    <span class="hint">This parcel goes back to the brand, not to the customer.</span>
+                                  }
+                                </span>
                               }
-                            </span>
-                          }
-                        </div>
-                      } @else if (u.return_status === 'held') {
-                        <div class="review-sent hold">
-                          <span><b>On hold</b> by the customer@if (u.review_note || u.return_note) { · {{ u.return_note || u.review_note }} }</span>
-                          @if (u.hold_received_at) {
-                            <span class="hint">✓ Corrected article received {{ u.hold_received_at | timeAgo }}. Waiting for the customer to approve it. The hold resolves after that.</span>
-                          } @else {
-                            <span class="hint">Keep the article safe until the corrected one arrives.</span>
-                            <button *can="'receiving.returns'" type="button" class="btn btn-sm btn-primary" (click)="openCorrected(o, u)">Receive Corrected Article</button>
-                          }
-                        </div>
-                      } @else if (u.return_status === 'sent_back' || u.return_status === 'returned') {
-                        <div class="ret-flow" [class.is-done]="u.return_status === 'returned'">
-                          <span><b>{{ u.return_status === 'returned' ? 'Returned' : 'Handed over to the courier' }}</b> · {{ returnWhere(u.return_to) }}</span>
-                          @if (u.return_shipment; as sh) {
-                            <div class="ship-line">
-                              <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
-                              <span class="ship-status">{{ sh.status_label }}</span>
                             </div>
-                            <span class="small muted">
-                              @if (sh.handed_over_at) { Handed over {{ sh.handed_over_at | day }} }
-                              @if (sh.delivered_at) { · Delivered {{ sh.delivered_at | day }} }
-                            </span>
-                            @if (sh.events.length) {
-                              <ul class="ship-events">
-                                @for (ev of sh.events; track $index) {
-                                  <li><span class="ev-s">{{ ev.status === 'booked' ? 'CN booked' : ev.status === 'handed_over' ? 'Handed over' : ev.status === 'in_transit' ? 'In transit' : ev.status === 'delivered' ? 'Delivered' : ev.status }}</span>
-                                    <span class="muted">{{ ev.occurred_at | day }} · {{ ev.source === 'webhook' ? 'courier' : ev.source === 'manual' ? 'entered by staff' : 'system' }}@if (ev.note) { · {{ ev.note }} }</span></li>
+                          } @else if (u.return_status === 'held') {
+                            <div class="review-sent hold">
+                              <span><b>On hold</b> by the customer@if (u.review_note || u.return_note) { · {{ u.return_note || u.review_note }} }</span>
+                              @if (u.hold_received_at) {
+                                <span class="hint">✓ Corrected article received {{ u.hold_received_at | timeAgo }}. Waiting for the customer to approve it. The hold resolves after that.</span>
+                              } @else {
+                                <span class="hint">Keep the article safe until the corrected one arrives.</span>
+                                <button *can="'receiving.returns'" type="button" class="btn btn-sm btn-primary" (click)="openCorrected(o, u)">Receive Corrected Article</button>
+                              }
+                            </div>
+                          } @else if (u.return_status === 'sent_back' || u.return_status === 'returned') {
+                            <div class="ret-flow" [class.is-done]="u.return_status === 'returned'">
+                              <span><b>{{ u.return_status === 'returned' ? 'Returned' : 'Handed over to the courier' }}</b> · {{ returnWhere(u.return_to) }}</span>
+                              @if (u.return_shipment; as sh) {
+                                <div class="ship-line">
+                                  <span><b>{{ sh.courier_name }}</b> · CN <b class="mono">{{ sh.cn_number }}</b></span>
+                                  <span class="ship-status">{{ sh.status_label }}</span>
+                                </div>
+                                <span class="small muted">
+                                  @if (sh.handed_over_at) { Handed over {{ sh.handed_over_at | day }} }
+                                  @if (sh.delivered_at) { · Delivered {{ sh.delivered_at | day }} }
+                                </span>
+                                @if (sh.events.length) {
+                                  <ul class="ship-events">
+                                    @for (ev of sh.events; track $index) {
+                                      <li><span class="ev-s">{{ ev.status === 'booked' ? 'CN booked' : ev.status === 'handed_over' ? 'Handed over' : ev.status === 'in_transit' ? 'In transit' : ev.status === 'delivered' ? 'Delivered' : ev.status }}</span>
+                                        <span class="muted">{{ ev.occurred_at | day }} · {{ ev.source === 'webhook' ? 'courier' : ev.source === 'manual' ? 'entered by staff' : 'system' }}@if (ev.note) { · {{ ev.note }} }</span></li>
+                                    }
+                                  </ul>
                                 }
-                              </ul>
-                            }
-                            @if (u.return_status === 'sent_back') {
-                              <span *can="'receiving.returns'" class="ship-actions">
-                                @if (sh.courier_name.toLowerCase() === 'postex') { <button type="button" class="btn btn-sm" (click)="refreshTracking(u)">Refresh PostEx tracking</button> }
-                                @if (sh.status === 'handed_over') { <button type="button" class="btn btn-sm" (click)="openTrack(o, u, 'in_transit')">Mark in transit</button> }
-                                <button type="button" class="btn btn-sm btn-primary" (click)="openTrack(o, u, 'delivered')">Courier delivered it</button>
-                              </span>
-                            }
-                          } @else if (u.return_courier || u.return_tracking) {
-                            <span class="small">{{ u.return_courier }}@if (u.return_courier && u.return_tracking) { · } @if (u.return_tracking) { Tracking {{ u.return_tracking }} }</span>
+                                @if (u.return_status === 'sent_back') {
+                                  <span *can="'receiving.returns'" class="ship-actions">
+                                    @if (sh.courier_name.toLowerCase() === 'postex') { <button type="button" class="btn btn-sm" (click)="refreshTracking(u)">Refresh PostEx tracking</button> }
+                                    @if (sh.status === 'handed_over') { <button type="button" class="btn btn-sm" (click)="openTrack(o, u, 'in_transit')">Mark in transit</button> }
+                                    <button type="button" class="btn btn-sm btn-primary" (click)="openTrack(o, u, 'delivered')">Courier delivered it</button>
+                                  </span>
+                                }
+                              } @else if (u.return_courier || u.return_tracking) {
+                                <span class="small">{{ u.return_courier }}@if (u.return_courier && u.return_tracking) { · } @if (u.return_tracking) { Tracking {{ u.return_tracking }} }</span>
+                              }
+                              @if (u.return_status === 'sent_back') { <span class="hint">When the corrected article arrives, press “Receive corrected article”; the customer then reviews it again.</span> }
+                            </div>
                           }
-                          @if (u.return_status === 'sent_back') { <span class="hint">When the corrected article arrives, press “Receive corrected article”; the customer then reviews it again.</span> }
+                        </div>
+                      } @else if (u.return_status === 'sent_back') {
+                        <div class="issue-box review-box" role="note">
+                          <div><b>Sent back to {{ returnWhere(u.return_to) }}</b>@if (u.return_courier || u.return_tracking) { · {{ u.return_courier }} {{ u.return_tracking }} }</div>
+                          <span class="hint">When the corrected article arrives, press “Receive parcel”. The customer then reviews it again.</span>
                         </div>
                       }
-                    </div>
-                  } @else if (u.return_status === 'sent_back') {
-                    <div class="issue-box review-box" role="note">
-                      <div><b>Sent back to {{ returnWhere(u.return_to) }}</b>@if (u.return_courier || u.return_tracking) { · {{ u.return_courier }} {{ u.return_tracking }} }</div>
-                      <span class="hint">When the corrected article arrives, press “Receive parcel”. The customer then reviews it again.</span>
-                    </div>
-                  }
-                  @if (u.receive_media?.length) {
-                    <div class="thumbs recv-thumbs">
-                      @for (m of u.receive_media; track m.url) {
-                        <a [href]="m.url" target="_blank" rel="noopener" class="thumb" [attr.aria-label]="'Open received ' + (m.type === 'video' ? 'video' : 'photo')">
-                          @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Received photo" loading="lazy" /> }
-                        </a>
-                      }
-                    </div>
-                  }
-                  @if (u.status === 'issue') {
-                    <div class="issue-box" role="note">
-                      <div><b>{{ issueLabel(u.issue_type) }}</b>@if (u.issue_note) { · {{ u.issue_note }} }</div>
-                      <app-voice-note-play [note]="u.issue_audio" label="Issue, voice" />
-                      @if (u.issue_media?.length) {
-                        <div class="thumbs">
-                          @for (m of u.issue_media; track m.url) {
-                            <a [href]="m.url" target="_blank" rel="noopener" class="thumb" [title]="m.name || 'Open'" [attr.aria-label]="'Open issue ' + (m.type === 'video' ? 'video' : 'photo') + ' ' + ($index + 1)">
-                              @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Issue photo" loading="lazy" /> }
+                      @if (u.receive_media?.length) {
+                        <div class="thumbs recv-thumbs">
+                          @for (m of u.receive_media; track m.url) {
+                            <a [href]="m.url" target="_blank" rel="noopener" class="thumb" [attr.aria-label]="'Open received ' + (m.type === 'video' ? 'video' : 'photo')">
+                              @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Received photo" loading="lazy" /> }
                             </a>
                           }
                         </div>
                       }
-                      <span *can="'receiving.receive'" class="hint">Once sorted, use “Receive parcel”.</span>
-                    </div>
+                      @if (u.status === 'issue') {
+                        <div class="issue-box" role="note">
+                          <div><b>{{ issueLabel(u.issue_type) }}</b>@if (u.issue_note) { · {{ u.issue_note }} }</div>
+                          <app-voice-note-play [note]="u.issue_audio" label="Issue, voice" />
+                          @if (u.issue_media?.length) {
+                            <div class="thumbs">
+                              @for (m of u.issue_media; track m.url) {
+                                <a [href]="m.url" target="_blank" rel="noopener" class="thumb" [title]="m.name || 'Open'" [attr.aria-label]="'Open issue ' + (m.type === 'video' ? 'video' : 'photo') + ' ' + ($index + 1)">
+                                  @if (m.type === 'video') { <span class="video">▶ Video</span> } @else { <img [src]="m.url" alt="Issue photo" loading="lazy" /> }
+                                </a>
+                              }
+                            </div>
+                          }
+                          <span *can="'receiving.receive'" class="hint">Once sorted, use “Receive parcel”.</span>
+                        </div>
+                      }
+                    </li>
                   }
-                </li>
-              }
-            </ul>
+                </ul>
 
-            <div class="order-foot">
-              <div class="progress">
-                <div class="progress-track" aria-hidden="true">
-                  <span class="seg ok" [style.width.%]="(receivedCount(o) / (o.units.length || 1)) * 100"></span>
-                  <span class="seg bad" [style.width.%]="(issueCount(o) / (o.units.length || 1)) * 100"></span>
+                <div class="order-foot">
+                  <div class="progress">
+                    <div class="progress-track" aria-hidden="true">
+                      <span class="seg ok" [style.width.%]="(receivedCount(o) / (o.units.length || 1)) * 100"></span>
+                      <span class="seg bad" [style.width.%]="(issueCount(o) / (o.units.length || 1)) * 100"></span>
+                    </div>
+                    <span class="progress-text">
+                      <b>{{ receivedCount(o) }} of {{ o.units.length }}</b> received
+                      @if (issueCount(o)) { · <span class="bad-text">{{ issueCount(o) }} issue</span> }
+                      @if (pendingCount(o)) { · {{ pendingCount(o) }} to check }
+                    </span>
+                  </div>
+                  @if (o.group === 'hold' || o.group === 'resolved') {
+                    <span class="muted small return-wait">{{ o.group === 'hold' ? 'Use “Receive Corrected Article” on the article when it arrives.' : 'This hold is resolved. The article continues with the normal order.' }}</span>
+                  } @else if (o.group === 'return') {
+                    <span class="muted small return-wait">Returned articles stay here until the return is resolved.</span>
+                  } @else if (returnWaiting(o)) {
+                    <span class="muted small return-wait">Send the rejected article back first. Receiving opens again after that.</span>
+                  } @else if (pendingCount(o) > 0) {
+                    @if (o.cod?.receive_blocked) {
+                      <span class="pay-block" role="status">
+                        <b>Payment is required before receiving this order.</b>
+                        <span>{{ payStateLabel(o) }}. The Received button opens when the customer's payment is confirmed.</span>
+                      </span>
+                    }
+                    <button *can="'receiving.receive'" type="button" class="btn btn-primary btn-floor all-btn" [disabled]="!!o.cod?.receive_blocked" [attr.title]="o.cod?.receive_blocked ? 'Payment is required before receiving this order.' : null" (click)="openReceive(o)">
+                      <span aria-hidden="true">📦</span>
+                      <span [class.urdu]="lang.isUrdu()">{{ sentBackCount(o) ? 'Receive corrected article' : lang.t('Receive parcel', 'پارسل وصول کریں') }}</span>
+                      @if (pendingCount(o) > 1) { <span class="all-count">{{ pendingCount(o) }}</span> }
+                    </button>
+                  }
                 </div>
-                <span class="progress-text">
-                  <b>{{ receivedCount(o) }} of {{ o.units.length }}</b> received
-                  @if (issueCount(o)) { · <span class="bad-text">{{ issueCount(o) }} issue</span> }
-                  @if (pendingCount(o)) { · {{ pendingCount(o) }} to check }
-                </span>
-              </div>
-              @if (o.group === 'hold' || o.group === 'resolved') {
-                <span class="muted small return-wait">{{ o.group === 'hold' ? 'Use “Receive Corrected Article” on the article when it arrives.' : 'This hold is resolved. The article continues with the normal order.' }}</span>
-              } @else if (o.group === 'return') {
-                <span class="muted small return-wait">Returned articles stay here until the return is resolved.</span>
-              } @else if (returnWaiting(o)) {
-                <span class="muted small return-wait">Send the rejected article back first. Receiving opens again after that.</span>
-              } @else if (pendingCount(o) > 0) {
-                @if (o.cod?.receive_blocked) {
-                  <span class="pay-block" role="status">
-                    <b>Payment is required before receiving this order.</b>
-                    <span>{{ payStateLabel(o) }}. The Received button opens when the customer's payment is confirmed.</span>
-                  </span>
+                        </article>
+                      </td>
+                    </tr>
+                  }
                 }
-                <button *can="'receiving.receive'" type="button" class="btn btn-primary btn-floor all-btn" [disabled]="!!o.cod?.receive_blocked" [attr.title]="o.cod?.receive_blocked ? 'Payment is required before receiving this order.' : null" (click)="openReceive(o)">
-                  <span aria-hidden="true">📦</span>
-                  <span [class.urdu]="lang.isUrdu()">{{ sentBackCount(o) ? 'Receive corrected article' : lang.t('Receive parcel', 'پارسل وصول کریں') }}</span>
-                  @if (pendingCount(o) > 1) { <span class="all-count">{{ pendingCount(o) }}</span> }
-                </button>
+              </tbody>
+            </table>
+          </div>
+          <div #sentinel class="sentinel" aria-hidden="true"></div>
+          <div class="list-foot" role="status">
+            @if (loadingMore()) {
+              <span class="muted"><ion-spinner name="crescent" /> Loading more…</span>
+            } @else if (meta(); as m) {
+              @if (m.hasMore) {
+                <button type="button" class="btn btn-sm" (click)="loadMore()">Load more</button>
+              } @else {
+                <span class="muted small">{{ m.total }} {{ m.total === 1 ? 'parcel' : 'parcels' }} · that is all</span>
               }
-            </div>
-          </article>
-        }
-        <div class="card pager-card"><app-pagination [meta]="meta()" (pageChange)="goToPage($event)" /></div>
+            }
+          </div>
+        </div>
       }
     </section>
 

@@ -1,10 +1,15 @@
 import { DatePipe, NgClass } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { distinctUntilChanged, map } from 'rxjs';
 import { IonSpinner } from '@ionic/angular';
 import { ApiService, apiErrorMessage } from '../../../core/services/api.service';
 import { UiService } from '../../../core/services/ui.service';
+import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
+import { PaginationComponent } from '../../../shared/components/pagination.component';
+import { SearchInputComponent } from '../../../shared/components/search-input.component';
+import { PAGE_SIZES, PagedList, SKELETON_ROWS, intParam, setQuery } from '../admin-list';
 
 interface Store {
   id: string;
@@ -35,6 +40,13 @@ interface QueueRow {
   needs_attention: boolean;
 }
 
+interface OrdersQuery {
+  search: string;
+  store: string;
+  page: number;
+  limit: number;
+}
+
 /**
  * Brand stores connected through the Stitch&Ship Shopify app, and the orders that came from them. The "needs attention" list is the
  * work for a person: a failed order, a shipment held because the customer changed the address, a customer who was not emailed.
@@ -43,7 +55,7 @@ interface QueueRow {
   selector: 'app-admin-shopify',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, IonSpinner, DatePipe, NgClass],
+  imports: [FormsModule, RouterLink, IonSpinner, DatePipe, NgClass, SearchInputComponent, PaginationComponent, EmptyStateComponent],
   template: `
     <div class="page">
       <header class="page-header">
@@ -212,50 +224,78 @@ interface QueueRow {
         </section>
 
         <section class="panel flush">
-          <h2 class="panel-title pad">Recent Shopify orders</h2>
-          @if (!queue().length) {
-            <p class="muted pad">No Shopify order yet.</p>
-          } @else {
-            <div class="table-scroll">
-              <table class="data-table">
-                <caption class="sr-only">Orders that came from Shopify stores</caption>
-                <thead>
-                  <tr>
-                    <th>Shopify order</th>
-                    <th>Store</th>
-                    <th>Customer</th>
-                    <th>Received</th>
-                    <th>Progress</th>
-                    <th>Status</th>
-                    <th>Stitch&amp;Ship order</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (r of queue(); track r.id) {
-                    <tr [class.attn-row]="r.needs_attention">
-                      <td><span class="cell-main">{{ r.shopify_order_name || r.shopify_order_id }}</span></td>
-                      <td>{{ r.store?.shop_domain }}</td>
-                      <td>{{ r.customer_email || '—' }}</td>
-                      <td class="nowrap">{{ r.created_at | date: 'MMM d, h:mm a' }}</td>
-                      <td>
-                        <ol class="steps" aria-label="Progress">
-                          @for (st of steps(r); track st.label) { <li [attr.data-s]="st.state" [attr.title]="st.label">{{ st.label }}</li> }
-                        </ol>
-                      </td>
-                      <td>
-                        <span class="badge" [ngClass]="badge(r).tone">{{ badge(r).label }}</span>
-                        @if (r.last_error) { <span class="cell-sub err">{{ r.last_error }}</span> }
-                      </td>
-                      <td>
-                        @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">{{ r.order?.reference }}</a> }
-                        @else { <span class="muted">—</span> }
-                      </td>
+          <h2 class="panel-title pad">Shopify orders</h2>
+          <div class="toolbar-row">
+            <app-search-input placeholder="Search order number, customer email, store, SA number…" [value]="ordersQuery().search" (search)="setOrders({ search: $event })" />
+            <label class="filter">Store
+              <select class="select" aria-label="Filter by store" (change)="setOrders({ store: $any($event.target).value })">
+                <option value="" [selected]="!ordersQuery().store">All stores</option>
+                @for (st of stores(); track st.id) { <option [value]="st.id" [selected]="st.id === ordersQuery().store">{{ st.shop_domain }}</option> }
+              </select>
+            </label>
+            <label class="filter">Rows
+              <select class="select" aria-label="Rows per page" (change)="setOrders({ limit: $any($event.target).value })">
+                @for (n of pageSizes; track n) { <option [value]="n" [selected]="n === ordersQuery().limit">{{ n }}</option> }
+              </select>
+            </label>
+            @if (orders.meta(); as m) { <span class="result-count">{{ m.total }} {{ m.total === 1 ? 'order' : 'orders' }}</span> }
+          </div>
+
+          <div class="orders-card" [class.refreshing]="orders.refreshing()">
+            @if (orders.error()) {
+              <app-empty-state kind="error" [message]="orders.error()" (retry)="orders.reload()" />
+            } @else {
+              <div class="table-scroll">
+                <table class="data-table orders-table">
+                  <caption class="sr-only">Orders that came from Shopify stores</caption>
+                  <thead>
+                    <tr>
+                      <th>Shopify order</th>
+                      <th>Store</th>
+                      <th>Customer</th>
+                      <th>Received</th>
+                      <th>Progress</th>
+                      <th>Status</th>
+                      <th>Stitch&amp;Ship order</th>
                     </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
+                  </thead>
+                  <tbody>
+                    @if (orders.loading()) {
+                      @for (i of skeleton; track i) { <tr class="sk">@for (c of [1, 2, 3, 4, 5, 6, 7]; track c) { <td><span class="skeleton"></span></td> }</tr> }
+                    } @else {
+                      @for (r of orders.items(); track r.id) {
+                        <tr [class.attn-row]="r.needs_attention">
+                          <td data-label="Shopify order"><span class="cell-main">{{ r.shopify_order_name || r.shopify_order_id }}</span></td>
+                          <td data-label="Store" class="store-cell">{{ r.store?.shop_domain }}</td>
+                          <td data-label="Customer" class="email-cell">{{ r.customer_email || '—' }}</td>
+                          <td data-label="Received" class="nowrap">{{ r.created_at | date: 'MMM d, h:mm a' }}</td>
+                          <td data-label="Progress">
+                            <ol class="steps" aria-label="Progress">
+                              @for (st of steps(r); track st.label) { <li [attr.data-s]="st.state" [attr.title]="st.label">{{ st.short }}</li> }
+                            </ol>
+                          </td>
+                          <td data-label="Status">
+                            <span class="badge" [ngClass]="badge(r).tone">{{ badge(r).label }}</span>
+                            @if (r.last_error) { <span class="cell-sub err">{{ r.last_error }}</span> }
+                          </td>
+                          <td data-label="Stitch&amp;Ship order">
+                            @if (r.order?.reference) { <a class="btn btn-sm" [routerLink]="['/admin/orders']" [queryParams]="{ ref: r.order?.reference }">{{ r.order?.reference }}</a> }
+                            @else { <span class="muted">—</span> }
+                          </td>
+                        </tr>
+                      } @empty {
+                        <tr class="empty-row"><td colspan="7">
+                          <app-empty-state [title]="ordersFiltered() ? 'No matching orders' : 'No Shopify order yet'"
+                            [message]="ordersFiltered() ? 'Try a different search or store.' : 'Orders appear here when a customer buys with Stitch&Ship.'" />
+                        </td></tr>
+                      }
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <app-pagination [meta]="orders.meta()" (pageChange)="setOrders({ page: $event })" />
+            }
+          </div>
         </section>
       }
     </div>
@@ -325,11 +365,51 @@ interface QueueRow {
     .check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.4; }
     .check input { margin-top: 2px; }
     .nowrap { white-space: nowrap; }
+    .toolbar-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 0 22px 14px; }
+    .toolbar-row .filter { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--c-muted); }
+    .toolbar-row .select { width: auto; min-height: 40px; max-width: 240px; }
+    .result-count { font-size: 12.5px; color: var(--c-muted); margin-left: auto; }
+    .orders-card { border-top: 1px solid var(--c-line); transition: opacity 0.15s; }
+    .orders-card.refreshing { opacity: 0.6; }
+    .orders-table td { vertical-align: middle; }
+    .orders-table .store-cell, .orders-table .email-cell { overflow-wrap: anywhere; max-width: 240px; }
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; flex-wrap: wrap; }
+    .steps li { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.6; background: var(--c-bg-soft); color: var(--c-muted); border: 1px solid var(--c-line); white-space: nowrap; }
+    .steps li[data-s='done'] { background: #e3f1ea; color: var(--c-green); border-color: transparent; }
+    .steps li[data-s='bad'] { background: var(--c-red-soft); color: var(--c-red); border-color: transparent; }
+    @media (max-width: 860px) {
+      .toolbar-row { padding: 0 14px 12px; }
+      .toolbar-row app-search-input { flex: 1 1 100%; max-width: none; }
+      .toolbar-row .filter { flex: 1 1 140px; }
+      .toolbar-row .select { flex: 1; max-width: none; }
+      .result-count { margin-left: 0; }
+      /* a row becomes a card: each cell shows its own label */
+      .orders-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .orders-table, .orders-table tbody { display: block; }
+      .orders-table tr { display: block; padding: 12px 14px; border-top: 1px solid var(--c-line); }
+      .orders-table tr.attn-row { border-left: 3px solid var(--c-red); }
+      .orders-table td { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 5px 0; border: 0; text-align: right; }
+      .orders-table td::before { content: attr(data-label); flex: none; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--c-muted); text-align: left; padding-top: 2px; }
+      .orders-table td .steps { justify-content: flex-end; }
+      .orders-table .store-cell, .orders-table .email-cell { max-width: none; }
+      .orders-table tr.empty-row td { display: block; text-align: center; }
+      .orders-table tr.empty-row td::before { content: none; }
+      .orders-table tr.sk td::before { content: none; }
+    }
   `,
 })
 export class AdminShopifyPage implements OnInit {
   private api = inject(ApiService);
   private ui = inject(UiService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
+
+  readonly pageSizes = PAGE_SIZES;
+  readonly skeleton = SKELETON_ROWS;
+  /** The orders table: one page at a time, searched on the server. The "needs attention" list and the numbers above use `queue`. */
+  readonly orders = new PagedList<QueueRow>();
+  readonly ordersQuery = signal<OrdersQuery>({ search: '', store: '', page: 1, limit: 15 });
 
   readonly loading = signal(true);
   readonly busy = signal(false);
@@ -359,20 +439,43 @@ export class AdminShopifyPage implements OnInit {
     return { label: 'Received', tone: '' };
   }
 
-  steps(r: QueueRow): { label: string; state: 'done' | 'todo' | 'bad' }[] {
+  steps(r: QueueRow): { label: string; short: string; state: 'done' | 'todo' | 'bad' }[] {
     return [
-      { label: 'Order received', state: 'done' },
-      { label: r.address_state === 'address_mismatch' ? 'Wrong address' : 'Address checked', state: r.address_state === 'address_ok' ? 'done' : r.address_state === 'address_mismatch' ? 'bad' : 'todo' },
-      { label: 'Draft order', state: r.order_id ? 'done' : r.state === 'failed' ? 'bad' : 'todo' },
-      { label: 'Customer emailed', state: r.notified_at ? 'done' : 'todo' },
+      { label: 'Order received', short: 'Received', state: 'done' },
+      { label: r.address_state === 'address_mismatch' ? 'Wrong address' : 'Address checked', short: r.address_state === 'address_mismatch' ? 'Wrong address' : 'Address', state: r.address_state === 'address_ok' ? 'done' : r.address_state === 'address_mismatch' ? 'bad' : 'todo' },
+      { label: 'Draft order', short: 'Draft', state: r.order_id ? 'done' : r.state === 'failed' ? 'bad' : 'todo' },
+      { label: 'Customer emailed', short: 'Emailed', state: r.notified_at ? 'done' : 'todo' },
     ];
   }
 
   ngOnInit(): void {
+    const q$ = this.route.queryParamMap.pipe(
+      map((p): OrdersQuery => ({ search: p.get('search') || '', store: p.get('store') || '', page: intParam(p, 'page', 1), limit: intParam(p, 'limit', 15, PAGE_SIZES) })),
+      distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))
+    );
+    this.orders.connect(
+      q$,
+      (q) => {
+        this.ordersQuery.set(q);
+        return this.api.list<QueueRow>('/admin/shopify/orders', { ...q });
+      },
+      this.destroyRef
+    );
     this.reload();
   }
 
+  setOrders(patch: Partial<Record<keyof OrdersQuery, string | number>>): void {
+    const reset = 'page' in patch ? {} : { page: 1 };
+    setQuery(this.router, this.route, { ...patch, ...reset });
+  }
+
+  ordersFiltered(): boolean {
+    const q = this.ordersQuery();
+    return !!(q.search || q.store);
+  }
+
   reload(): void {
+    this.orders.reload();
     let pending = 2;
     const done = () => {
       if (--pending === 0) this.loading.set(false);

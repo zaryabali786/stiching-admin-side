@@ -65,18 +65,16 @@
   padding: 4px 8px 18px;
   min-height: 58px;
 
+  /* the Stitch&Ship mark (assets/logo.png), on a light tile so its maroon shows on the dark sidebar too */
   .brand-mark {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    box-sizing: border-box;
     border-radius: 10px;
-    background: linear-gradient(140deg, #D9B474, #B8893C);
-    color: #1A1610;
-    font-family: var(--font-serif);
-    font-size: 19px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: #fff;
+    object-fit: contain;
+    display: block;
     flex-shrink: 0;
   }
 

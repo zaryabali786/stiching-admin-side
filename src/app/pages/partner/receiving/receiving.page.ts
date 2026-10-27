@@ -1,15 +1,16 @@
+import { NgClass } from '@angular/common';
 import { CanDirective } from '../../../shared/can.directive';
 import { VoiceNote, voicePayload } from '../../../core/models/chat.models';
 import { VoiceNoteFieldComponent } from '../../../shared/components/voice-note-field/voice-note-field.component';
 import { VoiceNotePlayComponent } from '../../../shared/components/voice-note-field/voice-note-play.component';
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { CourierRef, CourierSelectComponent } from '../../../shared/components/courier-select/courier-select.component';
 import { ChatSocketService } from '../../../core/services/chat-socket.service';
-import { Observable, Subject, firstValueFrom, forkJoin, catchError, debounceTime, combineLatest, map, of, startWith, switchMap, tap } from 'rxjs';
+import { Observable, Subject, firstValueFrom, forkJoin, catchError, debounceTime, distinctUntilChanged, map, merge, of, startWith, switchMap, tap } from 'rxjs';
 import { PageMeta } from '../../../core/models/api.models';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { BadgeService } from '../../../core/services/badge.service';
@@ -32,7 +33,6 @@ import { UiService } from '../../../core/services/ui.service';
 import { DayPipe, TimeAgoPipe } from '../../../shared/pipes';
 import { CodPaymentPanelComponent } from '../../../shared/components/cod-payment-panel/cod-payment-panel.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
-import { PaginationComponent } from '../../../shared/components/pagination.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
 import { QrCodeComponent } from '../../../shared/components/qr-code.component';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge.component';
@@ -49,6 +49,10 @@ const TABS: { value: ReceivingTab; en: string; ur: string }[] = [
 ];
 
 const MAX_MEDIA = 4;
+/** Parcels fetched per scroll step. */
+const PAGE_SIZE = 20;
+/** After an action the loaded part of the list is fetched again, at most this many steps. */
+const MAX_REFRESH_PAGES = 10;
 
 interface RcvUnit {
   unit: ReceivingUnit;
@@ -73,7 +77,7 @@ interface IssueForm {
 @Component({
   selector: 'app-partner-receiving',
   standalone: true,
-  imports: [RouterLink, CanDirective, CodPaymentPanelComponent, CourierSelectComponent, FormsModule, IonSpinner, DayPipe, TimeAgoPipe, QrCodeComponent, EmptyStateComponent, PaginationComponent, SearchInputComponent, StatusBadgeComponent, VoiceNoteFieldComponent, VoiceNotePlayComponent],
+  imports: [NgClass, RouterLink, CanDirective, CodPaymentPanelComponent, CourierSelectComponent, FormsModule, IonSpinner, DayPipe, TimeAgoPipe, QrCodeComponent, EmptyStateComponent, SearchInputComponent, StatusBadgeComponent, VoiceNoteFieldComponent, VoiceNotePlayComponent],
   templateUrl: './receiving.page.html',
   styleUrls: ['./receiving.page.scss'],
 })
@@ -87,6 +91,20 @@ export class PartnerReceivingPage implements OnInit {
   private destroyRef = inject(DestroyRef);
   private socket = inject(ChatSocketService);
 
+  constructor() {
+    effect(() => {
+      const el = this.sentinel()?.nativeElement;
+      this.observer?.disconnect();
+      this.observer = null;
+      if (!el || typeof IntersectionObserver === 'undefined') return;
+      this.observer = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) this.loadMore();
+      }, { rootMargin: '400px 0px' });
+      this.observer.observe(el);
+    });
+    this.destroyRef.onDestroy(() => this.observer?.disconnect());
+  }
+
   readonly tabs = TABS;
   readonly issueTypes = ISSUE_TYPES;
   readonly maxMedia = MAX_MEDIA;
@@ -94,7 +112,16 @@ export class PartnerReceivingPage implements OnInit {
   // List state (mirrors the URL)
   readonly tab = signal<ReceivingTab>('expected');
   readonly search = signal('');
-  readonly page = signal(1);
+  /** Infinite scroll: how many steps (pages) are loaded, and whether one more is being fetched. */
+  readonly loadingMore = signal(false);
+  private loaded = 1;
+  /** Bumped by every fresh fetch: an answer for an older one (another tab or search meanwhile) is dropped. */
+  private gen = 0;
+  /** The orders (by key) whose row is open. */
+  readonly expanded = signal<Set<string>>(new Set());
+  /** An empty element after the table: when it comes near the screen, the next step is fetched. */
+  private readonly sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
+  private observer: IntersectionObserver | null = null;
 
   readonly orders = signal<ReceivingOrder[]>([]);
   readonly meta = signal<(PageMeta & ReceivingMeta) | null>(null);
@@ -181,46 +208,55 @@ export class PartnerReceivingPage implements OnInit {
   ngOnInit(): void {
     // an article was approved, held, returned or its corrected copy was approved: the groups follow without a refresh
     this.socket.on('unit:update').pipe(debounceTime(400), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.refresh());
-    combineLatest([this.route.queryParamMap, this.reload$.pipe(startWith(undefined))])
+    const params$ = this.route.queryParamMap.pipe(
+      map((q) => {
+        const t = q.get('tab') as ReceivingTab;
+        return { tab: TABS.some((x) => x.value === t) ? t : ('expected' as ReceivingTab), search: (q.get('search') || '').trim() };
+      }),
+      distinctUntilChanged((x, y) => x.tab === y.tab && x.search === y.search)
+    );
+    merge(
+      params$.pipe(map((p) => ({ p, soft: false }))),
+      // an action was done (or "Try again"): the same list again; a soft one keeps what is on the screen until the answer comes
+      this.reload$.pipe(map(() => ({ p: { tab: this.tab(), search: this.search() }, soft: this.silent })))
+    )
       .pipe(
-        map(([q]) => {
-          const t = q.get('tab') as ReceivingTab;
-          return {
-            tab: TABS.some((x) => x.value === t) ? t : ('expected' as ReceivingTab),
-            search: (q.get('search') || '').trim(),
-            page: Math.max(1, parseInt(q.get('page') || '1', 10) || 1),
-          };
-        }),
-        tap((s) => {
-          this.tab.set(s.tab);
-          this.search.set(s.search);
-          this.page.set(s.page);
+        tap(({ p, soft }) => {
+          this.tab.set(p.tab);
+          this.search.set(p.search);
           this.error.set(null);
-          if (!this.silent) this.loading.set(true);
           this.silent = false;
+          if (!soft) {
+            this.loading.set(true);
+            this.loaded = 1;
+            this.expanded.set(new Set());
+          }
         }),
-        switchMap((s) =>
-          this.partner.receiving({ tab: s.tab, search: s.search, page: s.page, limit: 10 }).pipe(
-            map((r) => ({ r, err: null as string | null })),
-            catchError((e) => of({ r: null, err: apiErrorMessage(e) }))
-          )
-        ),
+        switchMap(({ p, soft }) => {
+          const steps = soft ? Math.min(Math.max(this.loaded, 1), MAX_REFRESH_PAGES) : 1;
+          const gen = ++this.gen;
+          return forkJoin(Array.from({ length: steps }, (_, i) => this.partner.receiving({ tab: p.tab, search: p.search, page: i + 1, limit: PAGE_SIZE }))).pipe(
+            map((rs) => ({ rs, err: null as string | null, gen })),
+            catchError((e) => of({ rs: null, err: apiErrorMessage(e), gen }))
+          );
+        }),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe(({ r, err }) => {
+      .subscribe(({ rs, err }) => {
         this.loading.set(false);
-        if (err || !r) {
+        if (err || !rs) {
           this.error.set(err);
           return;
         }
-        // The last item on a page was handled → step back a page.
-        if (!r.items.length && r.meta.page > 1) {
-          this.go({ page: r.meta.totalPages > 1 ? Math.min(r.meta.page - 1, r.meta.totalPages) : null });
-          return;
-        }
-        this.orders.set(r.items);
-        this.meta.set(r.meta);
-        this.lookElsewhere(r.items.length === 0 ? this.search() : '');
+        const items = this.unique(rs.flatMap((r) => r.items));
+        const last = rs[rs.length - 1];
+        this.orders.set(items);
+        this.loaded = rs.length;
+        this.meta.set({ ...rs[0].meta, page: last.meta.page, hasMore: last.meta.hasMore });
+        // one parcel found by its code: show it open, ready to receive
+        if (this.search() && items.length === 1) this.expanded.set(new Set([this.key(items[0])]));
+        this.lookElsewhere(items.length === 0 ? this.search() : '');
+        this.checkMore();
       });
 
     this.unmatchedReload$
@@ -259,12 +295,83 @@ export class PartnerReceivingPage implements OnInit {
     this.go({ search: text || null, page: null });
   }
 
-  goToPage(page: number): void {
-    this.go({ page: page > 1 ? page : null });
+  retry(): void {
+    this.silent = false;
+    this.reload$.next();
   }
 
-  retry(): void {
-    this.reload$.next();
+  // ───────────── Infinite scroll ─────────────
+
+  /** The next step of the list, when the end of the table comes near the screen. */
+  loadMore(): void {
+    const m = this.meta();
+    if (this.loading() || this.loadingMore() || !m?.hasMore) return;
+    const gen = this.gen;
+    const next = this.loaded + 1;
+    this.loadingMore.set(true);
+    this.partner.receiving({ tab: this.tab(), search: this.search(), page: next, limit: PAGE_SIZE }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (r) => {
+        this.loadingMore.set(false);
+        if (gen !== this.gen) return;
+        this.orders.update((rows) => this.unique([...rows, ...r.items]));
+        this.loaded = next;
+        this.meta.update((cur) => (cur ? { ...cur, page: r.meta.page, total: r.meta.total, hasMore: r.meta.hasMore } : cur));
+        this.checkMore();
+      },
+      error: (e) => {
+        this.loadingMore.set(false);
+        this.ui.error(e);
+      },
+    });
+  }
+
+  /** The new rows may still not fill the screen: the observer does not fire again then, so look once more. */
+  private checkMore(): void {
+    setTimeout(() => {
+      const el = this.sentinel()?.nativeElement;
+      if (el && el.getBoundingClientRect().top < window.innerHeight + 400) this.loadMore();
+    }, 60);
+  }
+
+  /** The same order can move between steps while the list is open: keep the first copy of each. */
+  private unique(rows: ReceivingOrder[]): ReceivingOrder[] {
+    const seen = new Set<string>();
+    return rows.filter((o) => {
+      const k = this.key(o);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
+  // ───────────── Rows (the table: a summary row that opens into the whole order) ─────────────
+
+  key(o: ReceivingOrder): string {
+    return o.row_key || o.id;
+  }
+
+  isOpen(o: ReceivingOrder): boolean {
+    return this.expanded().has(this.key(o));
+  }
+
+  toggle(o: ReceivingOrder): void {
+    const k = this.key(o);
+    this.expanded.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(k)) next.add(k);
+      return next;
+    });
+  }
+
+  /** How the order is paid, for the summary row. */
+  payBadge(o: ReceivingOrder): { label: string; tone: string } {
+    const c = o.cod;
+    if (c?.payment_type === 'COD') {
+      const label = c.payment_status === 'PAID' ? 'COD · PAID' : c.payment_status === 'PENDING' ? 'COD · Payment pending' : 'COD · NOT PAID';
+      return { label, tone: c.payment_status === 'PAID' ? 'green' : 'amber' };
+    }
+    if (c?.payment_type === 'NON_COD') return { label: 'Non-COD', tone: '' };
+    return { label: 'Not chosen yet', tone: '' };
   }
 
   private refresh(): void {

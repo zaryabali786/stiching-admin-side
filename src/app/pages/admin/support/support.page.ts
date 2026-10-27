@@ -9,6 +9,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { BadgeService } from '../../../core/services/badge.service';
 import { UiService } from '../../../core/services/ui.service';
 import { TimeAgoPipe } from '../../../shared/pipes';
+import { VoicePlayerComponent } from '../../../shared/components/chat-panel/voice-player.component';
 
 interface Conversation {
   customer_id: string;
@@ -25,7 +26,10 @@ interface SupportMsg {
   id: string;
   customer_id: string;
   sender_role: 'customer' | 'admin';
-  body: string;
+  /** 'voice' = a recording (see `audio`), no text. */
+  kind?: 'text' | 'voice';
+  body: string | null;
+  audio?: { url: string; duration: number | null; mime: string } | null;
   client_msg_id?: string | null;
   read_at: string | null;
   created_at: string;
@@ -42,7 +46,7 @@ interface Customer {
 @Component({
   selector: 'app-admin-support',
   standalone: true,
-  imports: [FormsModule, DatePipe, IonSpinner, TimeAgoPipe],
+  imports: [FormsModule, DatePipe, IonSpinner, TimeAgoPipe, VoicePlayerComponent],
   template: `
     <div class="page">
       <header class="page-header">
@@ -94,7 +98,11 @@ interface Customer {
               @for (m of messages(); track m.id) {
                 <div class="row" [class.mine]="m.sender_role === 'admin'">
                   <div class="bubble">
-                    <span class="body">{{ m.body }}</span>
+                    @if (m.kind === 'voice' && m.audio) {
+                      <app-voice-player [url]="m.audio.url" [duration]="m.audio.duration ?? 0" [mime]="m.audio.mime" [mine]="m.sender_role === 'admin'" />
+                    } @else {
+                      <span class="body">{{ m.body }}</span>
+                    }
                     <span class="meta">{{ m.created_at | date: 'MMM d, h:mm a' }}@if (m.sender_role === 'admin' && m.read_at) { · seen }</span>
                   </div>
                 </div>
