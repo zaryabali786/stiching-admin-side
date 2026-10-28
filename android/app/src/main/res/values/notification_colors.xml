@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the colour of the small round mark of a push notification (the Stitch&Ship dark red) -->
+    <color name="notification_accent">#62003E</color>
+</resources>

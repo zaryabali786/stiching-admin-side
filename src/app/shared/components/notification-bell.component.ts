@@ -10,6 +10,7 @@ const TYPE_ICON: Record<string, string> = {
   approval: '✓',
   invoice: '₨',
   logistics: '➜',
+  broadcast: '✉',
 };
 
 /** Header bell with unread badge and a dropdown notification panel. */
@@ -53,11 +54,12 @@ const TYPE_ICON: Record<string, string> = {
           }
 
           @for (n of notifications.items(); track n.id) {
-            <div class="item" [class.unread]="!n.read_at" (click)="openItem(n)" role="button" tabindex="0" (keydown.enter)="openItem(n)">
-              <span class="type" [class]="'type ' + n.type">{{ icon(n.type) }}</span>
+            <div class="item" [class.unread]="!n.read_at" [class.urgent]="n.priority === 'urgent'" (click)="openItem(n)" role="button" tabindex="0" (keydown.enter)="openItem(n)">
+              <span class="type" [class]="'type ' + n.type + (n.priority === 'urgent' ? ' alert' : '')">{{ n.priority === 'urgent' ? '!' : icon(n.type) }}</span>
               <div class="body">
-                <div class="title">{{ n.title }}</div>
+                <div class="title">@if (n.priority === 'urgent') { <span class="urgent-tag">Urgent</span> }{{ n.title }}</div>
                 @if (n.body) { <div class="text">{{ n.body }}</div> }
+                @if (n.image_url) { <img class="pic" [src]="n.image_url" alt="" loading="lazy" referrerpolicy="no-referrer" /> }
                 <div class="time">{{ n.created_at | timeAgo }}</div>
               </div>
               <div class="item-actions">
@@ -108,6 +110,9 @@ const TYPE_ICON: Record<string, string> = {
     .body { flex: 1; min-width: 0; }
     .title { font-size: 13px; font-weight: 600; color: var(--c-ink); }
     .text { font-size: 12px; color: var(--c-muted); margin-top: 2px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .urgent-tag { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 999px; background: var(--c-red-soft); color: var(--c-red); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
+    .item.urgent { box-shadow: inset 3px 0 0 var(--c-red); }
+    .pic { display: block; width: 100%; max-height: 150px; margin-top: 6px; border-radius: 8px; object-fit: cover; }
     .time { font-size: 11px; color: var(--c-faint); margin-top: 4px; }
     .item-actions { display: flex; flex-direction: column; gap: 2px; opacity: 0; transition: opacity .12s; }
     .item:hover .item-actions { opacity: 1; }

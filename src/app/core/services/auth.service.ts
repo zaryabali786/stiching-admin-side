@@ -207,6 +207,7 @@ export class AuthService {
       ['teams.view', '/partner/teams'],
       ['earnings.view', '/partner/earnings'],
       ['catalogue.view', '/partner/articles'],
+      ['notifications.view', '/partner/notification-center'],
     ];
     return pages.find(([permission]) => this.can(permission))?.[1] ?? '/forbidden';
   }
@@ -217,7 +218,7 @@ export class AuthService {
       ['overview', '/admin/overview'], ['orders', '/admin/orders'], ['messages', '/admin/messages'], ['support', '/admin/support'],
       ['warehouse', '/admin/warehouse'], ['invoices', '/admin/invoices'], ['reports', '/admin/reports'], ['customers', '/admin/customers'],
       ['partners', '/admin/partners'], ['price_list', '/admin/price-list'], ['shipping', '/admin/shipping'], ['settings', '/admin/settings'],
-      ['app_builder', '/admin/home-layout'], ['portal_theme', '/admin/portal-theme'],
+      ['app_builder', '/admin/home-layout'], ['portal_theme', '/admin/portal-theme'], ['notification_center', '/admin/notification-center'],
     ];
     return pages.find(([id]) => this.canAdminModule(id))?.[1] ?? '/forbidden';
   }

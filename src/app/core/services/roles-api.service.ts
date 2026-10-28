@@ -49,7 +49,7 @@ export interface RolesBundle {
 
 interface AdminRoles {
   roles: RoleRecord[];
-  modules: { id: string; label: string; description: string }[];
+  modules: { id: string; label: string; description: string; detail?: { id: string; label: string; description?: string }[] }[];
   actions: { id: string; label: string; description: string }[];
 }
 
@@ -85,10 +85,16 @@ export class RolesApiService {
       return this.api.get<AdminRoles>('/admin/roles').pipe(
         map((d) => ({
           roles: d.roles,
-          modules: d.modules.map((m) => ({
-            ...m,
-            actions: d.actions.map((a): RoleAction => ({ id: `${m.id}.${a.id}`, label: a.label, description: a.description, kind: a.id === 'view' ? 'view' : 'detail' })),
-          })),
+          modules: d.modules.map((m) => {
+            const detail = m.detail ?? [];
+            // a module with detailed actions: View, then one tick per button, then "everything" (edit and delete)
+            const base = d.actions.map((a): RoleAction => ({ id: `${m.id}.${a.id}`, label: a.label, description: a.description, kind: a.id === 'view' ? 'view' : 'detail' }));
+            if (!detail.length) return { id: m.id, label: m.label, description: m.description, actions: base };
+            const view = base.filter((a) => a.kind === 'view');
+            const extra = detail.map((x): RoleAction => ({ id: `${m.id}.${x.id}`, label: x.label, description: x.description, kind: 'detail' }));
+            const full = base.filter((a) => a.kind !== 'view').map((a): RoleAction => (a.id.endsWith('.edit') ? { ...a, label: 'Full control (every action above)', kind: 'full' } : a));
+            return { id: m.id, label: m.label, description: m.description, actions: [...view, ...extra, ...full] };
+          }),
         })),
       );
     }

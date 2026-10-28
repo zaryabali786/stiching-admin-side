@@ -91,9 +91,12 @@ export class PartnerQualityCheckPage implements OnInit {
   // Approval photos modal
   readonly approval = signal<{ card: JobCard; photos: UploadFile[] } | null>(null);
   readonly approvalSaving = signal(false);
+  /** Admin setting: the customer approves the QC photos before Pressing (on until the server says it is off). */
+  readonly approvalRequired = signal(true);
   readonly photosReading = signal(false);
 
   ngOnInit(): void {
+    this.partner.qcApprovalRequired().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (v) => this.approvalRequired.set(v), error: () => undefined });
     combineLatest([this.route.queryParamMap, this.reload$.pipe(startWith(undefined))])
       .pipe(
         map(([q]) => {
@@ -293,7 +296,13 @@ export class PartnerQualityCheckPage implements OnInit {
 
   /** Articles of this order (on this page) whose photos the customer has not decided on yet: they block packing. */
   waiting(group: QcOrderGroup): JobCard[] {
-    return group.cards.filter((c) => c.approval_status === 'pending');
+    return this.approvalRequired() ? group.cards.filter((c) => c.approval_status === 'pending') : [];
+  }
+
+  /** Can this order go to Pressing now? Approval off: yes. On: at least one article has the customer's approval and none is still waiting. */
+  canSendToPressing(group: QcOrderGroup): boolean {
+    if (!this.approvalRequired()) return true;
+    return this.waiting(group).length === 0 && group.cards.some((c) => c.approval_status === 'approved');
   }
 
   waitingTitles(group: QcOrderGroup): string {

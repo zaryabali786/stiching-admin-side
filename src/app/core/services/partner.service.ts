@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { AudioRef, VoiceNote } from '../models/chat.models';
 import { ApprovalStatus } from '../utils/approval';
 import { ApiService } from './api.service';
@@ -693,6 +693,11 @@ export class PartnerService {
   /** Send (or resend) photos for ONE article; the customer approves or asks for changes on it alone. */
   requestCardApproval(cardId: string, photos: UploadFile[]) {
     return this.api.postWithMessage<{ photos?: MediaItem[] }>(`${this.base}/qc/cards/${cardId}/request-approval`, { photos });
+  }
+
+  /** The admin's "client approval required after QC" setting (public platform config; on unless it says otherwise). */
+  qcApprovalRequired() {
+    return this.api.get<{ qcApproval?: { required: boolean } }>('/config').pipe(map((c) => c.qcApproval?.required !== false));
   }
 
   sendToPressing(orderId: string) {

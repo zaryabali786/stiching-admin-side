@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { distinctUntilChanged, filter, map } from 'rxjs';
-import { AdminModule, AdminService, AdminUser, ExpressShippingSetting, ExpressStitchingSetting, PostexSettings, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
+import { AdminModule, AdminService, AdminUser, ExpressShippingSetting, ExpressStitchingSetting, PostexSettings, QcApprovalSetting, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { UiService } from '../../../core/services/ui.service';
@@ -16,9 +16,9 @@ import { PaginationComponent } from '../../../shared/components/pagination.compo
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PAGE_SIZES, PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 
-type SettingsTab = 'team' | 'address' | 'express' | 'postex' | 'account';
+type SettingsTab = 'team' | 'address' | 'express' | 'workflow' | 'postex' | 'account';
 type TeamRole = UserRoleFilter;
-const TABS: readonly SettingsTab[] = ['team', 'address', 'express', 'postex', 'account'];
+const TABS: readonly SettingsTab[] = ['team', 'address', 'express', 'workflow', 'postex', 'account'];
 const TEAM_ROLES: readonly TeamRole[] = ['staff', 'admin', 'partner_staff', 'customer'];
 
 interface SettingsQuery {
@@ -211,6 +211,30 @@ export class AdminSettingsPage implements OnInit {
     });
   }
 
+  // Client approval after QC: what the server has saved, and what the admin has chosen but not saved yet
+  readonly qcApproval = signal<QcApprovalSetting>({ required: true });
+  private readonly qcApprovalSaved = signal<QcApprovalSetting>({ required: true });
+  readonly qcApprovalLoaded = signal(false);
+  readonly savingQcApproval = signal(false);
+  readonly qcApprovalDirty = computed(() => this.qcApproval().required !== this.qcApprovalSaved().required);
+
+  saveQcApproval(): void {
+    if (!this.qcApprovalLoaded() || !this.qcApprovalDirty() || this.savingQcApproval()) return;
+    this.savingQcApproval.set(true);
+    this.admin.setQcApproval(this.qcApproval().required).subscribe({
+      next: (res) => {
+        this.savingQcApproval.set(false);
+        this.qcApproval.set(res.data);
+        this.qcApprovalSaved.set(res.data);
+        this.ui.success(res.message || 'Saved.');
+      },
+      error: (err) => {
+        this.savingQcApproval.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
   setExpress(patch: Partial<ExpressStitchingSetting>): void {
     this.express.update((e) => ({ ...e, ...patch }));
   }
@@ -334,6 +358,14 @@ export class AdminSettingsPage implements OnInit {
         this.expressShip.set(e);
         this.expressShipSaved.set(e);
         this.expressShipLoaded.set(true);
+      },
+      error: (err) => this.ui.error(err),
+    });
+    this.admin.getQcApproval().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (q) => {
+        this.qcApproval.set(q);
+        this.qcApprovalSaved.set(q);
+        this.qcApprovalLoaded.set(true);
       },
       error: (err) => this.ui.error(err),
     });

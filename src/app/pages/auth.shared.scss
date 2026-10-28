@@ -43,10 +43,28 @@
   }
 
   .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     font-family: var(--font-serif);
     font-size: 30px;
     font-weight: 600;
     margin-top: 8px;
+  }
+
+  /* the company logo on a white badge (the mark is dark red, the panel is dark) */
+  .logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 52px;
+    height: 52px;
+    padding: 8px;
+    border-radius: 14px;
+    background: #fff;
+
+    img { display: block; width: 100%; height: 100%; object-fit: contain; }
   }
 
   h1 {

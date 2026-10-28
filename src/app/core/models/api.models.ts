@@ -74,6 +74,10 @@ export interface AppNotification {
   order_id: string | null;
   read_at: string | null;
   created_at: string;
+  /** 'urgent' for a message marked urgent in the Notification Center */
+  priority?: 'normal' | 'urgent';
+  /** a picture sent with the message */
+  image_url?: string | null;
 }
 
 export type OrderStatus =

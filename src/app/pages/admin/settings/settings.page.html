@@ -13,6 +13,7 @@
     }
     <button type="button" role="tab" [class.active]="query().tab === 'address'" [attr.aria-selected]="query().tab === 'address'" (click)="setTab('address')">Ship-to address</button>
     <button type="button" role="tab" [class.active]="query().tab === 'express'" [attr.aria-selected]="query().tab === 'express'" (click)="setTab('express')">Priority &amp; fast</button>
+    <button type="button" role="tab" [class.active]="query().tab === 'workflow'" [attr.aria-selected]="query().tab === 'workflow'" (click)="setTab('workflow')">Workflow</button>
     <button type="button" role="tab" [class.active]="query().tab === 'postex'" [attr.aria-selected]="query().tab === 'postex'" (click)="setTab('postex')">PostEx</button>
     <button type="button" role="tab" [class.active]="query().tab === 'account'" [attr.aria-selected]="query().tab === 'account'" (click)="setTab('account')">Account</button>
   </div>
@@ -117,6 +118,27 @@
       </form>
     </section>
     </div>
+  } @else if (query().tab === 'workflow') {
+    <!-- ═══ Client approval after QC ═══ -->
+    <section class="card address-card">
+      <h3 class="card-title">Client Approval Required After QC</h3>
+      <p class="muted small">When enabled, clients must approve QC images before the order can move to Pressing. When disabled, orders can move directly from QC to Pressing without requiring client approval.</p>
+      <form (submit)="$event.preventDefault(); saveQcApproval()">
+        <div class="field">
+          <label for="qcApproval">Require client approval after QC</label>
+          <select id="qcApproval" class="select" [disabled]="!qcApprovalLoaded()" (change)="qcApproval.set({ required: $any($event.target).value === 'yes' })">
+            <option value="yes" [selected]="qcApproval().required">On: the client approves the QC photos first</option>
+            <option value="no" [selected]="!qcApproval().required">Off: QC goes straight to Pressing</option>
+          </select>
+          <span class="hint">Orders already waiting for a client's approval are not approved or changed when you switch this off. The client app header changes with this setting.</span>
+        </div>
+        <div class="row-end">
+          <button type="submit" class="btn btn-primary" [disabled]="!qcApprovalLoaded() || !qcApprovalDirty() || savingQcApproval()">
+            @if (savingQcApproval()) { <ion-spinner name="crescent" /> } Save
+          </button>
+        </div>
+      </form>
+    </section>
   } @else if (query().tab === 'postex') {
     <!-- ═══ PostEx ═══ -->
     <section class="card address-card">

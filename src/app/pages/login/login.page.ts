@@ -58,7 +58,7 @@ interface PublicConfig {
       <section class="brand-panel">
         <div>
           <span class="eyebrow">[PLATFORM]</span>
-          <div class="logo">V360</div>
+          <div class="logo"><span class="logo-mark"><img src="assets/logo.png" alt="V360 logo" width="44" height="44" /></span><span>V360</span></div>
         </div>
         <div>
           <h1>Stitching, run <em>end to end</em>.</h1>

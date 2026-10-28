@@ -14,6 +14,7 @@
   <meta name="theme-color" content="#111A15" />
 
   <link rel="icon" type="image/png" href="assets/icon/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/icon/apple-touch-icon.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,9 +22,25 @@
 
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- Animated splash (the app on a phone only): the Stitch&Ship logo plays over a white screen until the app is ready (see main.ts). -->
+  <script>
+    (function () {
+      var c = window.Capacitor;
+      if (c && c.isNativePlatform && c.isNativePlatform()) document.documentElement.classList.add('native-boot');
+    })();
+  </script>
+  <style>
+    #boot-splash { display: none; }
+    .native-boot #boot-splash { display: flex; position: fixed; inset: 0; z-index: 2147483000; align-items: center; justify-content: center; overflow: hidden; background: #fff; transition: opacity 0.45s ease; }
+    .native-boot #boot-splash.hide { opacity: 0; pointer-events: none; }
+    /* the same size as the still picture of the phone's own splash screen, so the two follow each other without a jump */
+    #boot-splash img { width: max(35.87vh, 35.87vw); height: auto; max-width: none; flex: none; transform: translate(-0.35%, 1.07%); }
+  </style>
 </head>
 
 <body>
+  <div id="boot-splash" aria-hidden="true"><img src="assets/splash/logoSplash-animated.svg" alt="" draggable="false" /></div>
   <app-root></app-root>
 </body>
 

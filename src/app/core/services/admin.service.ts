@@ -109,6 +109,11 @@ export interface ExpressStitchingSetting {
   price_pkr: number;
 }
 
+/** "Client approval required after QC": on = the customer approves the QC photos before Pressing; off = QC goes straight to Pressing. */
+export interface QcApprovalSetting {
+  required: boolean;
+}
+
 /** Fast shipping: can customers ask for it, and how many days the delivery takes (decided by the admin). It has no price. */
 export type ExpressShippingSetting = Omit<ExpressStitchingSetting, 'price_pkr'>;
 
@@ -948,6 +953,15 @@ export class AdminService {
 
   decideExtraCost(id: string, decision: 'approve' | 'reject', note?: string): Observable<ApiResult<OrderExtraCost>> {
     return this.send<OrderExtraCost>('POST', `/admin/extra-costs/${id}/decision`, { decision, note });
+  }
+
+  /** Must the customer approve the QC photos before an article goes to Pressing? (the server decides and keeps it) */
+  getQcApproval(): Observable<QcApprovalSetting> {
+    return this.api.get<QcApprovalSetting>('/admin/settings/qc-approval');
+  }
+
+  setQcApproval(required: boolean): Observable<ApiResult<QcApprovalSetting>> {
+    return this.send<QcApprovalSetting>('PUT', '/admin/settings/qc-approval', { required });
   }
 
   getExpressShipping(): Observable<ExpressShippingSetting> {
