@@ -10,6 +10,8 @@ import { routes } from './app/app.routes';
 import { AppComponent } from './app/app.component';
 import { authInterceptor } from './app/core/interceptors/auth.interceptor';
 import { AuthService } from './app/core/services/auth.service';
+import { Location } from '@angular/common';
+import { initBackNavigation } from './app/core/back-navigation';
 
 // The animated logo (index.html) stays over the app until the animation has played (about 4.4 s) and the app is ready; it only exists on a phone.
 const SPLASH_MIN_MS = 4400;
@@ -42,6 +44,7 @@ bootstrapApplication(AppComponent, {
     ),
     // Refresh the signed-in user's profile (role may have changed) before the first navigation.
     provideAppInitializer(() => inject(AuthService).init()),
+    provideAppInitializer(() => initBackNavigation(inject(Location))),
   ],
 })
   .then(() => hideBootSplash())
