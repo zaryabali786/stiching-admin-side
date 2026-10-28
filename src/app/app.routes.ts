@@ -31,24 +31,24 @@ export const routes: Routes = [
   {
     path: 'login',
     canActivate: [guestGuard],
-    title: 'Log in · V360',
+    title: 'Log in · Stitch&Ship',
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
   },
   {
     path: 'reset-password',
-    title: 'Choose a new password · V360',
+    title: 'Choose a new password · Stitch&Ship',
     loadComponent: () => import('./pages/reset-password/reset-password.page').then((m) => m.ResetPasswordPage),
   },
   {
     path: 'change-password',
     canActivate: [passwordChangeGuard],
-    title: 'Choose your password · V360',
+    title: 'Choose your password · Stitch&Ship',
     loadComponent: () => import('./pages/change-password/change-password.page').then((m) => m.ChangePasswordPage),
   },
   {
     path: 'forbidden',
     canActivate: [authGuard],
-    title: 'No access · V360',
+    title: 'No access · Stitch&Ship',
     loadComponent: () => import('./pages/forbidden/forbidden.page').then((m) => m.ForbiddenPage),
   },
 

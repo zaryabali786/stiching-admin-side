@@ -101,7 +101,7 @@ function sheetOf(card: Card, mode: SheetMode): string {
 
   const header = `
     <div class="top">
-      <div class="brand"><span class="mark">V</span><span>V360</span></div>
+      <div class="brand"><span class="mark">V</span><span>Stitch&Ship</span></div>
       <div class="doc"><b>${esc(card.order_reference)}</b>Job sheet · printed ${esc(fmtDate(new Date().toISOString()))}</div>
     </div>`;
 
@@ -159,7 +159,7 @@ function sheetOf(card: Card, mode: SheetMode): string {
     ${measures}
     <h2>Notes</h2>
     ${notes || '<p class="muted">No notes.</p>'}
-    <div class="foot"><span>${esc(card.order_reference)} · ${esc(code)}</span><span>V360 production sheet</span></div>`);
+    <div class="foot"><span>${esc(card.order_reference)} · ${esc(code)}</span><span>Stitch&Ship production sheet</span></div>`);
 }
 
 function wrap(body: string): string {
