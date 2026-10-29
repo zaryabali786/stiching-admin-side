@@ -6,13 +6,13 @@ import { IonIcon } from '@ionic/angular';
 import { addIcons } from 'ionicons';
 import {
   alertCircleOutline, checkmarkCircle, cloudUploadOutline, closeOutline, ellipseOutline, flash, flashOutline, globeOutline, idCardOutline, businessOutline,
-  informationCircleOutline, notifications, notificationsOutline, paperPlaneOutline, peopleOutline, phonePortraitOutline, searchOutline, swapHorizontalOutline, timeOutline, trashOutline,
+  imageOutline, informationCircleOutline, navigateOutline, notifications, notificationsOutline, paperPlaneOutline, peopleOutline, phonePortraitOutline, searchOutline, swapHorizontalOutline, timeOutline, trashOutline,
 } from 'ionicons/icons';
 import { compressImage } from '../../../core/utils/image';
 import { UiService } from '../../../core/services/ui.service';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import {
-  NcAudience, NcBroadcast, NcCategory, NcOptions, NcPageMeta, NcRecipient, NcStatus, NotificationCenterService, NotificationPortal,
+  NcAudience, NcBroadcast, NcCategory, NcDestination, NcDestinationType, NcOptions, NcOrderOption, NcPageMeta, NcProduct, NcRecipient, NcStatus, NotificationCenterService, NotificationPortal,
 } from '../../../core/services/notification-center.service';
 import { PaginationComponent } from '../pagination.component';
 
@@ -218,9 +218,98 @@ const timeZones = (): string[] => {
               }
             </section>
 
-            <!-- 3 · how -->
+            <!-- 3 · where it opens -->
             <section class="step">
-              <header class="step-head"><span class="num">3</span><div><h3>How and when?</h3><p>Priority, delivery and timing.</p></div></header>
+              <header class="step-head"><span class="num">3</span><div><h3>Where should it open?</h3><p>Optional. What the person sees when they tap the notification.</p></div></header>
+              <div class="field">
+                <label for="ncDestType">Destination</label>
+                <select id="ncDestType" class="select" [value]="destType()" (change)="setDestType($any($event.target).value)">
+                  <option value="none">Nothing: just show the message</option>
+                  @if (pageOptions().length) { <option value="page">A page of the app</option> }
+                  @if (canLinkProduct()) { <option value="product">A product</option> }
+                  <option value="url">A custom address</option>
+                </select>
+              </div>
+
+              @if (destType() === 'page') {
+                <div class="field">
+                  <label for="ncDestPage">Page</label>
+                  <select id="ncDestPage" class="select" [value]="destPage()" (change)="setDestPage($any($event.target).value)">
+                    <option value="">Choose a page…</option>
+                    @for (p of pageOptions(); track p.key) { <option [value]="p.key" [selected]="destPage() === p.key">{{ p.label }}</option> }
+                  </select>
+                </div>
+                @if (pageEntity() === 'order') {
+                  <div class="field">
+                    <label>Which order</label>
+                    @if (!singleClientId()) {
+                      <p class="hint">An order opens only for the client it belongs to. Choose "Selected clients" above and pick exactly one client, then choose the order here.</p>
+                    } @else {
+                      @if (destOrder(); as order) {
+                        <div class="dest-chosen"><b>Order {{ order.reference }}</b><button type="button" class="btn btn-sm btn-ghost" (click)="destOrder.set(null)">Change</button></div>
+                      } @else {
+                        <input class="input" type="search" placeholder="Search by order number" [value]="orderQuery()" (input)="onOrderSearch($any($event.target).value)" />
+                        <ul class="dest-list">
+                          @for (o of orderResults(); track o.id) { <li><button type="button" (click)="destOrder.set(o)"><b>{{ o.reference }}</b> <small>{{ o.status }}</small></button></li> }
+                          @empty { <li class="muted">{{ orderLoading() ? 'Searching…' : 'This client has no orders.' }}</li> }
+                        </ul>
+                      }
+                    }
+                  </div>
+                }
+              }
+
+              @if (destType() === 'product') {
+                <div class="field">
+                  <label>Product</label>
+                  @if (destProduct(); as p) {
+                    <div class="dest-chosen prod-chosen">
+                      <span class="prod-img sm">@if (p.image_url) { <img [src]="p.image_url" [alt]="p.title" referrerpolicy="no-referrer" /> } @else { <ion-icon name="image-outline" aria-hidden="true"></ion-icon> }</span>
+                      <span class="prod-meta"><b>{{ p.title }}</b><small>{{ p.brand }}</small></span>
+                      <button type="button" class="btn btn-sm btn-ghost" (click)="destProduct.set(null)">Change</button>
+                    </div>
+                  } @else {
+                    <div class="prod-filters">
+                      <input class="input" type="search" placeholder="Search products by name" [value]="productQuery()" (input)="onProductSearch($any($event.target).value)" aria-label="Search products" />
+                      <select class="select" aria-label="Filter by brand" [value]="productBrand()" (change)="setProductBrand($any($event.target).value)">
+                        <option value="">All brands</option>
+                        @for (b of productBrands(); track b.id) { <option [value]="b.id" [selected]="productBrand() === b.id">{{ b.name }}</option> }
+                      </select>
+                    </div>
+                    <div class="prod-grid" role="listbox" aria-label="Products" (scroll)="onProductScroll($event)">
+                      @for (p of productResults(); track p.id) {
+                        <button type="button" class="prod-card" role="option" (click)="destProduct.set(p)">
+                          <span class="prod-img">
+                            @if (p.image_url) { <img [src]="p.image_url" [alt]="p.title" loading="lazy" referrerpolicy="no-referrer" /> } @else { <ion-icon name="image-outline" aria-hidden="true"></ion-icon> }
+                          </span>
+                          <span class="prod-name">{{ p.title }}</span>
+                          <span class="prod-brand">{{ p.brand }}</span>
+                        </button>
+                      }
+                      @if (productLoading()) { <p class="prod-state">Loading products…</p> }
+                      @else if (!productResults().length) { <p class="prod-state">No product found{{ productBrand() || productQuery() ? ' for this search' : '' }}.</p> }
+                      @else if (!productMore()) { <p class="prod-state">That is every product.</p> }
+                    </div>
+                    <label for="ncProductUrl" class="sub">Or paste the product address</label>
+                    <input id="ncProductUrl" class="input" type="url" placeholder="https://store.myshopify.com/products/…" [value]="productUrl()" (input)="productUrl.set($any($event.target).value)" />
+                    <p class="hint">The product opens in the client's app through its own product page. Hidden or unavailable products are refused.</p>
+                  }
+                </div>
+              }
+
+              @if (destType() === 'url') {
+                <div class="field">
+                  <label for="ncDestUrl">Address</label>
+                  <input id="ncDestUrl" class="input" type="text" placeholder="/app/orders  or  https://…" [value]="destUrl()" (input)="destUrl.set($any($event.target).value)" />
+                  <p class="hint">A page of the app, or an https address of an approved website. Addresses with a login, a token, or any other scheme are refused.</p>
+                </div>
+              }
+              @if (destinationSummary(); as d) { <span class="note"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon> {{ d }}</span> }
+            </section>
+
+            <!-- 4 · how -->
+            <section class="step">
+              <header class="step-head"><span class="num">4</span><div><h3>How and when?</h3><p>Priority, delivery and timing.</p></div></header>
 
               <div class="field">
                 <label>Priority</label>
@@ -292,6 +381,7 @@ const timeZones = (): string[] => {
               </div>
               <ul class="summary">
                 <li><ion-icon [name]="catIcon(category())" aria-hidden="true"></ion-icon> {{ categoryLabel(category()) }} · {{ audienceText() }}</li>
+                <li><ion-icon name="navigate-outline" aria-hidden="true"></ion-icon> {{ destinationSummary() || 'Opens nothing (message only)' }}</li>
                 <li><ion-icon name="globe-outline" aria-hidden="true"></ion-icon> {{ webOn() && pushOn() ? 'Web + push' : webOn() ? 'Web only' : pushOn() ? 'Push only' : 'No delivery chosen' }}</li>
                 <li><ion-icon [name]="scheduled() ? 'time-outline' : 'paper-plane-outline'" aria-hidden="true"></ion-icon> {{ scheduled() ? 'Scheduled' : 'Sent right away' }}</li>
               </ul>
@@ -380,6 +470,7 @@ const timeZones = (): string[] => {
             @if (d.image_url) { <img class="pic" [src]="d.image_url" alt="" /> }
             <dl class="facts">
               <div><dt>Audience</dt><dd>{{ categoryLabel(d.category) }}: {{ audienceSummary(d) }}</dd></div>
+              @if (d.destination) { <div><dt>Opens</dt><dd>{{ d.destination.label || d.destination.url || d.destination.type }}</dd></div> }
               <div><dt>Status</dt><dd><span class="badge" [class]="'st-' + d.status">{{ statusLabel(d.status) }}</span></dd></div>
               <div><dt>Channels</dt><dd>{{ d.channels.join(' + ') }}</dd></div>
               <div><dt>Created</dt><dd>{{ d.created_at | date: 'd MMM y, h:mm a' }}@if (d.creator_name) { by {{ d.creator_name }} }</dd></div>
@@ -458,6 +549,24 @@ const timeZones = (): string[] => {
     .compose { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
     .compose-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
     .step { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+    .dest-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 190px; overflow: auto; border: 1px solid var(--c-border); border-radius: 10px; }
+    .dest-list li { padding: 0; } .dest-list li.muted { padding: 10px 12px; }
+    .dest-list button { width: 100%; text-align: left; background: none; border: 0; padding: 9px 12px; font: inherit; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+    .dest-list button:hover { background: rgba(0, 0, 0, 0.04); }
+    .dest-chosen { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 1px solid var(--c-border); border-radius: 10px; }
+    .prod-filters { display: grid; grid-template-columns: 1fr 200px; gap: 8px; }
+    .prod-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; max-height: 420px; overflow-y: auto; padding: 4px; border: 1px solid var(--c-border); border-radius: 12px; }
+    .prod-card { display: flex; flex-direction: column; gap: 6px; text-align: left; background: var(--c-surface, #fff); border: 1px solid var(--c-border); border-radius: 12px; padding: 8px; cursor: pointer; font: inherit; transition: border-color .15s, box-shadow .15s, transform .15s; }
+    .prod-card:hover, .prod-card:focus-visible { border-color: var(--c-green); box-shadow: 0 4px 14px rgba(0, 0, 0, .08); transform: translateY(-1px); outline: none; }
+    .prod-img { display: grid; place-items: center; aspect-ratio: 1; width: 100%; border-radius: 8px; background: rgba(0, 0, 0, .05); overflow: hidden; color: var(--c-muted); font-size: 28px; }
+    .prod-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .prod-img.sm { width: 56px; height: 56px; aspect-ratio: auto; flex: none; font-size: 22px; }
+    .prod-name { font-size: 13px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+    .prod-brand { align-self: flex-start; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .06); color: var(--c-muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prod-state { grid-column: 1 / -1; margin: 6px 0; text-align: center; font-size: 12.5px; color: var(--c-muted); }
+    .prod-chosen { justify-content: flex-start; gap: 12px; }
+    .prod-meta { display: flex; flex-direction: column; flex: 1; min-width: 0; } .prod-meta small { color: var(--c-muted); }
+    .field .sub { margin-top: 10px; display: block; font-size: 12.5px; color: var(--c-muted); }
     .step-head { display: flex; align-items: center; gap: 12px; }
     .step-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
     .step-head p { margin: 1px 0 0; font-size: 12.5px; color: var(--c-muted); }
@@ -614,6 +723,8 @@ const timeZones = (): string[] => {
       .when { grid-template-columns: 1fr; }
       .table th:nth-child(2), .table td:nth-child(2) { display: none; }
       .filters .select, .filters .input { max-width: none; }
+      .prod-filters { grid-template-columns: 1fr; }
+      .prod-grid { grid-template-columns: repeat(2, 1fr); max-height: 360px; }
     }
   `],
 })
@@ -651,6 +762,46 @@ export class NotificationCenterComponent {
   readonly dragging = signal(false);
   readonly sending = signal(false);
   readonly formError = signal<string | null>(null);
+
+  // ── where a tap leads ──
+  readonly destType = signal<NcDestinationType>('none');
+  readonly destPage = signal('');
+  readonly destOrder = signal<NcOrderOption | null>(null);
+  readonly destProduct = signal<NcProduct | null>(null);
+  readonly destUrl = signal('');
+  readonly productUrl = signal('');
+  readonly productQuery = signal('');
+  readonly productResults = signal<NcProduct[]>([]);
+  readonly productLoading = signal(false);
+  readonly productMore = signal(false);
+  readonly productBrand = signal('');
+  readonly productBrands = signal<{ id: string; name: string }[]>([]);
+  private productPage = 0;
+  private productRequest = 0;
+  readonly orderQuery = signal('');
+  readonly orderResults = signal<NcOrderOption[]>([]);
+  readonly orderLoading = signal(false);
+  private productSearch$ = new Subject<string>();
+  private orderSearch$ = new Subject<string>();
+
+  /** The pages the server offers for this audience (it builds the list from the app's real pages). */
+  readonly pageOptions = computed(() => this.opts()?.destinations?.[this.category()] ?? []);
+  readonly pageEntity = computed(() => this.pageOptions().find((p) => p.key === this.destPage())?.entity ?? null);
+  /** Products are linked only for clients, and only by an admin (a partner has no access to the Shop catalogue). */
+  readonly canLinkProduct = computed(() => this.opts()?.kind === 'admin' && this.category() === 'clients');
+  /** The one client an order link is for (an order opens only for its owner). */
+  readonly singleClientId = computed(() => (this.category() === 'clients' && this.mode() === 'selected' && this.picked().length === 1 ? this.picked()[0].id : null));
+  readonly destinationSummary = computed(() => {
+    switch (this.destType()) {
+      case 'page': {
+        const p = this.pageOptions().find((x) => x.key === this.destPage());
+        return p ? `Opens ${p.label}${this.destOrder() ? ' · order ' + this.destOrder()!.reference : ''}` : null;
+      }
+      case 'product': return this.destProduct() ? `Opens the product "${this.destProduct()!.title}"` : null;
+      case 'url': return this.destUrl().trim() ? `Opens ${this.destUrl().trim().startsWith('/') ? 'the app page' : 'the website'} ${this.destUrl().trim()}` : null;
+      default: return null;
+    }
+  });
 
   // ── the picker ──
   readonly search = signal('');
@@ -693,6 +844,109 @@ export class NotificationCenterComponent {
       untracked(() => this.start(portal));
     });
     this.search$.pipe(debounceTime(300), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadResults(1));
+    this.productSearch$.pipe(debounceTime(300), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadProducts(true));
+    this.orderSearch$.pipe(debounceTime(300), takeUntilDestroyed(this.destroyRef)).subscribe((q) => this.loadOrders(q));
+    // the audience changed: a chosen order, page or product may no longer fit it
+    effect(() => {
+      const client = this.singleClientId();
+      untracked(() => {
+        this.destOrder.set(null);
+        this.orderResults.set([]);
+        if (client && this.pageEntity() === 'order') this.loadOrders('');
+      });
+    });
+    effect(() => {
+      const options = this.pageOptions();
+      const canProduct = this.canLinkProduct();
+      untracked(() => {
+        if (this.destPage() && !options.some((p) => p.key === this.destPage())) this.destPage.set('');
+        if (this.destType() === 'product' && !canProduct) this.setDestType('none');
+        if (this.destType() === 'page' && !options.length) this.setDestType('none');
+      });
+    });
+  }
+
+  setDestType(type: NcDestinationType): void {
+    this.destType.set(type);
+    if (type === 'product' && !this.productResults().length) {
+      this.api.productBrands().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (b) => this.productBrands.set(b), error: () => undefined });
+      this.loadProducts(true);
+    }
+  }
+
+  setDestPage(key: string): void {
+    this.destPage.set(key);
+    this.destOrder.set(null);
+    if (this.singleClientId() && this.pageEntity() === 'order') this.loadOrders('');
+  }
+
+  onProductSearch(q: string): void { this.productQuery.set(q); this.productSearch$.next(q); }
+  onOrderSearch(q: string): void { this.orderQuery.set(q); this.orderSearch$.next(q); }
+
+  setProductBrand(id: string): void {
+    this.productBrand.set(id);
+    this.loadProducts(true);
+  }
+
+  /** The grid scrolled near its end: the next page comes from the server. */
+  onProductScroll(event: Event): void {
+    const el = event.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) this.loadProducts(false);
+  }
+
+  /** One page of products from the server (search and brand applied there). `reset` starts again from the first page. */
+  private loadProducts(reset: boolean): void {
+    if (!reset && (this.productLoading() || !this.productMore())) return;
+    const page = reset ? 1 : this.productPage + 1;
+    const request = ++this.productRequest; // an older answer (the search changed meanwhile) is ignored
+    if (reset) this.productResults.set([]);
+    this.productLoading.set(true);
+    this.api.products({ search: this.productQuery().trim(), brand: this.productBrand(), page, limit: 12 }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: ({ items, meta }) => {
+        if (request !== this.productRequest) return;
+        this.productPage = page;
+        this.productResults.update((list) => (reset ? items : [...list, ...items.filter((i) => !list.some((x) => x.id === i.id))]));
+        this.productMore.set(meta.hasMore);
+        this.productLoading.set(false);
+      },
+      error: () => {
+        if (request !== this.productRequest) return;
+        this.productMore.set(false);
+        this.productLoading.set(false);
+      },
+    });
+  }
+
+  private loadOrders(q: string): void {
+    const client = this.singleClientId();
+    if (!client) return;
+    this.orderLoading.set(true);
+    this.api.clientOrders(client, q.trim()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (rows) => { this.orderResults.set(rows); this.orderLoading.set(false); },
+      error: () => { this.orderResults.set([]); this.orderLoading.set(false); },
+    });
+  }
+
+  /** The destination to send: null for none, a string for a missing field (shown to the sender). The server validates it again. */
+  private destination(): NcDestination | null | string {
+    switch (this.destType()) {
+      case 'page': {
+        if (!this.destPage()) return 'Choose the page the notification opens.';
+        if (this.pageEntity() === 'order') {
+          if (!this.singleClientId()) return 'To link an order, select exactly one client.';
+          if (!this.destOrder()) return 'Choose the order to open.';
+          return { type: 'page', page: this.destPage(), entity_id: this.destOrder()!.id };
+        }
+        return { type: 'page', page: this.destPage() };
+      }
+      case 'product':
+        if (this.destProduct()) return { type: 'product', product_id: this.destProduct()!.id };
+        return this.productUrl().trim() ? ({ type: 'product', url: this.productUrl().trim() } as NcDestination) : 'Choose a product or paste its address.';
+      case 'url':
+        return this.destUrl().trim() ? { type: 'url', url: this.destUrl().trim() } : 'Enter the address to open.';
+      default:
+        return null;
+    }
   }
 
   private start(portal: NotificationPortal): void {
@@ -837,6 +1091,8 @@ export class NotificationCenterComponent {
     if (!channels.length) return void this.formError.set('Choose web, push or both.');
     if (this.mode() === 'selected' && !this.picked().length) return void this.formError.set('Select at least one person.');
     if (this.mode() === 'filter' && this.category() === 'staff' && !this.staffTypes().length && !this.partnerIds().length) return void this.formError.set('Choose a department, a role or a partner.');
+    const destination = this.destination();
+    if (typeof destination === 'string') return void this.formError.set(destination);
     let schedule: { at: string; timezone: string } | null = null;
     if (this.scheduled()) {
       const info = this.scheduleInfo();
@@ -845,7 +1101,7 @@ export class NotificationCenterComponent {
     }
     this.sending.set(true);
     this.api
-      .create(this.portal(), { title: this.title().trim(), body: this.body().trim(), priority: this.priority(), channels, audience: this.audience(), schedule, image: this.image() })
+      .create(this.portal(), { title: this.title().trim(), body: this.body().trim(), priority: this.priority(), channels, audience: this.audience(), destination, schedule, image: this.image() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: ({ message }) => {
@@ -870,6 +1126,12 @@ export class NotificationCenterComponent {
     this.mode.set('all');
     this.scheduled.set(false);
     this.date.set('');
+    this.destType.set('none');
+    this.destPage.set('');
+    this.destOrder.set(null);
+    this.destProduct.set(null);
+    this.destUrl.set('');
+    this.productUrl.set('');
   }
 
   // ── lists ──

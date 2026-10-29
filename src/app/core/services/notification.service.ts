@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { Subscription, interval, startWith, switchMap, catchError, of } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
-import { AppNotification } from '../models/api.models';
+import { AppNotification, NotificationDestination } from '../models/api.models';
 import { UiService } from './ui.service';
 
 const POLL_MS = 30_000;
@@ -94,10 +94,28 @@ export class NotificationService {
   /** Mark read and open the notification's link. */
   open(n: AppNotification): void {
     this.markRead(n);
+    // a configured destination is resolved by the server for THIS person (permissions, the record itself); without one, the link works as before
+    if (n.destination) return this.openDestination(n.id);
     if (!n.link) return;
-    const [path, query] = n.link.split('?');
+    this.navigateTo(n.link);
+  }
+
+  /** Ask the server where this notification leads for the signed-in person, then go there. A refusal is shown as the server words it. */
+  openDestination(id: string): void {
+    this.api.get<NotificationDestination>(`/notifications/${encodeURIComponent(id)}/destination`).subscribe({
+      next: (r) => {
+        if (r.kind === 'internal') this.navigateTo(r.link);
+        // outside the app: a new window, with no reference to this app and nothing of the login in the address
+        else if (r.kind === 'external') window.open(r.url, '_blank', 'noopener,noreferrer');
+      },
+      error: (err) => this.ui.error(err, 'This link is no longer available.'),
+    });
+  }
+
+  private navigateTo(link: string): void {
+    const [path, query] = link.split('?');
     const queryParams = Object.fromEntries(new URLSearchParams(query || ''));
-    this.router.navigate([path], { queryParams });
+    void this.router.navigate([path], { queryParams });
   }
 
   /**

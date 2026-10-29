@@ -11,6 +11,21 @@ export interface NcAbilities {
   create: boolean; send: boolean; schedule: boolean; edit: boolean; cancel: boolean; urgent: boolean; image: boolean; history: boolean; status: boolean;
 }
 
+/** Where a tap on a notification leads (validated by the server; a page of the app, a Shop product, or an approved address). */
+export type NcDestinationType = 'none' | 'page' | 'product' | 'url';
+export interface NcDestination {
+  type: Exclude<NcDestinationType, 'none'>;
+  page?: string;
+  entity_id?: string;
+  product_id?: string;
+  url?: string;
+  external?: boolean;
+  label?: string;
+}
+export interface NcPageOption { key: string; label: string; entity: 'order' | null }
+export interface NcProduct { id: string; title: string; image_url: string | null; brand: string; store_id?: string }
+export interface NcOrderOption { id: string; reference: string; status: string }
+
 export interface NcOptions {
   abilities: NcAbilities;
   kind: NotificationPortal;
@@ -18,6 +33,7 @@ export interface NcOptions {
   channels: ('web' | 'push')[];
   staff_types: { id: string; label: string; subordinates: string[] }[];
   partners: { id: string; name: string }[];
+  destinations?: Record<NcCategory, NcPageOption[]>;
   limits: { title: number; body: number; image_mb: number };
 }
 
@@ -46,6 +62,7 @@ export interface NcBroadcast {
   channels: ('web' | 'push')[];
   category: NcCategory;
   audience: NcAudience;
+  destination?: NcDestination | null;
   status: NcStatus;
   is_scheduled: boolean;
   send_at: string;
@@ -73,6 +90,7 @@ export interface NcCreateInput {
   priority: 'normal' | 'urgent';
   channels: string[];
   audience: NcAudience;
+  destination?: NcDestination | null;
   schedule?: { at: string; timezone: string } | null;
   image?: { name: string; dataUrl: string } | null;
 }
@@ -91,6 +109,21 @@ export class NotificationCenterService {
 
   recipients(portal: NotificationPortal, params: Record<string, string | number | boolean | null | undefined>): Observable<{ items: NcRecipient[]; meta: NcPageMeta }> {
     return this.api.list<NcRecipient, NcPageMeta>(`${this.base(portal)}/recipients`, params).pipe(map((r) => ({ items: r.items, meta: r.meta as unknown as NcPageMeta })));
+  }
+
+  /** Shop products a client could be sent (admin only; only what the Shop may show). */
+  products(params: Record<string, string | number | boolean | null | undefined>): Observable<{ items: NcProduct[]; meta: NcPageMeta }> {
+    return this.api.list<NcProduct, NcPageMeta>('/admin/notification-center/products', params).pipe(map((r) => ({ items: r.items, meta: r.meta as unknown as NcPageMeta })));
+  }
+
+  /** The brands a product can be filtered by. */
+  productBrands(): Observable<{ id: string; name: string }[]> {
+    return this.api.get<{ id: string; name: string }[]>('/admin/notification-center/product-brands');
+  }
+
+  /** The orders of the one client the notification goes to (admin only). */
+  clientOrders(clientId: string, search: string): Observable<NcOrderOption[]> {
+    return this.api.get<NcOrderOption[]>('/admin/notification-center/orders', { client_id: clientId, search });
   }
 
   list(portal: NotificationPortal, params: Record<string, string | number | boolean | null | undefined>): Observable<{ items: NcBroadcast[]; meta: NcPageMeta }> {

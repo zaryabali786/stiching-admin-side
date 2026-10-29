@@ -78,7 +78,12 @@ export interface AppNotification {
   priority?: 'normal' | 'urgent';
   /** a picture sent with the message */
   image_url?: string | null;
+  /** set when the sender chose where a tap leads (the server decides, per person, whether and where it opens: GET /notifications/:id/destination) */
+  destination?: { type: 'page' | 'product' | 'url'; label?: string } | null;
 }
+
+/** Where a tap on a notification leads for the signed-in person. */
+export type NotificationDestination = { kind: 'none' } | { kind: 'internal'; link: string } | { kind: 'external'; url: string };
 
 export type OrderStatus =
   | 'submitted' | 'received' | 'assigned' | 'cutting' | 'stitching' | 'qc_passed' | 'customer_approval'

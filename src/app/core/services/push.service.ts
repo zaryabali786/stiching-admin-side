@@ -120,6 +120,9 @@ export class PushService {
     const link = data?.['link'];
     const forUser = data?.['userId'];
     if (typeof forUser === 'string' && forUser && forUser !== this.auth.user()?.id) return;
+    // a notification with a configured destination: the server decides where it leads for this person (and whether they may open it)
+    const id = data?.['notificationId'];
+    if (data?.['dest'] === '1' && typeof id === 'string' && id && this.auth.isAuthenticated()) return this.notifications.openDestination(id);
     if (typeof link === 'string' && /^\/(admin|partner)(\/|$|\?)/.test(link)) void this.router.navigateByUrl(link);
   }
 }
