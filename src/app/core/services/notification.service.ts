@@ -125,9 +125,28 @@ export class NotificationService {
   pushLive(n: AppNotification | null | undefined): void {
     if (n?.id) {
       this.items.update((list) => (list.some((x) => x.id === n.id) ? list : [n, ...list]));
-      this.ui.info(n.title);
+      if (!this.alerted.has(n.id)) {
+        this.alerted.add(n.id);
+        this.ui.info(n.title);
+      }
     }
     this.refresh();
+  }
+
+  /** ids already announced, so the live event and the push of one notification never raise two toasts */
+  private alerted = new Set<string>();
+
+  /**
+   * A push arrived while the app is open (the phone shows no tray notification then): announce it once. A "Mobile application"
+   * notification has no live event at all, so without this nothing would show.
+   */
+  alertPush(title: string | undefined, data: Record<string, unknown> | undefined): void {
+    const id = typeof data?.['notificationId'] === 'string' ? (data['notificationId'] as string) : '';
+    if (id) {
+      if (this.alerted.has(id)) return;
+      this.alerted.add(id);
+    }
+    if (title) this.ui.info(title);
   }
 
   /** The socket says something new arrived: refresh the bell now instead of waiting for the poll. */

@@ -67,7 +67,10 @@ export class PushService {
       await PushNotifications.addListener('registrationError', (e) => console.warn('[Push] registration error', e));
       // app open: the phone shows no tray notification, the in-app alert comes from the live socket event;
       // this only refreshes the bell if the socket was down (no alert here, so nothing is ever shown twice)
-      await PushNotifications.addListener('pushNotificationReceived', () => this.notifications.refresh());
+      await PushNotifications.addListener('pushNotificationReceived', (n) => {
+        this.notifications.alertPush(n.title, n.data);
+        this.notifications.refresh();
+      });
       await PushNotifications.addListener('pushNotificationActionPerformed', (a) => this.open(a.notification?.data));
     }
     let perm = await PushNotifications.checkPermissions();

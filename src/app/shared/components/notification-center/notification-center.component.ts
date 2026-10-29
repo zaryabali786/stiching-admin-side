@@ -327,14 +327,14 @@ const timeZones = (): string[] => {
                 <label>Delivery <em>(choose one or both)</em></label>
                 <div class="duo">
                   <button type="button" class="tile" role="checkbox" [attr.aria-checked]="webOn()" [class.on]="webOn()" (click)="webOn.set(!webOn())">
-                    <ion-icon name="globe-outline" aria-hidden="true"></ion-icon><span><b>Web</b><small>In the app’s bell</small></span><ion-icon class="tick" [name]="webOn() ? 'checkmark-circle' : 'ellipse-outline'" aria-hidden="true"></ion-icon>
+                    <ion-icon name="globe-outline" aria-hidden="true"></ion-icon><span><b>Web application</b><small>In the app’s bell</small></span><ion-icon class="tick" [name]="webOn() ? 'checkmark-circle' : 'ellipse-outline'" aria-hidden="true"></ion-icon>
                   </button>
                   <button type="button" class="tile" role="checkbox" [attr.aria-checked]="pushOn()" [class.on]="pushOn()" (click)="pushOn.set(!pushOn())">
-                    <ion-icon name="phone-portrait-outline" aria-hidden="true"></ion-icon><span><b>Push</b><small>To their phone</small></span><ion-icon class="tick" [name]="pushOn() ? 'checkmark-circle' : 'ellipse-outline'" aria-hidden="true"></ion-icon>
+                    <ion-icon name="phone-portrait-outline" aria-hidden="true"></ion-icon><span><b>Mobile application</b><small>Push to their phone</small></span><ion-icon class="tick" [name]="pushOn() ? 'checkmark-circle' : 'ellipse-outline'" aria-hidden="true"></ion-icon>
                   </button>
                 </div>
                 @if (pushOn()) {
-                  <span class="note"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon> Push reaches people who have the app installed and allowed notifications. The delivery status shows who had no device.</span>
+                  <span class="note"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon> A mobile push goes to the Android phones and iPhones the person is signed in on, if they allowed notifications. The delivery status shows who has no mobile device or had a problem. “Sent” means Firebase accepted the push; the phone itself gives no receipt.</span>
                 }
               </div>
 
@@ -382,7 +382,7 @@ const timeZones = (): string[] => {
               <ul class="summary">
                 <li><ion-icon [name]="catIcon(category())" aria-hidden="true"></ion-icon> {{ categoryLabel(category()) }} · {{ audienceText() }}</li>
                 <li><ion-icon name="navigate-outline" aria-hidden="true"></ion-icon> {{ destinationSummary() || 'Opens nothing (message only)' }}</li>
-                <li><ion-icon name="globe-outline" aria-hidden="true"></ion-icon> {{ webOn() && pushOn() ? 'Web + push' : webOn() ? 'Web only' : pushOn() ? 'Push only' : 'No delivery chosen' }}</li>
+                <li><ion-icon name="globe-outline" aria-hidden="true"></ion-icon> {{ webOn() && pushOn() ? 'Web + mobile app' : webOn() ? 'Web application only' : pushOn() ? 'Mobile application only' : 'No delivery chosen' }}</li>
                 <li><ion-icon [name]="scheduled() ? 'time-outline' : 'paper-plane-outline'" aria-hidden="true"></ion-icon> {{ scheduled() ? 'Scheduled' : 'Sent right away' }}</li>
               </ul>
               <button type="submit" class="send" [class.urgent]="priority() === 'urgent'" [disabled]="sending()">
@@ -489,10 +489,10 @@ const timeZones = (): string[] => {
               <h4>Delivery status</h4>
               <div class="table-wrap">
                 <table class="table small">
-                  <thead><tr><th>Person</th><th>Web</th><th>Push</th><th>Problem</th></tr></thead>
+                  <thead><tr><th>Person</th><th>Web app</th><th>Mobile push</th><th>Problem</th></tr></thead>
                   <tbody>
                     @for (x of d.deliveries; track x.user_id) {
-                      <tr><td>{{ x.name || x.email || x.user_id }}</td><td>{{ x.web_status || '–' }}</td><td>{{ x.push_status || '–' }}@if (x.push_devices) { ({{ x.push_devices }}) }</td><td class="bad">{{ x.error }}</td></tr>
+                      <tr><td>{{ x.name || x.email || x.user_id }}</td><td>{{ x.web_status || '–' }}</td><td>{{ pushLabel(x.push_status) }}@if (x.push_devices) { ({{ x.push_devices }} device{{ x.push_devices === 1 ? '' : 's' }}) }</td><td class="bad">{{ x.error }}</td></tr>
                     } @empty { <tr><td colspan="4" class="muted">No deliveries yet.</td></tr> }
                   </tbody>
                 </table>
@@ -515,7 +515,7 @@ const timeZones = (): string[] => {
                 <select class="select" (change)="patchEdit({ priority: $any($event.target).value })"><option value="normal" [selected]="e.priority === 'normal'">Normal</option><option value="urgent" [selected]="e.priority === 'urgent'" [disabled]="!o.abilities.urgent">Urgent</option></select></div>
               <div class="field"><label>Delivery</label>
                 <select class="select" (change)="patchEdit({ channels: $any($event.target).value.split(',') })">
-                  <option value="web" [selected]="e.channels.join() === 'web'">Web</option><option value="push" [selected]="e.channels.join() === 'push'">Push</option><option value="web,push" [selected]="e.channels.join() === 'web,push'">Web and push</option>
+                  <option value="web" [selected]="e.channels.join() === 'web'">Web application</option><option value="push" [selected]="e.channels.join() === 'push'">Mobile application</option><option value="web,push" [selected]="e.channels.join() === 'web,push'">Web and mobile</option>
                 </select></div>
             </div>
             @if (o.abilities.schedule) {
@@ -754,7 +754,7 @@ export class NotificationCenterComponent {
   readonly image = signal<{ name: string; dataUrl: string } | null>(null);
   readonly priority = signal<'normal' | 'urgent'>('normal');
   readonly webOn = signal(true);
-  readonly pushOn = signal(false);
+  readonly pushOn = signal(true);
   readonly scheduled = signal(false);
   readonly date = signal('');
   readonly time = signal('09:00');
@@ -964,6 +964,10 @@ export class NotificationCenterComponent {
 
   categoryLabel(c: NcCategory): string { return CATEGORY_LABEL[c] ?? c; }
   statusLabel(s: NcStatus): string { return STATUS_LABEL[s] ?? s; }
+  /** What the server's push status means for the sender (Firebase gives no receipt from the phone itself). */
+  pushLabel(s: string | null): string {
+    return s === 'sent' ? 'Accepted by Firebase' : s === 'failed' ? 'Failed' : s === 'no_device' ? 'No mobile device' : s === 'skipped' ? 'Skipped' : '–';
+  }
 
   allLabel(): string {
     const o = this.opts();
@@ -1088,7 +1092,7 @@ export class NotificationCenterComponent {
     const channels = [...(this.webOn() ? ['web'] : []), ...(this.pushOn() ? ['push'] : [])];
     if (!this.title().trim()) return void this.formError.set('Write a title.');
     if (!this.body().trim()) return void this.formError.set('Write a message.');
-    if (!channels.length) return void this.formError.set('Choose web, push or both.');
+    if (!channels.length) return void this.formError.set('Choose the web application, the mobile application or both.');
     if (this.mode() === 'selected' && !this.picked().length) return void this.formError.set('Select at least one person.');
     if (this.mode() === 'filter' && this.category() === 'staff' && !this.staffTypes().length && !this.partnerIds().length) return void this.formError.set('Choose a department, a role or a partner.');
     const destination = this.destination();
