@@ -91,6 +91,8 @@ export interface NcCreateInput {
   channels: string[];
   audience: NcAudience;
   destination?: NcDestination | null;
+  /** a product link brings the product's own picture; false = send without it */
+  use_product_image?: boolean;
   schedule?: { at: string; timezone: string } | null;
   image?: { name: string; dataUrl: string } | null;
 }

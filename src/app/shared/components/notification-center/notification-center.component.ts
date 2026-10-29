@@ -6,7 +6,7 @@ import { IonIcon } from '@ionic/angular';
 import { addIcons } from 'ionicons';
 import {
   alertCircleOutline, checkmarkCircle, cloudUploadOutline, closeOutline, ellipseOutline, flash, flashOutline, globeOutline, idCardOutline, businessOutline,
-  imageOutline, informationCircleOutline, navigateOutline, notifications, notificationsOutline, paperPlaneOutline, peopleOutline, phonePortraitOutline, searchOutline, swapHorizontalOutline, timeOutline, trashOutline,
+  imageOutline, informationCircleOutline, navigateOutline, refreshOutline, notifications, notificationsOutline, paperPlaneOutline, peopleOutline, phonePortraitOutline, searchOutline, swapHorizontalOutline, timeOutline, trashOutline,
 } from 'ionicons/icons';
 import { compressImage } from '../../../core/utils/image';
 import { UiService } from '../../../core/services/ui.service';
@@ -175,52 +175,9 @@ const timeZones = (): string[] => {
               }
             </section>
 
-            <!-- 2 · what -->
+            <!-- 2 · where it opens -->
             <section class="step">
-              <header class="step-head"><span class="num">2</span><div><h3>What do you want to say?</h3><p>A short title and a clear message.</p></div></header>
-              <div class="field">
-                <label for="ncTitle">Title</label>
-                <input id="ncTitle" class="input" maxlength="120" autocomplete="off" placeholder="e.g. Eid collection is live" [value]="title()" (input)="title.set($any($event.target).value)" />
-                <span class="counter">{{ title().length }}/{{ o.limits.title }}</span>
-              </div>
-              <div class="field">
-                <label for="ncBody">Message</label>
-                <textarea id="ncBody" class="input" rows="4" [attr.maxlength]="o.limits.body" placeholder="Write your message…" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
-                <span class="counter">{{ body().length }}/{{ o.limits.body }}</span>
-              </div>
-
-              @if (o.abilities.image) {
-                <div class="field">
-                  <label>Picture <em>(optional)</em></label>
-                  @if (image(); as img) {
-                    <div class="uploaded">
-                      <img [src]="img.dataUrl" alt="The picture you chose" />
-                      <div class="uploaded-info">
-                        <span class="ok"><ion-icon name="checkmark-circle" aria-hidden="true"></ion-icon> Picture added</span>
-                        <b class="fname">{{ img.name }}</b>
-                        <small>About {{ imageKb() }} KB · ready to send</small>
-                        <div class="uploaded-actions">
-                          <label class="btn btn-sm" for="ncImage2"><ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon> Replace</label>
-                          <button type="button" class="btn btn-sm btn-ghost danger" (click)="image.set(null)"><ion-icon name="trash-outline" aria-hidden="true"></ion-icon> Remove</button>
-                        </div>
-                        <input id="ncImage2" class="sr" type="file" accept="image/png,image/jpeg,image/webp" (change)="pickImage($event)" />
-                      </div>
-                    </div>
-                  } @else {
-                    <label class="drop" [class.over]="dragging()" for="ncImage" (dragover)="onDragOver($event)" (dragleave)="dragging.set(false)" (drop)="onDrop($event)">
-                      <span class="drop-ico"><ion-icon name="cloud-upload-outline" aria-hidden="true"></ion-icon></span>
-                      <b>Drop a picture here, or <u>browse</u></b>
-                      <small>PNG, JPG or WebP · it is shrunk automatically so it sends fast</small>
-                    </label>
-                    <input id="ncImage" class="sr" type="file" accept="image/png,image/jpeg,image/webp" (change)="pickImage($event)" />
-                  }
-                </div>
-              }
-            </section>
-
-            <!-- 3 · where it opens -->
-            <section class="step">
-              <header class="step-head"><span class="num">3</span><div><h3>Where should it open?</h3><p>Optional. What the person sees when they tap the notification.</p></div></header>
+              <header class="step-head"><span class="num">2</span><div><h3>Where should it open?</h3><p>Optional. What the person sees when they tap the notification.</p></div></header>
               <div class="field">
                 <label for="ncDestType">Destination</label>
                 <select id="ncDestType" class="select" [value]="destType()" (change)="setDestType($any($event.target).value)">
@@ -278,7 +235,7 @@ const timeZones = (): string[] => {
                     </div>
                     <div class="prod-grid" role="listbox" aria-label="Products" (scroll)="onProductScroll($event)">
                       @for (p of productResults(); track p.id) {
-                        <button type="button" class="prod-card" role="option" (click)="destProduct.set(p)">
+                        <button type="button" class="prod-card" role="option" (click)="chooseProduct(p)">
                           <span class="prod-img">
                             @if (p.image_url) { <img [src]="p.image_url" [alt]="p.title" loading="lazy" referrerpolicy="no-referrer" /> } @else { <ion-icon name="image-outline" aria-hidden="true"></ion-icon> }
                           </span>
@@ -305,6 +262,66 @@ const timeZones = (): string[] => {
                 </div>
               }
               @if (destinationSummary(); as d) { <span class="note"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon> {{ d }}</span> }
+            </section>
+
+            <!-- 3 · what -->
+            <section class="step">
+              <header class="step-head"><span class="num">3</span><div><h3>What do you want to say?</h3><p>A short title and a clear message.</p></div></header>
+              <div class="field">
+                <label for="ncTitle">Title</label>
+                <input id="ncTitle" class="input" maxlength="120" autocomplete="off" placeholder="e.g. Eid collection is live" [value]="title()" (input)="title.set($any($event.target).value)" />
+                <span class="counter">{{ title().length }}/{{ o.limits.title }}</span>
+              </div>
+              <div class="field">
+                <label for="ncBody">Message</label>
+                <textarea id="ncBody" class="input" rows="4" [attr.maxlength]="o.limits.body" placeholder="Write your message…" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
+                <span class="counter">{{ body().length }}/{{ o.limits.body }}</span>
+              </div>
+
+              @if (o.abilities.image) {
+                <div class="field">
+                  <label>Picture <em>(optional)</em></label>
+                  @if (productPicture(); as pic) {
+                    <div class="uploaded">
+                      <img [src]="pic" alt="The picture of the product" referrerpolicy="no-referrer" />
+                      <div class="uploaded-info">
+                        <span class="ok"><ion-icon name="checkmark-circle" aria-hidden="true"></ion-icon> The product’s own picture</span>
+                        <b class="fname">{{ destProduct()?.title }}</b>
+                        <small>Sent with the notification. Upload another picture to replace it, or send without one.</small>
+                        <div class="uploaded-actions">
+                          <label class="btn btn-sm" for="ncImage3"><ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon> Use my own picture</label>
+                          <button type="button" class="btn btn-sm btn-ghost danger" (click)="useProductImage.set(false)"><ion-icon name="trash-outline" aria-hidden="true"></ion-icon> No picture</button>
+                        </div>
+                        <input id="ncImage3" class="sr" type="file" accept="image/png,image/jpeg,image/webp" (change)="pickImage($event)" />
+                      </div>
+                    </div>
+                  } @else if (image(); as img) {
+                    <div class="uploaded">
+                      <img [src]="img.dataUrl" alt="The picture you chose" />
+                      <div class="uploaded-info">
+                        <span class="ok"><ion-icon name="checkmark-circle" aria-hidden="true"></ion-icon> Picture added</span>
+                        <b class="fname">{{ img.name }}</b>
+                        <small>About {{ imageKb() }} KB · ready to send</small>
+                        <div class="uploaded-actions">
+                          <label class="btn btn-sm" for="ncImage2"><ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon> Replace</label>
+                          <button type="button" class="btn btn-sm btn-ghost danger" (click)="image.set(null)"><ion-icon name="trash-outline" aria-hidden="true"></ion-icon> Remove</button>
+                        </div>
+                        <input id="ncImage2" class="sr" type="file" accept="image/png,image/jpeg,image/webp" (change)="pickImage($event)" />
+                      </div>
+                    </div>
+                  } @else {
+                    <label class="drop" [class.over]="dragging()" for="ncImage" (dragover)="onDragOver($event)" (dragleave)="dragging.set(false)" (drop)="onDrop($event)">
+                      <span class="drop-ico"><ion-icon name="cloud-upload-outline" aria-hidden="true"></ion-icon></span>
+                      <b>Drop a picture here, or <u>browse</u></b>
+                      <small>PNG, JPG or WebP · it is shrunk automatically so it sends fast</small>
+                    </label>
+                    <input id="ncImage" class="sr" type="file" accept="image/png,image/jpeg,image/webp" (change)="pickImage($event)" />
+                    @if (destProduct() && !useProductImage()) {
+                      <button type="button" class="btn btn-sm btn-ghost" (click)="useProductImage.set(true)"><ion-icon name="refresh-outline" aria-hidden="true"></ion-icon> Use the product’s picture again</button>
+                    }
+                  }
+                </div>
+              }
             </section>
 
             <!-- 4 · how -->
@@ -375,7 +392,7 @@ const timeZones = (): string[] => {
                   @if (priority() === 'urgent') { <span class="pn-urgent">Urgent</span> }
                   <b>{{ title().trim() || 'Your title appears here' }}</b>
                   <p>{{ body().trim() || 'Your message appears here. Keep it short and clear.' }}</p>
-                  @if (image(); as img) { <img [src]="img.dataUrl" alt="" /> }
+                  @if (image(); as img) { <img [src]="img.dataUrl" alt="" /> } @else if (productPicture(); as pic) { <img [src]="pic" alt="" referrerpolicy="no-referrer" /> }
                   <small>just now</small>
                 </div>
               </div>
@@ -771,6 +788,11 @@ export class NotificationCenterComponent {
   readonly destUrl = signal('');
   readonly productUrl = signal('');
   readonly productQuery = signal('');
+  /** a product link brings the product's own picture; the sender can send without it or upload another one instead */
+  readonly useProductImage = signal(true);
+  private autoTitle = '';
+  /** The picture the product brings, while nothing else is chosen. */
+  readonly productPicture = computed(() => (this.destType() === 'product' && this.useProductImage() && !this.image() ? this.destProduct()?.image_url ?? null : null));
   readonly productResults = signal<NcProduct[]>([]);
   readonly productLoading = signal(false);
   readonly productMore = signal(false);
@@ -871,6 +893,20 @@ export class NotificationCenterComponent {
     if (type === 'product' && !this.productResults().length) {
       this.api.productBrands().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (b) => this.productBrands.set(b), error: () => undefined });
       this.loadProducts(true);
+    }
+  }
+
+  /**
+   * A product was chosen: its name becomes the title (when the title is empty, or still the name of the product chosen before,
+   * so a title the sender wrote is never overwritten), and its picture comes with the notification.
+   */
+  chooseProduct(p: NcProduct): void {
+    this.destProduct.set(p);
+    this.useProductImage.set(true);
+    const current = this.title().trim();
+    if (!current || current === this.autoTitle) {
+      this.autoTitle = p.title.slice(0, this.opts()?.limits.title ?? 120);
+      this.title.set(this.autoTitle);
     }
   }
 
@@ -1105,7 +1141,7 @@ export class NotificationCenterComponent {
     }
     this.sending.set(true);
     this.api
-      .create(this.portal(), { title: this.title().trim(), body: this.body().trim(), priority: this.priority(), channels, audience: this.audience(), destination, schedule, image: this.image() })
+      .create(this.portal(), { title: this.title().trim(), body: this.body().trim(), priority: this.priority(), channels, audience: this.audience(), destination, use_product_image: this.useProductImage(), schedule, image: this.image() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: ({ message }) => {
@@ -1131,6 +1167,8 @@ export class NotificationCenterComponent {
     this.scheduled.set(false);
     this.date.set('');
     this.destType.set('none');
+    this.useProductImage.set(true);
+    this.autoTitle = '';
     this.destPage.set('');
     this.destOrder.set(null);
     this.destProduct.set(null);
