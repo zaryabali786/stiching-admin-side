@@ -26,11 +26,30 @@ export class PushService {
   private token: string | null = readToken();
   private nativeListening = false;
   private starting = false;
+  /** the permission question asked at the first launch; the sign-in registration waits for it so the box never appears twice */
+  private launchAsk: Promise<void> = Promise.resolve();
 
   constructor() {
     effect(() => {
       if (this.auth.isAuthenticated() && this.auth.canUsePartnerPortal()) void this.start();
     });
+    // Ask at the first launch, before anybody signs in: on a fresh install the person sits on the sign-in page and the box used to
+    // come only after sign-in (or never, when the sign-in is not completed). Asked once the splash is gone, so it is seen, not hidden behind it.
+    if (Capacitor.isNativePlatform() && environment.nativePush) this.launchAsk = this.askAtLaunch();
+  }
+
+  private async askAtLaunch(): Promise<void> {
+    try {
+      await afterSplash();
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      const perm = await PushNotifications.checkPermissions();
+      if ((perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') && askedLongAgo()) {
+        markAsked();
+        await PushNotifications.requestPermissions();
+      }
+    } catch (err) {
+      console.warn('[Push] permission not asked:', err);
+    }
   }
 
   /** Sign-out: this device stops getting the user's pushes. Call it while the login is still in place. */
@@ -73,6 +92,7 @@ export class PushService {
       });
       await PushNotifications.addListener('pushNotificationActionPerformed', (a) => this.open(a.notification?.data));
     }
+    await this.launchAsk;
     let perm = await PushNotifications.checkPermissions();
     // Ask at most once a week: after a "Don't allow" (or a dismissed dialog) the phone keeps answering "prompt", and asking on every
     // app start is what made the permission box come back each time the app was opened.
@@ -166,4 +186,16 @@ function writeToken(token: string | null): void {
   } catch {
     /* storage unavailable */
   }
+}
+
+/** Resolves when the animated start screen (index.html, removed by main.ts) is gone; gives up after 15 s so a slow start never blocks it. */
+function afterSplash(): Promise<void> {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const check = (): void => {
+      if (!document.getElementById('boot-splash') || Date.now() - started > 15_000) resolve();
+      else window.setTimeout(check, 300);
+    };
+    check();
+  });
 }
