@@ -1,13 +1,14 @@
 import { Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { PortalThemeService } from './core/services/portal-theme.service';
+import { NotificationsOffComponent } from './shared/components/notifications-off.component';
 import { PushService } from './core/services/push.service';
 import { installGalleryPermissionPrompt } from './core/services/native-permissions';
 
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, NotificationsOffComponent],
 })
 export class AppComponent {
   constructor() {

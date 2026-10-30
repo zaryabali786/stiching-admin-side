@@ -9,6 +9,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
  */
 interface MediaAccessPlugin {
   request(): Promise<{ gallery: string }>;
+  openSettings(): Promise<void>;
 }
 const MediaAccess = registerPlugin<MediaAccessPlugin>('MediaAccess');
 
@@ -67,4 +68,15 @@ export function installGalleryPermissionPrompt(): void {
     });
   };
   document.addEventListener('click', onClick, true);
+}
+
+/** Opens the phone's settings for this app (Android: its notification settings, iPhone: its settings page). */
+export async function openAppSettings(): Promise<void> {
+  try {
+    if (Capacitor.getPlatform() === 'android') await MediaAccess.openSettings();
+    // iPhone: the web view hands a link outside the app to the system, and "app-settings:" is this app's page in Settings
+    else window.location.href = 'app-settings:';
+  } catch (err) {
+    console.warn('[Permissions] settings not opened:', err);
+  }
 }
