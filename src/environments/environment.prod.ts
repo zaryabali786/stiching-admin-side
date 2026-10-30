@@ -1,7 +1,7 @@
 export const environment = {
   production: true,
   // The public Privacy Policy page (App Store rule: also linked inside the app). Empty = no link is shown. Set it once the page exists.
-  privacyPolicyUrl: 'https://www.stitchnship.com/privacy-policy',
+  privacyPolicyUrl: 'https://www.termsfeed.com/live/9b405225-cdbd-4a58-b133-b16083bd2f02',
   apiUrl: 'https://api.stitchnship.com/api',
   // switch on ONLY after android/app/google-services.json (Firebase) is in the project: without it the app crashes on push
   nativePush: true,

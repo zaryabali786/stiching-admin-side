@@ -15,8 +15,9 @@
 /* Brand panel */
 .brand-panel {
   position: relative;
-  background: var(--c-dark);
-  color: #fff;
+  background: #F8F9FB;
+  color: #111827;
+  border-right: 1px solid #E5E7EB;
   padding: calc(44px + var(--sat, 0px)) 48px 44px;
   display: flex;
   flex-direction: column;
@@ -39,7 +40,7 @@
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.2em;
-    color: #9DA8A1;
+    color: #6B7280;
   }
 
   .logo {
@@ -63,6 +64,7 @@
     padding: 8px;
     border-radius: 14px;
     background: #fff;
+    border: 1px solid #E5E7EB;
 
     img { display: block; width: 100%; height: 100%; object-fit: contain; }
   }
@@ -72,7 +74,7 @@
     font-size: 40px;
     font-weight: 600;
     line-height: 1.15;
-    color: #fff;
+    color: #111827;
     max-width: 440px;
 
     em {
@@ -82,7 +84,7 @@
   }
 
   .lead {
-    color: #B9C2BC;
+    color: #4B5563;
     font-size: 14.5px;
     line-height: 1.6;
     max-width: 420px;
@@ -102,15 +104,15 @@
       gap: 10px;
       align-items: flex-start;
       font-size: 13.5px;
-      color: #DDE3DF;
+      color: #374151;
     }
 
     .dot {
       width: 20px;
       height: 20px;
       border-radius: 50%;
-      background: rgba(196, 159, 99, 0.15);
-      color: var(--c-gold);
+      background: rgba(196, 159, 99, 0.22);
+      color: var(--c-gold-dark);
       font-size: 11px;
       display: flex;
       align-items: center;
@@ -122,7 +124,7 @@
 
   .foot {
     font-size: 12px;
-    color: #7A8980;
+    color: #6B7280;
     position: relative;
     z-index: 1;
   }
@@ -279,8 +281,41 @@
   div { height: 100%; transition: width 0.25s, background 0.25s; }
 }
 
+/* phone-sized header of the sign-in (round logo + title); the desktop layout has the brand panel instead */
+.m-head { display: none; }
+
 @media (max-width: 860px) {
-  .auth { grid-template-columns: 1fr; }
+  .auth { grid-template-columns: 1fr; background: #f8f9fa; }
+  .brand-panel { display: none; }
+  .form-side { align-items: flex-start; padding-top: calc(40px + var(--sat, 0px)); }
+  .form-card.login-mode {
+    .eyebrow, h2, .sub { display: none; }
+    .m-head {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 26px;
+
+      .m-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 84px;
+        height: 84px;
+        margin-bottom: 22px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #62003e 0%, #9b0a5d 100%);
+        box-shadow: 0 8px 22px rgba(98, 0, 62, 0.28);
+        img { width: 52px; height: 52px; object-fit: contain; filter: brightness(0) invert(1); }
+      }
+      h1 { font-size: 24px; line-height: 1.2; font-weight: 700; margin: 0; color: var(--c-ink); }
+      p { margin: 6px 0 0; font-size: 13px; color: var(--c-muted); }
+    }
+    .submit, .btn-google { border-radius: 999px; }
+    .submit { background: #62003e; border-color: #62003e; }
+    .submit:hover:not(:disabled) { background: #7a0b4d; border-color: #7a0b4d; }
+  }
   .brand-panel {
     padding: calc(28px + var(--sat, 0px)) 24px 28px;
     h1 { font-size: 28px; }

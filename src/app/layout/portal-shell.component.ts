@@ -171,7 +171,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
         urdu: 'روزانہ کام',
         items: [
           { path: '/partner/receiving', label: 'Receiving', urdu: 'وصولی', icon: 'download-outline', badge: p?.receiving, tone: 'amber', permission: 'receiving.view' },
-          { path: '/partner/production', label: 'Production', urdu: 'پیداوار', icon: 'layers-outline', permission: 'production.view' },
+          { path: '/partner/production', label: 'Production', urdu: 'پیداوار', icon: 'layers-outline', badge: p?.production, tone: 'amber', permission: 'production.view' },
           { path: '/partner/master-tracking', label: 'Master tracking', urdu: 'ماسٹر ٹریکنگ', icon: 'people-outline', permission: 'production.view' },
           { path: '/partner/quality-check', label: 'Quality check', urdu: 'کوالٹی چیک', icon: 'shield-checkmark-outline', badge: p?.qualityCheck, tone: 'amber', permission: 'quality.view' },
           { path: '/partner/warehouse', label: 'Warehouse', urdu: 'گودام', icon: 'file-tray-stacked-outline', badge: p?.warehouse, tone: 'amber', permission: 'warehouse.view' },

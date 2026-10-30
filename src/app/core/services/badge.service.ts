@@ -12,6 +12,8 @@ export interface AdminBadges {
 
 export interface PartnerBadges {
   receiving: number;
+  /** articles waiting in Production's "To assign" tab */
+  production?: number;
   qualityCheck: number;
   warehouse: number;
   /** conversations with unread customer messages */

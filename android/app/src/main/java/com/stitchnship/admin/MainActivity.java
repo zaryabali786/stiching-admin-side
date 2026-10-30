@@ -1,12 +1,17 @@
 package com.stitchnship.admin;
 
+import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
 /**
- * Camera, microphone and gallery access are NOT requested here any more. Asking for them at launch put a system permission box on
- * screen at the same moment as the notification permission box (Android shows one at a time, so one of them was dropped and the
- * phone never registered for push), and it covered the splash. The permissions stay declared in the manifest; Android asks for each
- * one when a feature first needs it (the voice recorder, a photo picker), through Capacitor's WebView.
+ * Nothing is requested at launch (that put several system boxes on screen at once and covered the splash). Notifications are asked
+ * after sign-in; the camera and microphone are asked by the WebView when a feature first uses them; the gallery is asked by
+ * MediaAccessPlugin the first time a photo or video is picked.
  */
 public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(MediaAccessPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
 }
