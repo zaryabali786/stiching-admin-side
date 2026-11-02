@@ -73,6 +73,7 @@ export const routes: Routes = [
       { path: 'appearance', pathMatch: 'full', redirectTo: 'theme' },
       { path: 'theme', data: { adminModule: 'app_builder', title: 'Customize', mode: 'appearance' }, title: 'Customize · Admin', loadComponent: () => import('./pages/admin/home-layout/home-layout.page').then((m) => m.AdminHomeLayoutPage) },
       { path: 'banners', pathMatch: 'full', redirectTo: 'home-layout' },
+      { path: 'reviews', data: { adminModule: 'reviews', title: 'Customer Reviews' }, title: 'Customer Reviews · Admin', loadComponent: () => import('./pages/admin/reviews/reviews.page').then((m) => m.AdminReviewsPage) },
       { path: 'notification-center', data: { adminModule: 'notification_center', title: 'Notification Center' }, title: 'Notification Center · Admin', loadComponent: () => import('./pages/admin/notification-center/notification-center.page').then((m) => m.AdminNotificationCenterPage) },
       { path: 'portal-theme', data: { adminModule: 'portal_theme', title: 'Portal theme' }, title: 'Portal theme · Admin', loadComponent: () => import('./pages/admin/portal-theme/portal-theme.page').then((m) => m.AdminPortalThemePage) },
       { path: 'reports', data: { adminModule: 'reports', title: 'Reports' }, title: 'Reports · Admin', loadComponent: () => import('./pages/admin/reports/reports.page').then((m) => m.AdminReportsPage) },

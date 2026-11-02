@@ -1,0 +1,163 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">People</span>
+      <h1>Customer Reviews</h1>
+      <p class="subtitle">What customers said about their delivered orders. The review emails are set up in Settings &rsaquo; Customer reviews.</p>
+    </div>
+    <a class="btn btn-ghost" routerLink="/admin/settings" [queryParams]="{ tab: 'reviews' }">Review email settings</a>
+  </header>
+
+  <!-- Summary -->
+  <section class="rv-summary" aria-label="Review summary">
+    <div class="rv-cards">
+      <div class="rv-card"><span>Total reviews</span><strong>{{ summary()?.total ?? '—' }}</strong></div>
+      <div class="rv-card">
+        <span>Average rating</span>
+        <strong>{{ summary() ? (summary()!.total ? (summary()!.average | number: '1.1-2') : '—') : '—' }}<small> / 5</small></strong>
+      </div>
+      <div class="rv-card good"><span>5-star reviews</span><strong>{{ summary()?.five_star ?? '—' }}</strong></div>
+      <div class="rv-card bad"><span>1-star reviews</span><strong>{{ summary()?.one_star ?? '—' }}</strong></div>
+    </div>
+    <div class="rv-dist" role="group" aria-label="Rating distribution">
+      @for (s of stars; track s) {
+        <button type="button" class="rv-dist-row" [class.on]="query().rating === s" [attr.aria-pressed]="query().rating === s" (click)="setRating(query().rating === s ? '' : '' + s)">
+          <span class="lbl">{{ s }} ★</span>
+          <span class="bar"><span class="fill" [style.width]="barWidth(count(s))"></span></span>
+          <span class="num">{{ count(s) }}</span>
+        </button>
+      }
+    </div>
+  </section>
+  @if (summaryError()) { <p class="rv-note">{{ summaryError() }}</p> }
+
+  <!-- Filters -->
+  <div class="toolbar rv-filters">
+    <app-search-input placeholder="Search customer, email or order…" [value]="query().search" (search)="onSearch($event)" />
+    <label class="rv-f">Type
+      <select class="select" (change)="setType($any($event.target).value)">
+        <option value="" [selected]="!query().type">All customers</option>
+        <option value="national" [selected]="query().type === 'national'">National</option>
+        <option value="international" [selected]="query().type === 'international'">International</option>
+      </select>
+    </label>
+    <label class="rv-f">Stars
+      <select class="select" (change)="setRating($any($event.target).value)">
+        <option value="" [selected]="!query().rating">All ratings</option>
+        @for (s of stars; track s) { <option [value]="s" [selected]="query().rating === s">{{ s }} {{ s === 1 ? 'star' : 'stars' }}</option> }
+      </select>
+    </label>
+    <label class="rv-f">From <input class="input" type="date" [value]="query().from" [max]="query().to || null" (change)="setFrom($any($event.target).value)" /></label>
+    <label class="rv-f">To <input class="input" type="date" [value]="query().to" [min]="query().from || null" (change)="setTo($any($event.target).value)" /></label>
+    <label class="rv-f">Sort
+      <select class="select" (change)="setDir($any($event.target).value)">
+        <option value="desc" [selected]="query().dir === 'desc'">Newest first</option>
+        <option value="asc" [selected]="query().dir === 'asc'">Oldest first</option>
+      </select>
+    </label>
+    @if (filtered()) { <button type="button" class="btn btn-ghost btn-sm" (click)="clearFilters()">Clear filters</button> }
+    @if (list.meta(); as m) { <span class="result-count">{{ m.total }} {{ m.total === 1 ? 'review' : 'reviews' }}</span> }
+    <label class="page-size">
+      Rows
+      <select class="select" (change)="setLimit($any($event.target).value)">
+        @for (s of pageSizes; track s) { <option [value]="s" [selected]="s === query().limit">{{ s }}</option> }
+      </select>
+    </label>
+  </div>
+
+  <div class="table-card" [class.refreshing]="list.refreshing()">
+    @if (list.error()) {
+      <app-empty-state kind="error" [message]="list.error()" (retry)="list.reload()" />
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table rv-table">
+          <caption class="sr-only">Customer reviews. Select a row to see the whole review.</caption>
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Order</th>
+              <th>Type</th>
+              <th>Rating</th>
+              <th>Comment</th>
+              <th>Reviewed</th>
+              <th>Delivered</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (list.loading()) {
+              @for (i of skeleton; track i) {
+                <tr>@for (c of [1, 2, 3, 4, 5, 6, 7]; track c) { <td><span class="skeleton"></span></td> }</tr>
+              }
+            } @else {
+              @for (r of list.items(); track r.id) {
+                <tr class="clickable" tabindex="0" [attr.aria-label]="'Open review of order ' + r.order?.reference" (click)="open(r)" (keydown.enter)="open(r)">
+                  <td data-label="Customer">
+                    <span class="cell-main">{{ r.customer?.full_name || '—' }}</span>
+                    <span class="cell-sub">{{ r.customer?.email || '' }}</span>
+                  </td>
+                  <td data-label="Order" class="mono nowrap">{{ r.order?.reference || '—' }}</td>
+                  <td data-label="Type"><span class="badge" [class.gold]="r.customer_type === 'international'">{{ typeLabel(r.customer_type) }}</span></td>
+                  <td data-label="Rating" class="nowrap"><span class="stars" [attr.aria-label]="r.rating + ' out of 5 stars'">{{ '★'.repeat(r.rating) }}<i>{{ '★'.repeat(5 - r.rating) }}</i></span></td>
+                  <td data-label="Comment" class="rv-comment">{{ r.comment || '—' }}</td>
+                  <td data-label="Reviewed" class="nowrap">{{ r.created_at | day }}</td>
+                  <td data-label="Delivered" class="nowrap">{{ r.delivered_at | day }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="7">
+                  <app-empty-state [title]="filtered() ? 'No matching reviews' : 'No reviews yet'"
+                    [message]="filtered() ? 'Try different filters or clear them.' : 'Reviews appear here after customers rate their delivered orders.'" />
+                </td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-pagination [meta]="list.meta()" (pageChange)="goTo($event)" />
+    }
+  </div>
+</div>
+
+@if (selected(); as r) {
+  <div class="drawer-backdrop" (click)="close()"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" [attr.aria-label]="'Review of order ' + r.order?.reference">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">Review · {{ typeLabel(r.customer_type) }}</span>
+        <h3>{{ r.customer?.full_name || r.customer?.email || 'Customer' }}</h3>
+        <p class="head-sub">Order {{ r.order?.reference }} · reviewed {{ r.created_at | day: true }}</p>
+      </div>
+      <button type="button" class="close-btn" (click)="close()" aria-label="Close review">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="rv-big"><span class="stars big" [attr.aria-label]="r.rating + ' out of 5 stars'">{{ '★'.repeat(r.rating) }}<i>{{ '★'.repeat(5 - r.rating) }}</i></span><strong>{{ r.rating }} / 5</strong></div>
+      <h4 class="sec">Comment</h4>
+      <p class="rv-text">{{ r.comment || 'The customer did not write a comment.' }}</p>
+
+      @if (detailLoading()) {
+        <span class="skeleton" style="height: 120px; margin-top: 18px"></span>
+      } @else if (detailError()) {
+        <app-empty-state kind="error" [message]="detailError()" (retry)="retryDetail()" />
+      } @else if (detail(); as d) {
+        <h4 class="sec">Customer</h4>
+        <dl class="kv">
+          <dt>Name</dt><dd>{{ d.customer?.full_name || '—' }}@if (d.customer?.customer_code) { · {{ d.customer?.customer_code }} }</dd>
+          <dt>Email</dt><dd>@if (d.customer?.email) { <a class="link" [href]="'mailto:' + d.customer?.email">{{ d.customer?.email }}</a> } @else { — }</dd>
+        </dl>
+        <h4 class="sec">Order</h4>
+        <dl class="kv">
+          <dt>Order</dt><dd>{{ d.order?.reference || '—' }}@if (d.order?.brand) { · {{ d.order?.brand }} }</dd>
+          <dt>Type</dt><dd>{{ typeLabel(d.customer_type) }} · {{ d.order?.destination_city || '—' }}{{ d.order?.destination_country ? ', ' + d.order?.destination_country : '' }}</dd>
+          <dt>Delivered</dt><dd>{{ d.delivered_at | day: true }}</dd>
+          <dt>Reviewed</dt><dd>{{ d.created_at | day: true }} · via {{ d.source === 'email' ? 'the email link' : 'the app' }}</dd>
+        </dl>
+      }
+    </div>
+    <div class="drawer-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
+      <span class="foot-spacer"></span>
+      @if (r.order?.reference) {
+        <a class="btn btn-primary" routerLink="/admin/orders" [queryParams]="{ ref: r.order?.reference }">View order {{ r.order?.reference }} →</a>
+      }
+    </div>
+  </aside>
+}

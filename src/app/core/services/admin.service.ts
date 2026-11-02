@@ -114,6 +114,49 @@ export interface QcApprovalSetting {
   required: boolean;
 }
 
+/** Customer reviews: when the review email goes out after delivery, separately for Pakistan (national) and other countries. */
+export interface ReviewSettings {
+  nationalEnabled: boolean;
+  nationalReviewDays: number;
+  internationalEnabled: boolean;
+  internationalReviewDays: number;
+  maxDays?: number;
+}
+
+export type ReviewType = 'national' | 'international';
+
+export interface AdminReview {
+  id: string;
+  order_id: string;
+  rating: number;
+  comment: string | null;
+  customer_type: ReviewType;
+  source: 'email' | 'app';
+  created_at: string;
+  delivered_at: string | null;
+  order: { id: string; reference: string; brand: string | null; status: string; destination_country: string | null; destination_city: string | null; delivered_at: string | null } | null;
+  customer: { id: string; full_name: string | null; email: string | null; customer_code: string | null } | null;
+}
+
+export interface ReviewSummary {
+  total: number;
+  average: number;
+  five_star: number;
+  one_star: number;
+  distribution: Record<'1' | '2' | '3' | '4' | '5', number>;
+}
+
+export interface ReviewQuery {
+  search?: string;
+  type?: ReviewType | '';
+  rating?: number | '';
+  from?: string;
+  to?: string;
+  dir?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
 /** Fast shipping: can customers ask for it, and how many days the delivery takes (decided by the admin). It has no price. */
 export type ExpressShippingSetting = Omit<ExpressStitchingSetting, 'price_pkr'>;
 
@@ -962,6 +1005,27 @@ export class AdminService {
 
   setQcApproval(required: boolean): Observable<ApiResult<QcApprovalSetting>> {
     return this.send<QcApprovalSetting>('PUT', '/admin/settings/qc-approval', { required });
+  }
+
+  getReviewSettings(): Observable<ReviewSettings> {
+    return this.api.get<ReviewSettings>('/admin/settings/reviews');
+  }
+
+  setReviewSettings(s: ReviewSettings): Observable<ApiResult<ReviewSettings>> {
+    const { nationalEnabled, nationalReviewDays, internationalEnabled, internationalReviewDays } = s;
+    return this.send<ReviewSettings>('PUT', '/admin/settings/reviews', { nationalEnabled, nationalReviewDays, internationalEnabled, internationalReviewDays });
+  }
+
+  listReviews(params: ReviewQuery): Observable<Paged<AdminReview>> {
+    return this.api.list<AdminReview>('/admin/reviews', params as ListParams);
+  }
+
+  getReviewSummary(params: { type?: string; from?: string; to?: string }): Observable<ReviewSummary> {
+    return this.api.get<ReviewSummary>('/admin/reviews/summary', params as ListParams);
+  }
+
+  getReview(id: string): Observable<AdminReview> {
+    return this.api.get<AdminReview>(`/admin/reviews/${id}`);
   }
 
   getExpressShipping(): Observable<ExpressShippingSetting> {

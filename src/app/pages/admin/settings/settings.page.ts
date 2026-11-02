@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IonSpinner } from '@ionic/angular';
 import { distinctUntilChanged, filter, map } from 'rxjs';
-import { AdminModule, AdminService, AdminUser, ExpressShippingSetting, ExpressStitchingSetting, PostexSettings, QcApprovalSetting, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
+import { AdminModule, AdminService, AdminUser, ExpressShippingSetting, ExpressStitchingSetting, PostexSettings, QcApprovalSetting, ReviewSettings, ShipToAddress, UserRoleFilter } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { apiErrorMessage } from '../../../core/services/api.service';
 import { UiService } from '../../../core/services/ui.service';
@@ -16,9 +16,9 @@ import { PaginationComponent } from '../../../shared/components/pagination.compo
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PAGE_SIZES, PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 
-type SettingsTab = 'team' | 'address' | 'express' | 'workflow' | 'postex' | 'account';
+type SettingsTab = 'team' | 'address' | 'express' | 'workflow' | 'reviews' | 'postex' | 'account';
 type TeamRole = UserRoleFilter;
-const TABS: readonly SettingsTab[] = ['team', 'address', 'express', 'workflow', 'postex', 'account'];
+const TABS: readonly SettingsTab[] = ['team', 'address', 'express', 'workflow', 'reviews', 'postex', 'account'];
 const TEAM_ROLES: readonly TeamRole[] = ['staff', 'admin', 'partner_staff', 'customer'];
 
 interface SettingsQuery {
@@ -235,6 +235,47 @@ export class AdminSettingsPage implements OnInit {
     });
   }
 
+  // Customer reviews: when the review email is sent after delivery (Pakistan / other countries)
+  readonly reviewForm = signal<ReviewSettings>({ nationalEnabled: true, nationalReviewDays: 3, internationalEnabled: true, internationalReviewDays: 7 });
+  private readonly reviewSaved = signal<ReviewSettings | null>(null);
+  readonly reviewLoaded = computed(() => this.reviewSaved() !== null);
+  readonly savingReview = signal(false);
+  readonly reviewMax = computed(() => this.reviewSaved()?.maxDays ?? 365);
+  validDaysOf(n: number): boolean {
+    return Number.isInteger(n) && n >= 0 && n <= this.reviewMax();
+  }
+  readonly reviewValid = computed(() => this.validDaysOf(this.reviewForm().nationalReviewDays) && this.validDaysOf(this.reviewForm().internationalReviewDays));
+  readonly reviewDirty = computed(() => {
+    const a = this.reviewForm();
+    const b = this.reviewSaved();
+    return !!b && (a.nationalEnabled !== b.nationalEnabled || a.nationalReviewDays !== b.nationalReviewDays || a.internationalEnabled !== b.internationalEnabled || a.internationalReviewDays !== b.internationalReviewDays);
+  });
+
+  setReview(patch: Partial<ReviewSettings>): void {
+    this.reviewForm.update((f) => ({ ...f, ...patch }));
+  }
+
+  setReviewDays(key: 'nationalReviewDays' | 'internationalReviewDays', value: string): void {
+    this.setReview({ [key]: value.trim() === '' ? NaN : Number(value) });
+  }
+
+  saveReview(): void {
+    if (!this.reviewLoaded() || !this.reviewDirty() || !this.reviewValid() || this.savingReview()) return;
+    this.savingReview.set(true);
+    this.admin.setReviewSettings(this.reviewForm()).subscribe({
+      next: (res) => {
+        this.savingReview.set(false);
+        this.reviewForm.set(res.data);
+        this.reviewSaved.set(res.data);
+        this.ui.success(res.message || 'Saved.');
+      },
+      error: (err) => {
+        this.savingReview.set(false);
+        this.ui.error(err);
+      },
+    });
+  }
+
   setExpress(patch: Partial<ExpressStitchingSetting>): void {
     this.express.update((e) => ({ ...e, ...patch }));
   }
@@ -366,6 +407,13 @@ export class AdminSettingsPage implements OnInit {
         this.qcApproval.set(q);
         this.qcApprovalSaved.set(q);
         this.qcApprovalLoaded.set(true);
+      },
+      error: (err) => this.ui.error(err),
+    });
+    this.admin.getReviewSettings().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (r) => {
+        this.reviewForm.set(r);
+        this.reviewSaved.set(r);
       },
       error: (err) => this.ui.error(err),
     });
