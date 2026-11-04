@@ -14,6 +14,7 @@
     <button type="button" role="tab" [class.active]="query().tab === 'address'" [attr.aria-selected]="query().tab === 'address'" (click)="setTab('address')">Ship-to address</button>
     <button type="button" role="tab" [class.active]="query().tab === 'express'" [attr.aria-selected]="query().tab === 'express'" (click)="setTab('express')">Priority &amp; fast</button>
     <button type="button" role="tab" [class.active]="query().tab === 'workflow'" [attr.aria-selected]="query().tab === 'workflow'" (click)="setTab('workflow')">Workflow</button>
+    <button type="button" role="tab" [class.active]="query().tab === 'reviews'" [attr.aria-selected]="query().tab === 'reviews'" (click)="setTab('reviews')">Customer reviews</button>
     <button type="button" role="tab" [class.active]="query().tab === 'postex'" [attr.aria-selected]="query().tab === 'postex'" (click)="setTab('postex')">PostEx</button>
     <button type="button" role="tab" [class.active]="query().tab === 'account'" [attr.aria-selected]="query().tab === 'account'" (click)="setTab('account')">Account</button>
   </div>
@@ -138,6 +139,66 @@
           </button>
         </div>
       </form>
+    </section>
+  } @else if (query().tab === 'reviews') {
+    <!-- ═══ Customer review emails ═══ -->
+    <section class="card review-settings">
+      <h3 class="card-title">Customer Review Settings</h3>
+      <p class="muted small">After an order is delivered, the customer gets one email asking them to rate it. Choose how many days after delivery it is sent. Pakistan orders are national; every other destination is international.</p>
+      @if (!reviewLoaded()) {
+        <p class="muted small">Loading…</p>
+      } @else {
+        <form (submit)="$event.preventDefault(); saveReview()">
+          <div class="rs-grid">
+            <div class="rs-panel" [class.off]="!reviewForm().nationalEnabled">
+              <div class="rs-head">
+                <div><span class="rs-title">National customers</span><span class="rs-sub">Orders delivered in Pakistan</span></div>
+                <label class="rs-switch" title="Send review emails to national customers">
+                  <input type="checkbox" [checked]="reviewForm().nationalEnabled" (change)="setReview({ nationalEnabled: $any($event.target).checked })" aria-label="Send review emails to national customers" />
+                  <span class="rs-track"></span>
+                </label>
+              </div>
+              <label class="rs-label" for="reviewNat">Send the email after</label>
+              <div class="rs-input">
+                <input id="reviewNat" class="input" type="number" min="0" [max]="reviewMax()" step="1" inputmode="numeric" [disabled]="!reviewForm().nationalEnabled" [value]="reviewForm().nationalReviewDays" (input)="setReviewDays('nationalReviewDays', $any($event.target).value)" />
+                <span>days after delivery</span>
+              </div>
+              @if (!validDaysOf(reviewForm().nationalReviewDays)) { <span class="hint error">Enter a whole number from 0 to {{ reviewMax() }}.</span> }
+              <span class="rs-state">{{ reviewForm().nationalEnabled ? 'Review emails are on' : 'Review emails are paused' }}</span>
+            </div>
+
+            <div class="rs-panel" [class.off]="!reviewForm().internationalEnabled">
+              <div class="rs-head">
+                <div><span class="rs-title">International customers</span><span class="rs-sub">Orders delivered outside Pakistan</span></div>
+                <label class="rs-switch" title="Send review emails to international customers">
+                  <input type="checkbox" [checked]="reviewForm().internationalEnabled" (change)="setReview({ internationalEnabled: $any($event.target).checked })" aria-label="Send review emails to international customers" />
+                  <span class="rs-track"></span>
+                </label>
+              </div>
+              <label class="rs-label" for="reviewInt">Send the email after</label>
+              <div class="rs-input">
+                <input id="reviewInt" class="input" type="number" min="0" [max]="reviewMax()" step="1" inputmode="numeric" [disabled]="!reviewForm().internationalEnabled" [value]="reviewForm().internationalReviewDays" (input)="setReviewDays('internationalReviewDays', $any($event.target).value)" />
+                <span>days after delivery</span>
+              </div>
+              @if (!validDaysOf(reviewForm().internationalReviewDays)) { <span class="hint error">Enter a whole number from 0 to {{ reviewMax() }}.</span> }
+              <span class="rs-state">{{ reviewForm().internationalEnabled ? 'Review emails are on' : 'Review emails are paused' }}</span>
+            </div>
+          </div>
+
+          <ul class="rs-notes">
+            <li>Days are counted from the moment the order was marked Delivered.</li>
+            <li>Changing the days re-schedules emails that are still waiting. Emails already sent are never sent again.</li>
+            <li>Switching a group off pauses its waiting emails. Switching it on again sends the ones still due (not those more than 14 days late).</li>
+            <li>Nothing is sent for cancelled or returned orders, or if the customer already left a review.</li>
+          </ul>
+
+          <div class="row-end">
+            <button type="submit" class="btn btn-primary" [disabled]="!reviewDirty() || !reviewValid() || savingReview()">
+              @if (savingReview()) { <ion-spinner name="crescent" /> } Save settings
+            </button>
+          </div>
+        </form>
+      }
     </section>
   } @else if (query().tab === 'postex') {
     <!-- ═══ PostEx ═══ -->

@@ -74,6 +74,8 @@
   --topbar-h: 60px;
   /* the phone's status bar / notch height (0 in a browser): Capacitor injects --safe-area-inset-top in the app */
   --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
 
   --ion-font-family: var(--font-sans);
   --ion-background-color: var(--c-bg);
@@ -612,7 +614,7 @@ table.data-table {
     .eyebrow { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c-gold-dark); }
   }
   .drawer-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
-  .drawer-foot { padding: 14px 22px; border-top: 1px solid var(--c-line-soft); display: flex; justify-content: flex-end; gap: 10px; }
+  .drawer-foot { padding: 14px 22px calc(14px + var(--safe-bottom)); border-top: 1px solid var(--c-line-soft); display: flex; justify-content: flex-end; gap: 10px; }
 }
 
 .close-btn {
@@ -741,4 +743,9 @@ table.data-table {
     .modal-body { padding: 4px 16px 16px; -webkit-overflow-scrolling: touch; }
     .modal-foot { padding: 12px 16px; flex-wrap: wrap; .btn { flex: 1 1 auto; justify-content: center; min-height: 46px; } }
   }
+}
+
+/* iOS zooms the page when a focused field's font is under 16px. Keep fields at 16px on touch devices. */
+@media (hover: none) and (pointer: coarse) {
+  input, select, textarea, .input, .select, .textarea { font-size: 16px !important; }
 }

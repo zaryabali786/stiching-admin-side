@@ -26,8 +26,19 @@
   <!-- Animated splash (the app on a phone only): the Stitch&Ship logo plays over a white screen until the app is ready (see main.ts). -->
   <script>
     (function () {
-      var c = window.Capacitor;
-      if (c && c.isNativePlatform && c.isNativePlatform()) document.documentElement.classList.add('native-boot');
+      try {
+        var raw = localStorage.getItem('__safe_area_insets__');
+        if (raw) {
+          var ins = JSON.parse(raw);
+          if (ins) {
+            var s = document.documentElement.style;
+            if (typeof ins.top === 'number') s.setProperty('--safe-area-inset-top', ins.top + 'px');
+            if (typeof ins.right === 'number') s.setProperty('--safe-area-inset-right', ins.right + 'px');
+            if (typeof ins.bottom === 'number') s.setProperty('--safe-area-inset-bottom', ins.bottom + 'px');
+            if (typeof ins.left === 'number') s.setProperty('--safe-area-inset-left', ins.left + 'px');
+          }
+        }
+      } catch (e) {}
     })();
   </script>
   <style>

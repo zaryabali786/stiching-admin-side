@@ -2,9 +2,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.stitchnship.admin',
-  appName: 'Stitch And Ship',
+  appName: 'S&S Admin',
   webDir: 'www',
   plugins: {
+    SystemBars: {
+      insetsHandling: 'disable',
+    },
     LiveUpdate: {
       appId: '0a3ced75-b36f-4b7c-b591-841038093175',
       autoDeleteBundles: true,

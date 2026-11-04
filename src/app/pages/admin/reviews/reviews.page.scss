@@ -1,0 +1,57 @@
+@use '../admin-page';
+
+.result-count { font-size: 12.5px; color: var(--c-muted); }
+.head-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--c-muted); }
+.rv-note { color: var(--c-red); font-size: 13px; margin: 0 0 12px; }
+
+/* summary: four cards and the rating distribution */
+.rv-summary { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; margin-bottom: 18px; }
+.rv-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rv-card {
+  background: var(--c-surface, #fff); border: 1px solid var(--c-line); border-radius: 14px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  span { font-size: 12px; font-weight: 600; color: var(--c-muted); }
+  strong { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; small { font-size: 14px; font-weight: 600; color: var(--c-muted); } }
+  &.good strong { color: var(--c-green, #1b7f4b); }
+  &.bad strong { color: var(--c-red); }
+}
+.rv-dist { background: var(--c-surface, #fff); border: 1px solid var(--c-line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.rv-dist-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center; gap: 10px;
+  border: 0; background: transparent; padding: 6px 6px; border-radius: 8px; cursor: pointer; font: inherit; text-align: left;
+  min-height: 34px;
+  &:hover { background: var(--c-bg-soft); }
+  &.on { background: var(--c-bg-soft); box-shadow: inset 0 0 0 1px var(--c-gold-dark); }
+  .lbl { font-size: 13px; font-weight: 700; color: var(--c-ink); }
+  .bar { height: 8px; border-radius: 999px; background: var(--c-bg-soft); overflow: hidden; }
+  .fill { display: block; height: 100%; border-radius: 999px; background: var(--c-gold-dark, #b8862b); }
+  .num { font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; color: var(--c-muted); }
+}
+
+/* filters */
+.rv-filters { flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; }
+.rv-f { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--c-muted); .select, .input { min-height: 40px; min-width: 140px; } }
+
+/* table */
+.stars { color: #d9a21b; letter-spacing: 1px; white-space: nowrap; i { font-style: normal; color: var(--c-line-strong, #d6d3cc); } &.big { font-size: 30px; } }
+.rv-comment { max-width: 320px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--c-ink-2, inherit); }
+.rv-big { display: flex; align-items: center; gap: 14px; strong { font-size: 20px; } }
+.rv-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55; margin: 0; }
+.sec { font-family: var(--font-sans); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--c-muted); margin: 22px 0 10px; }
+.link { color: var(--c-green); font-weight: 600; text-decoration: none; word-break: break-all; &:hover { text-decoration: underline; } }
+
+@media (max-width: 900px) {
+  .rv-summary { grid-template-columns: 1fr; }
+}
+
+/* phone: each review becomes a card */
+@media (max-width: 720px) {
+  .rv-f { flex: 1 1 calc(50% - 8px); .select, .input { min-width: 0; width: 100%; } }
+  .rv-table {
+    thead { display: none; }
+    tbody tr { display: block; padding: 12px 14px; border-top: 1px solid var(--c-line-soft, #e5e7eb); }
+    tbody td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: right; }
+    tbody td::before { content: attr(data-label); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--c-muted); text-align: left; flex: none; }
+    .rv-comment { max-width: none; -webkit-line-clamp: 3; }
+  }
+}

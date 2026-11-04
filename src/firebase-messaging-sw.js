@@ -6,7 +6,7 @@ firebase.initializeApp({
   apiKey: 'AIzaSyBZFEC5meXq78BXTmY2v3tC-Fz0r_Fypuk',
   projectId: 'stiching-98483',
   messagingSenderId: '894190452773',
-  appId: 'FILL_WEB_APP_ID', // Firebase console -> Project settings -> Your apps -> Web app
+  appId: '1:894190452773:android:3f69793699c7b0a171ffcc', // same as environment.firebase.appId (a dedicated Firebase *web* app id can replace both)
 });
 
 // the Firebase SDK shows the notification itself (the payload has `notification`); only the tap needs handling

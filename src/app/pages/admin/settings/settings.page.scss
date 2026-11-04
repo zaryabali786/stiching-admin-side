@@ -180,3 +180,34 @@ tr.inactive .cell-main { color: var(--c-muted); }
   .modal-foot { position: sticky; bottom: 0; background: var(--c-surface, #fff); .btn { flex: 1 1 0; justify-content: center; min-height: 44px; } }
   .pw-wrap { flex-wrap: wrap; .input { flex: 1 1 100%; } }
 }
+
+/* Customer review settings: two side-by-side panels, full width of the page */
+.review-settings { width: 100%; max-width: 860px; padding: 22px; }
+.rs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0 14px; }
+.rs-panel {
+  display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--c-line); border-radius: 14px; background: var(--c-surface, #fff);
+  transition: background .15s, border-color .15s;
+  &.off { background: var(--c-bg-soft); .rs-state { color: var(--c-muted); } }
+}
+.rs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rs-title { display: block; font-size: 15px; font-weight: 700; color: var(--c-ink); }
+.rs-sub { display: block; font-size: 12.5px; color: var(--c-muted); margin-top: 2px; }
+.rs-label { font-size: 12px; font-weight: 700; color: var(--c-ink-2, var(--c-ink)); margin-top: 4px; }
+.rs-input {
+  display: flex; align-items: center; gap: 10px;
+  .input { width: 96px; min-height: 44px; text-align: center; font-size: 16px; font-weight: 600; }
+  span { font-size: 13px; color: var(--c-muted); }
+}
+.rs-state { font-size: 12.5px; font-weight: 600; color: var(--c-green, #1b7f4b); }
+.hint.error { color: var(--c-red); font-size: 12.5px; }
+.rs-notes { margin: 0 0 6px; padding-left: 18px; color: var(--c-muted); font-size: 12.5px; line-height: 1.6; }
+
+/* on/off switch */
+.rs-switch { position: relative; flex: none; width: 46px; height: 26px; cursor: pointer;
+  input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+  .rs-track { position: absolute; inset: 0; border-radius: 999px; background: var(--c-line-strong, #d1d5db); transition: background .15s;
+    &::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; } }
+  input:checked + .rs-track { background: var(--c-brand, #62003e); &::after { transform: translateX(20px); } }
+  input:focus-visible + .rs-track { outline: 3px solid rgba(98, 0, 62, .35); outline-offset: 2px; }
+}
+@media (max-width: 720px) { .rs-grid { grid-template-columns: 1fr; } .review-settings { padding: 16px; } }

@@ -7,7 +7,7 @@ import {
   gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
   airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
   searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-  notificationsOutline, chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, chevronDownOutline, checkmarkOutline, albumsOutline, bagHandleOutline, storefrontOutline, cashOutline,
+  notificationsOutline, chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, chevronDownOutline, checkmarkOutline, albumsOutline, bagHandleOutline, storefrontOutline, cashOutline, starOutline,
 } from 'ionicons/icons';
 import { filter } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
@@ -94,7 +94,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
       gridOutline, cubeOutline, documentTextOutline, fileTrayStackedOutline, peopleOutline, cutOutline, pricetagsOutline,
       airplaneOutline, barChartOutline, settingsOutline, downloadOutline, layersOutline, shieldCheckmarkOutline, walletOutline,
       searchOutline, menuOutline, chevronBackOutline, chevronForwardOutline, swapHorizontalOutline, logOutOutline, personCircleOutline,
-      chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, bagHandleOutline, storefrontOutline, cashOutline, notificationsOutline,
+      chatbubblesOutline, helpBuoyOutline, businessOutline, bicycleOutline, shirtOutline, idCardOutline, imagesOutline, colorPaletteOutline, constructOutline, colorFillOutline, bagHandleOutline, storefrontOutline, cashOutline, notificationsOutline, starOutline,
     });
   }
 
@@ -133,6 +133,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           label: 'People',
           items: [
             { path: '/admin/customers', label: 'Customers', icon: 'people-outline', module: 'customers' },
+            { path: '/admin/reviews', label: 'Customer Reviews', icon: 'star-outline', module: 'reviews' },
             { path: '/admin/notification-center', label: 'Notification Center', icon: 'notifications-outline', module: 'notification_center' },
             { path: '/admin/partners', label: 'Partners & teams', icon: 'cut-outline', module: 'partners' },
             { path: '/admin/users', label: 'Users', icon: 'id-card-outline', fullAdmin: true },
@@ -171,7 +172,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
         urdu: 'روزانہ کام',
         items: [
           { path: '/partner/receiving', label: 'Receiving', urdu: 'وصولی', icon: 'download-outline', badge: p?.receiving, tone: 'amber', permission: 'receiving.view' },
-          { path: '/partner/production', label: 'Production', urdu: 'پیداوار', icon: 'layers-outline', permission: 'production.view' },
+          { path: '/partner/production', label: 'Production', urdu: 'پیداوار', icon: 'layers-outline', badge: p?.production, tone: 'amber', permission: 'production.view' },
           { path: '/partner/master-tracking', label: 'Master tracking', urdu: 'ماسٹر ٹریکنگ', icon: 'people-outline', permission: 'production.view' },
           { path: '/partner/quality-check', label: 'Quality check', urdu: 'کوالٹی چیک', icon: 'shield-checkmark-outline', badge: p?.qualityCheck, tone: 'amber', permission: 'quality.view' },
           { path: '/partner/warehouse', label: 'Warehouse', urdu: 'گودام', icon: 'file-tray-stacked-outline', badge: p?.warehouse, tone: 'amber', permission: 'warehouse.view' },

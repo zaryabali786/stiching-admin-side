@@ -50,8 +50,7 @@ interface PublicConfig {
     }
     .btn-google:hover:not(:disabled) { background: #f8f9fa; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
     .btn-google:disabled { opacity: 0.7; cursor: default; }
-    .btn-apple { margin-top: 10px; background: #000; border-color: #000; color: #fff; }
-    .btn-apple:hover:not(:disabled) { background: #1a1a1a; }
+    .btn-apple { margin-top: 10px; color: #000; }
   `],
   template: `
     <div class="auth">
@@ -73,8 +72,13 @@ interface PublicConfig {
       </section>
 
       <section class="form-side">
-        <div class="form-card">
+        <div class="form-card" [class.login-mode]="mode() === 'login'">
           @if (mode() === 'login') {
+            <div class="m-head">
+              <span class="m-logo"><img src="assets/logo.png" alt="Stitch&Ship logo" width="52" height="52" /></span>
+              <h1>Welcome to Stitch&amp;Ship</h1>
+              <p>Staff sign in</p>
+            </div>
             <span class="eyebrow">Staff sign in</span>
             <h2>Welcome back</h2>
             <p class="sub">Log in with the account your admin or partner gave you.</p>
@@ -86,12 +90,12 @@ interface PublicConfig {
             <form (ngSubmit)="login()" novalidate>
               <div class="field">
                 <label for="email">Email</label>
-                <input id="email" class="input" type="email" name="email" autocomplete="email" [(ngModel)]="email" required placeholder="you@company.com" />
+                <input id="email" class="input" type="email" name="email" autocomplete="email" [(ngModel)]="email" required placeholder="Enter your email" />
               </div>
               <div class="field">
                 <label for="password">Password</label>
                 <div class="input-wrap">
-                  <input id="password" class="input" [type]="showPassword() ? 'text' : 'password'" name="password" autocomplete="current-password" [(ngModel)]="password" required placeholder="Your password" />
+                  <input id="password" class="input" [type]="showPassword() ? 'text' : 'password'" name="password" autocomplete="current-password" [(ngModel)]="password" required placeholder="Enter your password" />
                   <button type="button" class="toggle" (click)="showPassword.set(!showPassword())">{{ showPassword() ? 'Hide' : 'Show' }}</button>
                 </div>
               </div>
