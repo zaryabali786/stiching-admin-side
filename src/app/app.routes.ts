@@ -46,12 +46,6 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/change-password/change-password.page').then((m) => m.ChangePasswordPage),
   },
   {
-    path: 'delete-account',
-    canActivate: [authGuard],
-    title: 'Delete my account · Stitch&Ship',
-    loadComponent: () => import('./pages/delete-account/delete-account.page').then((m) => m.DeleteAccountPage),
-  },
-  {
     path: 'forbidden',
     canActivate: [authGuard],
     title: 'No access · Stitch&Ship',
@@ -122,6 +116,7 @@ export const routes: Routes = [
       { canActivate: [permissionGuard], path: 'users', data: { permission: 'users.view', title: 'Users' }, title: 'Users · Partner', loadComponent: () => import('./pages/partner/users/users.page').then((m) => m.PartnerUsersPage) },
       { canActivate: [permissionGuard], path: 'notification-center', data: { permission: 'notifications.view', title: 'Notification Center' }, title: 'Notification Center · Partner', loadComponent: () => import('./pages/partner/notification-center/notification-center.page').then((m) => m.PartnerNotificationCenterPage) },
       { canActivate: [permissionGuard], path: 'roles', data: { permission: 'users.view', title: 'Roles and permissions' }, title: 'Roles · Partner', loadComponent: () => import('./pages/partner/roles/roles.page').then((m) => m.PartnerRolesPage) },
+      { path: 'account', data: { title: 'My account' }, title: 'My account · Partner', loadComponent: () => import('./pages/partner/account/account.page').then((m) => m.AccountPage) },
       { path: 'settings', pathMatch: 'full', redirectTo: 'users' },
       { canActivate: [permissionGuard], path: 'articles', data: { permission: 'catalogue.view', title: 'Articles' }, title: 'Articles · Partner', loadComponent: () => import('./pages/partner/catalogue/articles.page').then((m) => m.PartnerArticlesPage) },
     ],

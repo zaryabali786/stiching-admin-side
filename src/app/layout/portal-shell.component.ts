@@ -203,7 +203,7 @@ export class PortalShellComponent implements OnInit, OnDestroy {
           { path: '/partner/notification-center', label: 'Notification Center', urdu: 'نوٹیفکیشن سینٹر', icon: 'notifications-outline', permission: 'notifications.view' },
           { path: '/partner/users', label: 'Users', urdu: 'صارفین', icon: 'id-card-outline', permission: 'users.view' },
           { path: '/partner/roles', label: 'Roles & permissions', urdu: 'رولز اور اجازتیں', icon: 'shield-checkmark-outline', permission: 'users.view' },
-          { path: '/delete-account', label: 'My account', urdu: 'میرا اکاؤنٹ', icon: 'person-circle-outline' },
+          { path: '/partner/account', label: 'My account', urdu: 'میرا اکاؤنٹ', icon: 'person-circle-outline' },
         ],
       },
     ];
