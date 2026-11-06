@@ -335,6 +335,15 @@
             </div>
           </form>
         </section>
+
+        <section class="card">
+          <h3 class="card-title">Delete account</h3>
+          <p class="muted small">Permanently delete your login and personal details. Work records you handled are kept as "Deleted account". This cannot be undone.</p>
+          <div class="row-end">
+            <button type="button" class="btn btn-danger" (click)="deleteOpen.set(true)">Delete my account</button>
+          </div>
+        </section>
+        @if (deleteOpen()) { <app-delete-account-dialog (closed)="deleteOpen.set(false)" /> }
       </div>
     }
   } @else {

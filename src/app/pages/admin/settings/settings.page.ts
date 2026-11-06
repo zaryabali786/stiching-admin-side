@@ -13,6 +13,7 @@ import { GeoService } from '../../../core/services/geo.service';
 import { GeoPickerComponent } from '../../../shared/components/geo-picker.component';
 import { SearchInputComponent } from '../../../shared/components/search-input.component';
 import { PaginationComponent } from '../../../shared/components/pagination.component';
+import { DeleteAccountDialogComponent } from '../../../shared/components/delete-account-dialog.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state.component';
 import { PAGE_SIZES, PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 
@@ -52,7 +53,7 @@ const ROLE_LABELS: Record<Role, string> = { admin: 'Admin', partner_staff: 'Part
 @Component({
   selector: 'app-admin-settings',
   standalone: true,
-  imports: [RouterLink, IonSpinner, DayPipe, GeoPickerComponent, SearchInputComponent, PaginationComponent, EmptyStateComponent],
+  imports: [RouterLink, IonSpinner, DayPipe, GeoPickerComponent, SearchInputComponent, PaginationComponent, EmptyStateComponent, DeleteAccountDialogComponent],
   templateUrl: './settings.page.html',
   styleUrls: ['./settings.page.scss'],
 })
@@ -80,6 +81,7 @@ export class AdminSettingsPage implements OnInit {
 
   /** User management is for full admins only; a restricted admin lands on the first settings tab. */
   private readonly defaultTab: SettingsTab = this.auth.isFullAdmin() ? 'team' : 'address';
+  readonly deleteOpen = signal(false);
   readonly query = signal<SettingsQuery>({ tab: this.defaultTab, role: 'staff', search: '', page: 1, limit: 15 });
   readonly list = new PagedList<AdminUser>();
   readonly busyId = signal<string | null>(null);
