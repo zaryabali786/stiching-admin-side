@@ -139,6 +139,9 @@
                   Switch to {{ portal === 'admin' ? 'partner' : 'admin' }} portal
                 </a>
               }
+              <a class="menu-item danger" routerLink="/delete-account" role="menuitem">
+                <ion-icon name="trash-outline" aria-hidden="true"></ion-icon> Delete my account
+              </a>
               <button type="button" class="menu-item danger" (click)="logout()" role="menuitem">
                 <ion-icon name="log-out-outline" aria-hidden="true"></ion-icon> Log out
               </button>
