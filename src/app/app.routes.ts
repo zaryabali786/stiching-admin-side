@@ -46,6 +46,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/change-password/change-password.page').then((m) => m.ChangePasswordPage),
   },
   {
+    path: 'delete-account',
+    canActivate: [authGuard],
+    title: 'Delete my account · Stitch&Ship',
+    loadComponent: () => import('./pages/delete-account/delete-account.page').then((m) => m.DeleteAccountPage),
+  },
+  {
     path: 'forbidden',
     canActivate: [authGuard],
     title: 'No access · Stitch&Ship',

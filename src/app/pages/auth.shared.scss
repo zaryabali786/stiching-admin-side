@@ -281,10 +281,10 @@
   div { height: 100%; transition: width 0.25s, background 0.25s; }
 }
 
-/* phone-sized header of the sign-in (round logo + title); the desktop layout has the brand panel instead */
+/* the sign-in looks the same on every screen: the phone layout (round logo + title, no brand panel) */
 .m-head { display: none; }
 
-@media (max-width: 860px) {
+@media all {
   .auth { grid-template-columns: 1fr; background: #f8f9fa; }
   .brand-panel { display: none; }
   .form-side { align-items: flex-start; padding-top: calc(40px + var(--sat, 0px)); }

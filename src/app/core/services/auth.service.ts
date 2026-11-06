@@ -161,6 +161,15 @@ export class AuthService {
     return res.message;
   }
 
+  /** Deletes the signed-in staff account (login + personal details). The proof is the password or a fresh Apple / Google token. */
+  async deleteAccount(proof: { password?: string; idToken?: string; provider?: 'apple' | 'google'; name?: string }): Promise<void> {
+    await firstValueFrom(this.http.post(`${this.api}/auth/delete-account`, { confirm: 'DELETE', ...proof }));
+    this.injector.get(PushService).unregister();
+    this.session.set(null);
+    localStorage.removeItem(STORAGE_KEY);
+    await this.router.navigate(['/login']);
+  }
+
   /**
    * Exchange the refresh token for new tokens. Concurrent callers share one request.
    */
