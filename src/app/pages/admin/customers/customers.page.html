@@ -27,15 +27,15 @@
           <caption class="sr-only">Customers. Select a row to see the customer's details.</caption>
           <thead>
             <tr>
-              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('customer_code')" (click)="sortBy('customer_code')" (keydown.enter)="sortBy('customer_code')">Code<span class="sort" aria-hidden="true">{{ sortIcon('customer_code') }}</span></th>
-              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('full_name')" (click)="sortBy('full_name')" (keydown.enter)="sortBy('full_name')">Customer<span class="sort" aria-hidden="true">{{ sortIcon('full_name') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="sortView()['customer_code'].aria" (click)="sortBy('customer_code')" (keydown.enter)="sortBy('customer_code')">Code<span class="sort" aria-hidden="true">{{ sortView()['customer_code'].icon }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="sortView()['full_name'].aria" (click)="sortBy('full_name')" (keydown.enter)="sortBy('full_name')">Customer<span class="sort" aria-hidden="true">{{ sortView()['full_name'].icon }}</span></th>
               <th>Phone</th>
-              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('country')" (click)="sortBy('country')" (keydown.enter)="sortBy('country')">Location<span class="sort" aria-hidden="true">{{ sortIcon('country') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="sortView()['country'].aria" (click)="sortBy('country')" (keydown.enter)="sortBy('country')">Location<span class="sort" aria-hidden="true">{{ sortView()['country'].icon }}</span></th>
               <th class="num">Orders</th>
               <th class="num">Active</th>
               <th class="num">Total spent</th>
               <th>Last order</th>
-              <th class="sortable" tabindex="0" [attr.aria-sort]="ariaSort('created_at')" (click)="sortBy('created_at')" (keydown.enter)="sortBy('created_at')">Joined<span class="sort" aria-hidden="true">{{ sortIcon('created_at') }}</span></th>
+              <th class="sortable" tabindex="0" [attr.aria-sort]="sortView()['created_at'].aria" (click)="sortBy('created_at')" (keydown.enter)="sortBy('created_at')">Joined<span class="sort" aria-hidden="true">{{ sortView()['created_at'].icon }}</span></th>
             </tr>
           </thead>
           <tbody>

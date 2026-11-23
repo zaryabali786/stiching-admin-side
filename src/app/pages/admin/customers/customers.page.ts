@@ -1,4 +1,4 @@
-import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, catchError, distinctUntilChanged, map, of, switchMap, tap } from 'rxjs';
@@ -24,10 +24,14 @@ interface CustomerQuery {
   dir: 'asc' | 'desc';
 }
 
+const sameQuery = (a: CustomerQuery, b: CustomerQuery): boolean =>
+  a.search === b.search && a.page === b.page && a.limit === b.limit && a.sort === b.sort && a.dir === b.dir;
+
 @Component({
   selector: 'app-admin-customers',
   standalone: true,
   imports: [RouterLink, DayPipe, PkrPipe, TimeAgoPipe, SearchInputComponent, PaginationComponent, EmptyStateComponent, StatusBadgeComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './customers.page.html',
   styleUrls: ['./customers.page.scss'],
 })
@@ -61,7 +65,7 @@ export class AdminCustomersPage implements OnInit {
         sort: oneOf(p.get('sort'), SORTS, 'created_at'),
         dir: p.get('dir') === 'asc' ? 'asc' : 'desc',
       })),
-      distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b))
+      distinctUntilChanged(sameQuery)
     );
     this.list.connect(
       q$,
@@ -122,15 +126,15 @@ export class AdminCustomersPage implements OnInit {
     setQuery(this.router, this.route, { sort: isDefault ? null : key, dir: isDefault ? null : dir, page: null });
   }
 
-  ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
-    const q = this.query();
-    return q.sort !== key ? 'none' : q.dir === 'asc' ? 'ascending' : 'descending';
-  }
-
-  sortIcon(key: SortKey): string {
-    const q = this.query();
-    return q.sort !== key ? '↕' : q.dir === 'asc' ? '↑' : '↓';
-  }
+  /** aria-sort + arrow for every sortable column, computed once per query change instead of on every change detection. */
+  readonly sortView = computed(() => {
+    const { sort, dir } = this.query();
+    const view = {} as Record<SortKey, { aria: 'ascending' | 'descending' | 'none'; icon: string }>;
+    for (const key of SORTS) {
+      view[key] = sort !== key ? { aria: 'none', icon: '↕' } : dir === 'asc' ? { aria: 'ascending', icon: '↑' } : { aria: 'descending', icon: '↓' };
+    }
+    return view;
+  });
 
   open(c: AdminCustomerRow): void {
     this.selected.set(c);
