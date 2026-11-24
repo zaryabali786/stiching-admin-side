@@ -11,7 +11,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge.co
 import { PagedList, SKELETON_ROWS, intParam, oneOf, setQuery } from '../admin-list';
 import { InvoiceBuilderComponent } from './invoice-builder.component';
 
-const TABS: readonly InvoiceTab[] = ['to_invoice', 'issued', 'paid'];
+const TAB_KEYS: readonly InvoiceTab[] = ['to_invoice', 'issued', 'paid'];
 
 interface InvoiceQuery {
   tab: InvoiceTab;
@@ -43,26 +43,26 @@ export class AdminInvoicesPage implements OnInit {
   readonly openOrderId = signal<string | null>(null);
 
   ngOnInit(): void {
-    const q$ = this.route.queryParamMap.pipe(
+    const query$ = this.route.queryParamMap.pipe(
       map((p): InvoiceQuery => ({
-        tab: oneOf(p.get('tab'), TABS, 'to_invoice'),
+        tab: oneOf(p.get('tab'), TAB_KEYS, 'to_invoice'),
         search: p.get('search') || '',
         page: intParam(p, 'page', 1),
       })),
       distinctUntilChanged((a, b) => a.tab === b.tab && a.search === b.search && a.page === b.page)
     );
     this.list.connect(
-      q$,
-      (q) => {
-        this.query.set(q);
-        return this.admin.listInvoices({ tab: q.tab, search: q.search, page: q.page, limit: 15 });
+      query$,
+      (params) => {
+        this.query.set(params);
+        return this.admin.listInvoices({ tab: params.tab, search: params.search, page: params.page, limit: 15 });
       },
       this.destroyRef
     );
 
     this.route.queryParamMap
       .pipe(map((p) => p.get('order') || null), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
-      .subscribe((id) => this.openOrderId.set(id));
+      .subscribe((orderId) => this.openOrderId.set(orderId));
   }
 
   /** One line telling the admin what to do on the current tab. */
@@ -94,8 +94,8 @@ export class AdminInvoicesPage implements OnInit {
   }
 
   open(row: InvoiceListRow): void {
-    const id = row.order?.id;
-    if (id) setQuery(this.router, this.route, { order: id });
+    const orderId = row.order?.id;
+    if (orderId) setQuery(this.router, this.route, { order: orderId });
   }
 
   closeBuilder(): void {
