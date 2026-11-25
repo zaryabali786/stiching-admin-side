@@ -137,8 +137,8 @@ export class PartnerEarningsPage implements OnInit {
 
   /** Screen-reader summary of the monthly bar chart. */
   monthsLabel(): string {
-    const months = this.summary()?.monthly || [];
-    return 'Paid per month: ' + months.map((m) => `${m.month} PKR ${Math.round(m.amount).toLocaleString('en-PK')}`).join(', ');
+    const monthsVal = this.summary()?.monthly || [];
+    return 'Paid per month: ' + monthsVal.map((m) => `${m.month} PKR ${Math.round(m.amount).toLocaleString('en-PK')}`).join(', ');
   }
 
   compact(amount: number): string {
