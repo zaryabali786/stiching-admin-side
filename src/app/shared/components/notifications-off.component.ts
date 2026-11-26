@@ -15,7 +15,7 @@ import { PushService } from '../../core/services/push.service';
       <div class="bar" role="alert">
         <span class="msg">Notifications are off, so you will not get order updates.</span>
         <button type="button" class="on" (click)="open()">Turn on</button>
-        <button type="button" class="x" (click)="hidden.set(true)" aria-label="Dismiss">×</button>
+        <button type="button" class="x" (click)="dismissed.set(true)" aria-label="Dismiss">×</button>
       </div>
     }
   `,
@@ -45,10 +45,10 @@ import { PushService } from '../../core/services/push.service';
 })
 export class NotificationsOffComponent {
   private push = inject(PushService);
-  protected hidden = signal(false);
+  protected dismissed = signal(false);
 
   protected show(): boolean {
-    return Capacitor.isNativePlatform() && this.push.blocked() && !this.hidden();
+    return Capacitor.isNativePlatform() && this.push.blocked() && !this.dismissed();
   }
 
   protected open(): void {
