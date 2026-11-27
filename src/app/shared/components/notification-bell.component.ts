@@ -127,7 +127,7 @@ const TYPE_ICON: Record<string, string> = {
 export class NotificationBellComponent {
   readonly notifications = inject(NotificationService);
   readonly open = signal(false);
-  private host = inject(ElementRef<HTMLElement>);
+  private hostRef = inject(ElementRef<HTMLElement>);
 
   toggle(): void {
     const next = !this.open();
@@ -151,7 +151,7 @@ export class NotificationBellComponent {
 
   @HostListener('document:click', ['$event'])
   onDocClick(e: MouseEvent): void {
-    if (this.open() && !this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
+    if (this.open() && !this.hostRef.nativeElement.contains(e.target as Node)) this.open.set(false);
   }
 
   @HostListener('document:keydown.escape')
